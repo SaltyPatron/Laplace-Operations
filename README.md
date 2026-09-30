@@ -51,7 +51,7 @@ sudo ./agents.sh remove Laplace-Wiki               # unregister and remove one (
 
 ```sh
 ./build.sh                # the extension and the engine, each with Laplace-Native built as part of it
-./build.sh install        # also installs the extension into PostgreSQL's directories
+./build.sh install        # also installs the extension into PostgreSQL's directories; CREATE EXTENSION laplace then makes the schema
 ```
 
 The three code repositories sit side by side under one source root, `$LAPLACE_SRC`; the dependencies' sources under
