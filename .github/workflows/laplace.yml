@@ -1,14 +1,23 @@
-# Laplace-Operations on its runner: the machine declared and converged (setup.sh, as root: the one right this runner
-# has), then from an empty server to loaded, indexed and measured content (deploy.sh). Its checkouts are this
-# workspace: the three code repositories beside this one (private: the secret LAPLACE_CHECKOUT); its builds and work
-# are its own (runner/.env); the database is the machine's.
+# Laplace-Operations on its runner. On a push: the machine declared and converged (setup.sh, as root: the one right
+# this runner has), the build, the database's schema and extension (laplace deploy), and its status — minutes, and no
+# data is loaded. The ingest is an operation someone starts: "Run workflow" with the sources to load (default: every
+# source in its order, taken up where a previous run stopped), one deployment per database at a time.
+# The three code repositories are checked out beside this one (private: the secret LAPLACE_CHECKOUT); builds and
+# work are the runner's own (runner/.env); the database is the machine's.
 name: Laplace-Operations
 on:
-  workflow_dispatch:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      ingest:
+        description: "sources to ingest: 'all' for every source in order, names separated by spaces, or empty for none"
+        default: ""
+        required: false
+env:
+  LAPLACE_SRC: ${{ github.workspace }}
 jobs:
-  laplace:
+  machine:
     runs-on: [self-hosted, laplace, Laplace-Operations]
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +30,15 @@ jobs:
         with: { repository: "${{ github.repository_owner }}/Laplace-Engine", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - name: the machine
         run: sudo -n --preserve-env=LAPLACE_SRC,LAPLACE_BUILD,LAPLACE_WORK,LAPLACE_DEPSRC "$GITHUB_WORKSPACE/Laplace-Operations/setup.sh"
-        env: { LAPLACE_SRC: "${{ github.workspace }}" }
-      - name: from an empty server to measured content
-        run: ./Laplace-Operations/deploy.sh
-        env: { LAPLACE_SRC: "${{ github.workspace }}" }
+      - name: the build
+        run: ./Laplace-Operations/build.sh install
+      - name: the database, its schema and extension, and its status
+        run: |
+          . ./Laplace-Operations/laplace.env
+          laplace deploy
+          laplace status
+      - name: the ingest (only when asked)
+        if: github.event_name == 'workflow_dispatch' && inputs.ingest != ''
+        run: |
+          . ./Laplace-Operations/laplace.env
+          if [ "${{ inputs.ingest }}" = all ]; then ./Laplace-Operations/deploy.sh; else laplace ingest ${{ inputs.ingest }}; fi
