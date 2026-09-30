@@ -32,6 +32,7 @@ runner_version(){ [ -n "${RUNNER_VERSION:-}" ] || RUNNER_VERSION=$(curl -fsSL ht
 # ---------------------------------------------------------------------------------------------- one repository
 agent(){ repo=$1; part "$repo"
   id "$user" >/dev/null 2>&1 || { echo "no user $user: sudo ./setup.sh packages first"; exit 1; }
+  gh_op "api repos/$owner/$repo --jq .name" >/dev/null 2>&1 || { say "$owner/$repo" "NOT ON GITHUB: gh repo create $owner/$repo --private --source $LAPLACE_SRC/$repo --push, then again"; return; }
   d=$home/$repo; r=$d/runner; ws=$d/work/$repo/$repo                             # the workflow's workspace, as the runner lays it out
   # the directories: the agent's, the shared group's, group-writable, so the operator reads its logs and builds
   install -d -o "$user" -g "$group" -m 2775 "$home" "$d" "$r" "$d/work" "$d/build"
