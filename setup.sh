@@ -130,7 +130,7 @@ packages(){ part packages
   [ -e /opt/intel/oneapi/setvars.sh ] && say "Intel oneAPI" "present" || say "Intel oneAPI" "MISSING: install it from Intel (icx, MKL) and run setup.sh again"
   # CMake 3.24 or newer, 4.x for icx 2026 (Setup: Toolchain): the distribution's is older, so Kitware's release goes
   # under $PREFIX for everyone on the machine, the agents included
-  have=$("$PREFIX/bin/cmake" --version 2>/dev/null | sed -n '1s/.* //p'); case ${have:-0} in 3.2[4-9]*|3.[3-9]*|[4-9].*) say "CMake" "$have at $PREFIX/bin/cmake" ;; *)
+  have=0; [ -x "$PREFIX/bin/cmake" ] && have=$("$PREFIX/bin/cmake" --version | sed -n '1s/.* //p'); case $have in 3.2[4-9]*|3.[3-9]*|[4-9].*) say "CMake" "$have at $PREFIX/bin/cmake" ;; *)
     v=$(curl -fsSL https://api.github.com/repos/Kitware/CMake/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
     curl -fsSL "https://github.com/Kitware/CMake/releases/download/v$v/cmake-$v-linux-x86_64.tar.gz" | tar xz -C "$PREFIX" --strip-components=1 --exclude='*/doc' --exclude='*/man'
     say "CMake" "$("$PREFIX/bin/cmake" --version | sed -n '1s/.* //p') installed under $PREFIX" ;; esac
