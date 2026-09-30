@@ -13,10 +13,10 @@ set -e
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/laplace.env"
 # one deployment per database at a time, whoever runs it (the operator, an agent): the second says so and leaves
-db=$(echo "$LAPLACE_CONNINFO" | sed -n 's/.*dbname=\([^ ]*\).*/\1/p'); lock=/run/lock/laplace-${db:-default}.lock
-exec 9>"$lock" 2>/dev/null || exec 9>"$LAPLACE_WORK/.deploy-${db:-default}.lock"
+db=$(echo "$LAPLACE_CONNINFO" | sed -n 's/.*dbname=\([^ ]*\).*/\1/p'); [ -w "$LAPLACE_LOCKS" ] || LAPLACE_LOCKS=$LAPLACE_WORK   # before setup.sh: this user's own
+lock=$LAPLACE_LOCKS/deploy-${db:-default}.lock; exec 9>>"$lock"
 flock -n 9 || { echo "a deployment of $db is already running (pid $(cat "$lock.pid" 2>/dev/null)): this one leaves"; exit 3; }
-echo $$ > "$lock.pid" 2>/dev/null || true
+echo $$ > "$lock.pid"
 log=$LAPLACE_WORK/logs/deploy/$(date -u +%Y%m%dT%H%M%SZ); mkdir -p "$log"
 step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
         { "$@" 2>&1; echo $? > "$log/$name.exit"; } | grep --line-buffered -v "^OMP: " | tee "$log/$name.log"

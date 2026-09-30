@@ -120,12 +120,20 @@ shared(){
     chgrp -R "$LAPLACE_GROUP" "$d" 2>/dev/null || true; chmod -R g+rwX "$d" 2>/dev/null || true; find "$d" -type d -exec chmod g+s {} + 2>/dev/null || true
   done
   install -d "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"; chgrp "$LAPLACE_PG_GROUP" "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"; chmod 2775 "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"
-  say "shared trees" "group $LAPLACE_GROUP, set-group-id, group-writable"; say "$LAPLACE_PG_DIR/{lib,share/extension}" "group $LAPLACE_PG_GROUP"
+  # the locks: one deployment per database at a time, whoever runs it; the directory is on tmpfs, so it is declared to be made at every boot
+  printf 'd %s 2775 root %s -\n' "$LAPLACE_LOCKS" "$LAPLACE_GROUP" > /etc/tmpfiles.d/laplace.conf; systemd-tmpfiles --create /etc/tmpfiles.d/laplace.conf
+  say "shared trees" "group $LAPLACE_GROUP, set-group-id, group-writable"; say "$LAPLACE_PG_DIR/{lib,share/extension}" "group $LAPLACE_PG_GROUP"; say "locks" "$LAPLACE_LOCKS, at every boot"
 }
 packages(){ part packages
   missing=$(for p in $PACKAGES; do dpkg-query -W -f '${Status}\n' "$p" 2>/dev/null | grep -q "install ok installed" || echo "$p"; done)
   if [ -n "$missing" ]; then DEBIAN_FRONTEND=noninteractive apt-get install -y -q $missing; say "installed" "$(echo $missing)"; else say "packages" "all $(echo $PACKAGES | wc -w) present"; fi
   [ -e /opt/intel/oneapi/setvars.sh ] && say "Intel oneAPI" "present" || say "Intel oneAPI" "MISSING: install it from Intel (icx, MKL) and run setup.sh again"
+  # CMake 3.24 or newer, 4.x for icx 2026 (Setup: Toolchain): the distribution's is older, so Kitware's release goes
+  # under $PREFIX for everyone on the machine, the agents included
+  have=$("$PREFIX/bin/cmake" --version 2>/dev/null | sed -n '1s/.* //p'); case ${have:-0} in 3.2[4-9]*|3.[3-9]*|[4-9].*) say "CMake" "$have at $PREFIX/bin/cmake" ;; *)
+    v=$(curl -fsSL https://api.github.com/repos/Kitware/CMake/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+    curl -fsSL "https://github.com/Kitware/CMake/releases/download/v$v/cmake-$v-linux-x86_64.tar.gz" | tar xz -C "$PREFIX" --strip-components=1 --exclude='*/doc' --exclude='*/man'
+    say "CMake" "$("$PREFIX/bin/cmake" --version | sed -n '1s/.* //p') installed under $PREFIX" ;; esac
   id "$PGUSER" >/dev/null 2>&1 || { useradd -r -m -d "/var/lib/$PGUSER" -s /bin/bash "$PGUSER"; say "user $PGUSER" "made"; }
   # the users and groups: the server's user; the group the operator and the agent share; the group that installs extensions
   getent group "$LAPLACE_GROUP" >/dev/null || groupadd -r "$LAPLACE_GROUP"
