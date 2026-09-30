@@ -56,7 +56,8 @@ EOF
   # the runner's release
   if [ ! -x "$r/config.sh" ]; then
     v=$(runner_version)
-    curl -fsSL "https://github.com/actions/runner/releases/download/v$v/actions-runner-linux-x64-$v.tar.gz" | as_agent "tar xz -C $r"
+    curl -fsSL -o "$r/runner.tgz" "https://github.com/actions/runner/releases/download/v$v/actions-runner-linux-x64-$v.tar.gz"
+    chown "$user:$group" "$r/runner.tgz"; as_agent "tar xzf $r/runner.tgz -C $r"; rm -f "$r/runner.tgz"
     "$r/bin/installdependencies.sh" >/dev/null 2>&1 || true
     say "runner" "$v unpacked"
   else say "runner" "$(cat "$r/bin/Runner.Listener.deps.json" 2>/dev/null | sed -n 's/.*"Runner.Listener\/\([0-9.]*\)".*/\1/p' | head -1) present"; fi
