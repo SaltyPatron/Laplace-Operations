@@ -15,7 +15,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 log=$LAPLACE_WORK/logs/deploy/$(date -u +%Y%m%dT%H%M%SZ); mkdir -p "$log"
 step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
         { "$@" 2>&1; echo $? > "$log/$name.exit"; } | grep --line-buffered -v "^OMP: " | tee "$log/$name.log"
-        [ "$(cat "$log/$name.exit")" = 0 ] || { echo "=== $name did not finish; what it said is in $log/$name.log"; exit 1; }; }
+        [ "$(cat "$log/$name.exit" 2>/dev/null)" = 0 ] || { echo "=== $name did not finish; what it said is in $log/$name.log"; exit 1; }; }
 
 step build      "$here/build.sh" install
 [ -s "$LAPLACE_TIER0" ] || step tier0 laplace tier0
