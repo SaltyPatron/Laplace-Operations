@@ -1,0 +1,27 @@
+# Laplace-Operations on its runner: the machine declared and converged (setup.sh, as root: the one right this runner
+# has), then from an empty server to loaded, indexed and measured content (deploy.sh). Its checkouts are this
+# workspace: the three code repositories beside this one (private: the secret LAPLACE_CHECKOUT); its builds and work
+# are its own (runner/.env); the database is the machine's.
+name: Laplace-Operations
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  laplace:
+    runs-on: [self-hosted, laplace, Laplace-Operations]
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: Laplace-Operations }
+      - uses: actions/checkout@v4
+        with: { repository: "${{ github.repository_owner }}/Laplace-Native", path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - uses: actions/checkout@v4
+        with: { repository: "${{ github.repository_owner }}/Laplace-postgres", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - uses: actions/checkout@v4
+        with: { repository: "${{ github.repository_owner }}/Laplace-Engine", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - name: the machine
+        run: sudo -n --preserve-env=LAPLACE_SRC,LAPLACE_BUILD,LAPLACE_WORK,LAPLACE_DEPSRC "$GITHUB_WORKSPACE/Laplace-Operations/setup.sh"
+        env: { LAPLACE_SRC: "${{ github.workspace }}" }
+      - name: from an empty server to measured content
+        run: ./Laplace-Operations/deploy.sh
+        env: { LAPLACE_SRC: "${{ github.workspace }}" }
