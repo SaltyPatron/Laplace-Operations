@@ -100,7 +100,7 @@ remove(){ repo=$1; part "remove $repo"; r=$home/$repo/runner
     token=$(gh_op "api -X POST repos/$owner/$repo/actions/runners/remove-token --jq .token" 2>/dev/null || true)
     [ -n "$token" ] && as_agent "cd $r && ./config.sh remove --token $token" >/dev/null && say "registration" "removed from $owner/$repo" || say "registration" "could not unregister: remove $(hostname)-$repo on GitHub"
   fi
-  rm -rf "$home/$repo"; [ "$repo" = Laplace-Operations ] && rm -f /etc/sudoers.d/laplace-agent; say "$repo" "removed"
+  rm -rf "${home:?}/${repo:?}"; [ "$repo" = Laplace-Operations ] && rm -f /etc/sudoers.d/laplace-agent; say "$repo" "removed"
 }
 
 case ${1:-all} in
