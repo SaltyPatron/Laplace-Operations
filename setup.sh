@@ -16,6 +16,7 @@ here=$(cd "$(dirname "$0")" && pwd); . "$here/laplace.env"
 op=${SUDO_USER:-$(id -un)}; ophome=$(getent passwd "$op" | cut -d: -f6)
 PGDATA=$LAPLACE_PGDATA; PGWAL=$LAPLACE_PGWAL; PGTEMP=$LAPLACE_PGTEMP; PGUSER=$LAPLACE_PGUSER; PGBIN=$LAPLACE_PG_DIR/bin; PREFIX=$LAPLACE_PREFIX; SERVICE=$LAPLACE_PGSERVICE
 as_pg(){ su "$PGUSER" -c "$*" </dev/null; }                                     # as the server's user; never reads our stdin
+as_op(){ su -s /bin/bash "$op" -c "$*" </dev/null; }                              # as whoever ran this (an agent has no shell of its own)
 q(){ as_pg "$PGBIN/psql -X -h /tmp -d postgres -Atc \"$1\""; }                  # one statement, its value
 run(){ as_pg "$PGBIN/psql -X -h /tmp -d postgres -qc \"$1\"" >/dev/null; }        # one statement, done
 mkdir -p "$LAPLACE_WORK/logs/root"; chown "$op" "$LAPLACE_WORK/logs/root"
@@ -89,11 +90,11 @@ host      all   $LAPLACE_ROLE  ::1/128            scram-sha-256
 hostssl   all   $LAPLACE_ROLE  $LAPLACE_LAN       scram-sha-256
 hostnossl all   all            0.0.0.0/0          reject
 "
-IDENT="# who connects over the socket as $LAPLACE_ROLE: the operator, the server's user, the agent
-laplace  $op                  $LAPLACE_ROLE
-laplace  $PGUSER              $LAPLACE_ROLE
-laplace  $LAPLACE_AGENT_USER  $LAPLACE_ROLE
-"
+# Who operates Laplace on this machine is the shared group: every member connects over the socket as $LAPLACE_ROLE,
+# and has the role's password in ~/.pgpass. Not whoever happened to run this script.
+operators(){ { getent group "$LAPLACE_GROUP" | cut -d: -f4 | tr , '\n'; echo "$LAPLACE_AGENT_USER"; echo "$PGUSER"; } | grep . | sort -u; }
+ident(){ echo "# who connects over the socket as $LAPLACE_ROLE: the members of $LAPLACE_GROUP, the agent, the server's user"
+         operators | while read -r u; do printf 'laplace  %-20s %s\n' "$u" "$LAPLACE_ROLE"; done; }
 
 # ------------------------------------------------------------------------------------------------------- the parts
 volumes(){ part volumes
@@ -157,7 +158,7 @@ deps(){ part dependencies
   echo "$DEPS" | while read -r name proof how origin branch; do [ -n "$name" ] || continue
     src=$LAPLACE_DEPSRC/$name; b=$LAPLACE_WORK/$name
     if [ -e "$proof" ]; then say "$name" "installed"; continue; fi
-    [ -d "$src" ] || { su "$op" -c "git clone -q --depth 1 -b $branch $origin $src" || { say "$name" "could not clone $origin"; continue; }; }
+    [ -d "$src" ] || { as_op "git clone -q --depth 1 -b $branch $origin $src" || { say "$name" "could not clone $origin"; continue; }; }
     case $how in
       cmake)     cmake -S "$src" -B "$b" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$PREFIX -DBUILD_TESTING=OFF >/dev/null; cmake --build "$b" >/dev/null; cmake --install "$b" >/dev/null; ldconfig ;;
       source)    ;;                                                        # built into Laplace by its own CMake
@@ -166,7 +167,7 @@ deps(){ part dependencies
                    ICU_CFLAGS="-I$LAPLACE_ICU_DIR/include" ICU_LIBS="-L$LAPLACE_ICU_DIR/lib -licui18n -licuuc -licudata" >/dev/null
                    make -j"$cores" >/dev/null; make install >/dev/null; make -C contrib/pg_stat_statements install >/dev/null; make -C contrib/pg_buffercache install >/dev/null )
                  ln -sfn "$PGBIN/psql" "$PREFIX/bin/psql"; ln -sfn "$PGBIN/pg_config" "$PREFIX/bin/pg_config" ;;
-      postgis)   [ -x "$src/configure" ] || su "$op" -c "cd $src && ./autogen.sh" >/dev/null
+      postgis)   [ -x "$src/configure" ] || as_op "cd $src && ./autogen.sh" >/dev/null
                  mkdir -p "$b"; ( cd "$b"; [ -f config.status ] || "$src/configure" --with-pgconfig="$PGBIN/pg_config" --with-geosconfig=$PREFIX/bin/geos-config --with-projdir=$PREFIX --with-gdalconfig=$PREFIX/bin/gdal-config >/dev/null
                    make -j"$cores" >/dev/null; make install >/dev/null ); ldconfig ;;
     esac
@@ -230,15 +231,22 @@ SET
   q "SELECT '  '||rpad(name, 46)||current_setting(name) FROM pg_settings WHERE name IN ('shared_buffers','huge_pages_status','effective_cache_size','work_mem','maintenance_work_mem','io_method','max_wal_size','wal_buffers','listen_addresses','ssl') ORDER BY name"
 }
 access(){ part access
-  # the operator's password for laplace: made once, kept in the operator's ~/.pgpass only, never printed
-  pgpass=$ophome/.pgpass; touch "$pgpass"; chown "$op" "$pgpass"; chmod 600 "$pgpass"
   [ "$(q "SELECT count(*) FROM pg_roles WHERE rolname = '$LAPLACE_ROLE'")" = 1 ] || run "CREATE ROLE $LAPLACE_ROLE LOGIN SUPERUSER"
-  if ! grep -q ":$LAPLACE_ROLE:" "$pgpass"; then
-    pw=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-32)
-    run "ALTER ROLE $LAPLACE_ROLE PASSWORD '$pw'"
-    printf '*:5432:*:%s:%s\n' "$LAPLACE_ROLE" "$pw" >> "$pgpass"; unset pw; say "role $LAPLACE_ROLE" "password made, in $pgpass"
-  else say "role $LAPLACE_ROLE" "password in $pgpass"; fi
-  printf '%s' "$HBA" > "$PGDATA/pg_hba.conf.setup"; printf '%s' "$IDENT" > "$PGDATA/pg_ident.conf.setup"
+  # the role's password: one canonical copy, root's, in /etc/laplace; adopted from an operator's ~/.pgpass when it
+  # is the one the server accepts, made when none is; then written into every operator's ~/.pgpass. Never printed.
+  install -d -m 700 /etc/laplace; canon=/etc/laplace/pgpass
+  works(){ PGPASSWORD=$1 "$PGBIN/psql" -X "host=127.0.0.1 port=5432 user=$LAPLACE_ROLE dbname=postgres" -Atc 'SELECT 1' 2>/dev/null | grep -q 1; }
+  pw=""; [ -s "$canon" ] && pw=$(sed -n "s/^[^:]*:[^:]*:[^:]*:$LAPLACE_ROLE:\(.*\)$/\1/p" "$canon" | head -1)
+  if [ -z "$pw" ] || ! works "$pw"; then
+    pw=""; for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [ -s "$h/.pgpass" ] || continue
+      for c in $(sed -n "s/^[^:]*:[^:]*:[^:]*:$LAPLACE_ROLE:\(.*\)$/\1/p" "$h/.pgpass"); do works "$c" && { pw=$c; say "role $LAPLACE_ROLE" "password adopted from $u"; break 2; }; done; done
+    if [ -z "$pw" ]; then pw=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-32); run "ALTER ROLE $LAPLACE_ROLE PASSWORD '$pw'"; say "role $LAPLACE_ROLE" "password made"; fi
+    umask 077; printf '*:5432:*:%s:%s\n' "$LAPLACE_ROLE" "$pw" > "$canon"
+  else say "role $LAPLACE_ROLE" "password in $canon"; fi
+  for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [ -d "$h" ] || continue
+    { [ -f "$h/.pgpass" ] && grep -v ":$LAPLACE_ROLE:" "$h/.pgpass"; cat "$canon"; } > "$h/.pgpass.setup" 2>/dev/null; mv -f "$h/.pgpass.setup" "$h/.pgpass"; chown "$u" "$h/.pgpass"; chmod 600 "$h/.pgpass"; done
+  unset pw; say "~/.pgpass" "$(operators | tr '\n' ' ')"
+  printf '%s' "$HBA" > "$PGDATA/pg_hba.conf.setup"; ident > "$PGDATA/pg_ident.conf.setup"
   cmp -s "$PGDATA/pg_hba.conf.setup" "$PGDATA/pg_hba.conf" || { cp -p "$PGDATA/pg_hba.conf" "$PGDATA/pg_hba.conf.before" 2>/dev/null || true; mv "$PGDATA/pg_hba.conf.setup" "$PGDATA/pg_hba.conf"; say "pg_hba.conf" "written"; }
   cmp -s "$PGDATA/pg_ident.conf.setup" "$PGDATA/pg_ident.conf" || { mv "$PGDATA/pg_ident.conf.setup" "$PGDATA/pg_ident.conf"; say "pg_ident.conf" "written"; }
   rm -f "$PGDATA/pg_hba.conf.setup" "$PGDATA/pg_ident.conf.setup"; chown "$PGUSER:$PGUSER" "$PGDATA/pg_hba.conf" "$PGDATA/pg_ident.conf"
@@ -251,8 +259,8 @@ report(){ part report
   say "PostGIS" "$(q "SELECT default_version FROM pg_available_extensions WHERE name = 'postgis'")"
   say "listening" "$(ss -ltn | awk '$4 ~ /:5432$/ {print $4}' | tr '\n' ' ')"
   addr=$(ip -4 -o addr | awk -v lan="$LAPLACE_LAN" '{split(lan, a, "."); if ($4 ~ "^"a[1]"\\."a[2]"\\."a[3]"\\.") {print $4; exit}}' | cut -d/ -f1)
-  say "from the network, as $op" "$(su "$op" -c "$PGBIN/psql -X 'host=$addr port=5432 user=$LAPLACE_ROLE dbname=postgres sslmode=require' -Atc \"SELECT 'connected, TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')\"" 2>&1 | tail -1)"
-  say "over the socket, as $op" "$(su "$op" -c "$PGBIN/psql -X 'host=/tmp port=5432 user=$LAPLACE_ROLE dbname=postgres' -Atc \"SELECT 'connected as '||current_user\"" 2>&1 | tail -1)"
+  say "from the network, as $op" "$(as_op "$PGBIN/psql -X 'host=$addr port=5432 user=$LAPLACE_ROLE dbname=postgres sslmode=require' -Atc \"SELECT 'connected, TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')\"" 2>&1 | tail -1)"
+  say "over the socket, as $op" "$(as_op "$PGBIN/psql -X 'host=/tmp port=5432 user=$LAPLACE_ROLE dbname=postgres' -Atc \"SELECT 'connected as '||current_user\"" 2>&1 | tail -1)"
   echo; echo "next, as $op: ./deploy.sh;   the repositories' agents: sudo ./agents.sh"
 }
 
