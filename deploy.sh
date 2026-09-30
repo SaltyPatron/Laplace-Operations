@@ -1,5 +1,6 @@
 #!/bin/sh
-# Laplace, from an empty server to loaded, indexed and measured content: the five steps of Deployment, in order
+# Laplace, from an empty server to loaded, indexed and measured content: the five steps of Deployment, in order,
+# with the perf-caches (tier 0, its flags, the highway) generated once
 # (Laplace-Operations; the code is Laplace-Native, Laplace-postgres and Laplace-Engine beside it under $LAPLACE_SRC).
 # Everything it does can be done again: what is built is not rebuilt, what is recorded is passed over by its bytes,
 # and a run that was cut off is taken up by running it again.
@@ -25,6 +26,7 @@ step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
 step build      "$here/build.sh" install
 [ -s "$LAPLACE_TIER0" ] || step tier0 laplace tier0
 [ -s "${LAPLACE_TIER0%.bin}.flags" ] || step flags laplace flags
+[ -s "${LAPLACE_TIER0%.bin}.highway" ] || step highway laplace highway
 [ -n "$(ls "$LAPLACE_GRAMMARS" 2>/dev/null)" ] || step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"
 step deploy     laplace deploy
 step ingest     laplace ingest
