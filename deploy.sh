@@ -7,6 +7,7 @@
 #
 #   ./deploy.sh                                      the database laplace.env names
 #   LAPLACE_CONNINFO="... dbname=NAME" ./deploy.sh   another database; it is made if the server does not have it
+#   LAPLACE_SOURCES="open-english-wordnet verbnet" ./deploy.sh   these sources only: the small case, proved before the large
 #
 # What it needs first: PostgreSQL 18 with PostGIS running, a role that may create databases and extensions, and the
 # data under $LAPLACE_DATA (Operations: Setup, Builds). What each step said is kept in $LAPLACE_WORK/logs/deploy.
@@ -34,7 +35,8 @@ step build      "$here/build.sh" install
 step highway    laplace highway                                   # seconds; always current with the generator and the resources
 [ -n "$(ls "$LAPLACE_GRAMMARS" 2>/dev/null)" ] || step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"
 step deploy     laplace deploy
-step ingest     laplace ingest
+# shellcheck disable=SC2086
+step ingest     laplace ingest $LAPLACE_SOURCES                   # the sources named, or every source in order
 step status     laplace status
 step bench      laplace bench
 ss -ltn 2>/dev/null | grep -q "0.0.0.0:5432\|\*:5432" || echo "
