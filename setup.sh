@@ -122,7 +122,7 @@ shared(){
   done
   install -d "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"; chgrp "$LAPLACE_PG_GROUP" "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"; chmod 2775 "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"
   # the locks: one deployment per database at a time, whoever runs it; the directory is on tmpfs, so it is declared to be made at every boot
-  printf 'd %s 2775 root %s -\n' "$LAPLACE_LOCKS" "$LAPLACE_GROUP" > /etc/tmpfiles.d/laplace.conf; systemd-tmpfiles --create /etc/tmpfiles.d/laplace.conf
+  printf 'd %s 2775 root %s -\nz %s/* 0664 - %s -\n' "$LAPLACE_LOCKS" "$LAPLACE_GROUP" "$LAPLACE_LOCKS" "$LAPLACE_GROUP" > /etc/tmpfiles.d/laplace.conf; systemd-tmpfiles --create /etc/tmpfiles.d/laplace.conf
   say "shared trees" "group $LAPLACE_GROUP, set-group-id, group-writable"; say "$LAPLACE_PG_DIR/{lib,share/extension}" "group $LAPLACE_PG_GROUP"; say "locks" "$LAPLACE_LOCKS, at every boot"
 }
 packages(){ part packages

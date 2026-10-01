@@ -15,7 +15,12 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/laplace.env"
 # one deployment per database at a time, whoever runs it (the operator, an agent): the second says so and leaves
 db=$(echo "$LAPLACE_CONNINFO" | sed -n 's/.*dbname=\([^ ]*\).*/\1/p'); [ -w "$LAPLACE_LOCKS" ] || LAPLACE_LOCKS=$LAPLACE_WORK   # before setup.sh: this user's own
-lock=$LAPLACE_LOCKS/deploy-${db:-default}.lock; exec 9>>"$lock"
+umask 002                                                                      # what this makes, every operator of the group may take up
+lock=$LAPLACE_LOCKS/deploy-${db:-default}.lock
+if [ -e "$lock" ] && [ ! -w "$lock" ]; then                                    # left by another operator without group write: theirs while it runs, stale after
+  p=$(cat "$lock.pid" 2>/dev/null); if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then echo "a deployment of $db is already running (pid $p): this one leaves"; exit 3; fi
+  rm -f "$lock" "$lock.pid"; fi
+exec 9>>"$lock"
 flock -n 9 || { echo "a deployment of $db is already running (pid $(cat "$lock.pid" 2>/dev/null)): this one leaves"; exit 3; }
 echo $$ > "$lock.pid"
 log=$LAPLACE_WORK/logs/deploy/$(date -u +%Y%m%dT%H%M%SZ); mkdir -p "$log"
