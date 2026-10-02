@@ -1,0 +1,23 @@
+# The ingest, on the Operations runner: an operation someone starts, on the machine as the last Laplace-Operations
+# run left it. It builds nothing and checks out no code: the program, the recipes, the perf-caches and the database are
+# the ones that run built and deployed, so what is ingested is read by exactly what was built. One ingest per database
+# at a time; a run that was cut off is taken up by running it again.
+name: Laplace-Ingest
+on:
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "sources to ingest, by name, in this order; empty for every source in recipes/order"
+        default: ""
+        required: false
+env:
+  LAPLACE_SRC: ${{ github.workspace }}
+jobs:
+  ingest:
+    runs-on: [self-hosted, laplace, Laplace-Operations]
+    timeout-minutes: 7200
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: Laplace-Operations, clean: false }
+      - name: the ingest, its status, and its measurements
+        run: ./Laplace-Operations/ingest.sh ${{ inputs.sources }}

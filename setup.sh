@@ -113,11 +113,12 @@ volumes(){ part volumes
   shared
 }
 # What the operator and the agent both read and write is the shared group's, set-group-id and group-writable, so
-# neither ever meets a permission: sources, builds, work, dependencies, data; and the server's extension directories.
+# neither ever meets a permission: sources, builds, work, dependencies; and the server's extension directories.
+# The data is only read: its owner, group and modes are its owner's, and nothing here changes them.
 shared(){
   getent group "$LAPLACE_GROUP" >/dev/null || return 0
-  mkdir -p "$LAPLACE_SRC" "$LAPLACE_BUILD" "$LAPLACE_WORK" "$LAPLACE_DEPS" "$LAPLACE_DATA"
-  for d in "$LAPLACE_SRC" "$LAPLACE_BUILD" "$LAPLACE_WORK" "$LAPLACE_DEPS" "$LAPLACE_DATA"; do
+  mkdir -p "$LAPLACE_SRC" "$LAPLACE_BUILD" "$LAPLACE_WORK" "$LAPLACE_DEPS"
+  for d in "$LAPLACE_SRC" "$LAPLACE_BUILD" "$LAPLACE_WORK" "$LAPLACE_DEPS"; do
     chgrp -R "$LAPLACE_GROUP" "$d" 2>/dev/null || true; chmod -R g+rwX "$d" 2>/dev/null || true; find "$d" -type d -exec chmod g+s {} + 2>/dev/null || true
   done
   install -d "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"; chgrp "$LAPLACE_PG_GROUP" "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"; chmod 2775 "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"

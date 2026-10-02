@@ -1,7 +1,6 @@
-# Laplace-Operations on its runner. On a push: the machine declared and converged (setup.sh, as root: the one right
-# this runner has), the build, the database's schema and extension (laplace deploy), and its status — minutes, and no
-# data is loaded. The ingest is an operation someone starts: "Run workflow" with the sources to load (default: every
-# source in its order, taken up where a previous run stopped), one deployment per database at a time.
+# Laplace-Operations on its runner. On a push, or when someone runs it: the machine declared and converged (setup.sh,
+# as root: the one right this runner has), the build, the perf-caches, and the database's schema and extension with
+# its status (deploy.sh). Minutes, and no data is loaded: the ingest is a workflow of its own (ingest.yml).
 # The three code repositories are checked out beside this one (private: the secret LAPLACE_CHECKOUT); builds and
 # work are the runner's own (runner/.env); the database is the machine's.
 name: Laplace-Operations
@@ -9,11 +8,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      ingest:
-        description: "sources to ingest: 'all' for every source in order, names separated by spaces, or empty for none"
-        default: ""
-        required: false
 env:
   LAPLACE_SRC: ${{ github.workspace }}
 jobs:
@@ -30,15 +24,5 @@ jobs:
         with: { repository: "${{ github.repository_owner }}/Laplace-Engine", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - name: the machine
         run: sudo -n --preserve-env=LAPLACE_SRC,LAPLACE_BUILD,LAPLACE_WORK,LAPLACE_DEPSRC "$GITHUB_WORKSPACE/Laplace-Operations/setup.sh"
-      - name: the build
-        run: ./Laplace-Operations/build.sh install
-      - name: the database, its schema and extension, and its status
-        run: |
-          . ./Laplace-Operations/laplace.env
-          laplace deploy
-          laplace status
-      - name: the ingest (only when asked)
-        if: github.event_name == 'workflow_dispatch' && inputs.ingest != ''
-        run: |
-          . ./Laplace-Operations/laplace.env
-          if [ "${{ inputs.ingest }}" = all ]; then ./Laplace-Operations/deploy.sh; else laplace ingest ${{ inputs.ingest }}; fi
+      - name: the build, the perf-caches, the database with its schema and extension, and its status
+        run: ./Laplace-Operations/deploy.sh

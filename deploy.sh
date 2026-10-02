@@ -1,13 +1,13 @@
 #!/bin/sh
-# Laplace, from an empty server to loaded, indexed and measured content: the five steps of Deployment, in order,
-# with the perf-caches generated: tier 0 and its flags once, the highway every time (it takes seconds)
+# Laplace, from an empty server to a Laplace database ready to be loaded: the build, the perf-caches generated (tier 0
+# and its flags once, the highway every time: it takes seconds), the grammars, the database with its extension and
+# schema, and its status. No data is loaded here: loading is ingest.sh, an operation of its own on what this left
 # (Laplace-Operations; the code is Laplace-Native, Laplace-postgres and Laplace-Engine beside it under $LAPLACE_SRC).
 # Everything it does can be done again: what is built is not rebuilt, what is recorded is passed over by its bytes,
 # and a run that was cut off is taken up by running it again.
 #
 #   ./deploy.sh                                      the database laplace.env names
 #   LAPLACE_CONNINFO="... dbname=NAME" ./deploy.sh   another database; it is made if the server does not have it
-#   LAPLACE_SOURCES="open-english-wordnet verbnet" ./deploy.sh   these sources only: the small case, proved before the large
 #
 # What it needs first: PostgreSQL 18 with PostGIS running, a role that may create databases and extensions, and the
 # data under $LAPLACE_DATA (Operations: Setup, Builds). What each step said is kept in $LAPLACE_WORK/logs/deploy.
@@ -35,10 +35,7 @@ step build      "$here/build.sh" install
 step highway    laplace highway                                   # seconds; always current with the generator and the resources
 [ -n "$(ls "$LAPLACE_GRAMMARS" 2>/dev/null)" ] || step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"
 step deploy     laplace deploy
-# shellcheck disable=SC2086
-step ingest     laplace ingest $LAPLACE_SOURCES                   # the sources named, or every source in order
 step status     laplace status
-step bench      laplace bench
 ss -ltn 2>/dev/null | grep -q "0.0.0.0:5432\|\*:5432" || echo "
 The server listens on localhost only: sudo ./setup.sh declares the machine, this among it (the one step that needs root)."
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
