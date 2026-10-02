@@ -37,7 +37,8 @@ agent(){ repo=$1; part "$repo"
   # the directories: the agent's, the shared group's, group-writable, so the operator reads its logs and builds
   install -d -o "$user" -g "$group" -m 2775 "$home" "$d" "$r" "$d/work" "$d/build"
   # the environment every job on this runner gets (the runner reads .env at its root): its own builds and work, the
-  # machine's dependencies, data and database; its checkouts are the workspace, which the workflow names as LAPLACE_SRC
+  # machine's dependencies and data; its checkouts are the workspace, which the workflow names as LAPLACE_SRC.
+  # Not the database: that is laplace.env's alone, so a job reads the one name every operator reads
   cat > "$r/.env" <<EOF
 LAPLACE_BUILD=$d/build
 LAPLACE_WORK=$d/work
@@ -49,7 +50,6 @@ LAPLACE_DEPS=$LAPLACE_DEPS
 LAPLACE_ICU_DIR=$LAPLACE_ICU_DIR
 LAPLACE_DATA=$LAPLACE_DATA
 LAPLACE_PG_DIR=$LAPLACE_PG_DIR
-LAPLACE_CONNINFO=$LAPLACE_CONNINFO
 LAPLACE_TIER0=$LAPLACE_WORK/tier0/tier0.bin
 LAPLACE_GRAMMARS=$LAPLACE_BUILD/grammars
 EOF

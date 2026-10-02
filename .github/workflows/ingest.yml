@@ -12,6 +12,7 @@ on:
         required: false
 env:
   LAPLACE_SRC: ${{ github.workspace }}
+  LAPLACE_CONNINFO: ""   # the database is laplace.env's, never a copy a runner kept from when it was registered
 jobs:
   ingest:
     runs-on: [self-hosted, laplace, Laplace-Operations]
