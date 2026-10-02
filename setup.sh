@@ -59,12 +59,13 @@ effective_io_concurrency         256
 maintenance_io_concurrency       256
 random_page_cost                 1.1
 default_toast_compression        lz4
-max_wal_size                     32GB
+max_wal_size                     64GB
 min_wal_size                     4GB
-wal_buffers                      64MB
-wal_compression                  zstd
-checkpoint_timeout               30min
+wal_buffers                      256MB
+wal_compression                  lz4
+checkpoint_timeout               60min
 checkpoint_completion_target     0.9
+bgwriter_lru_maxpages            1000
 max_worker_processes             $((cores + 4))
 max_parallel_workers             $cores
 max_parallel_workers_per_gather  $((cores / 2))
