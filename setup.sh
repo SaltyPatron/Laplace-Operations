@@ -59,7 +59,7 @@ effective_io_concurrency         256
 maintenance_io_concurrency       256
 random_page_cost                 1.1
 default_toast_compression        lz4
-max_wal_size                     64GB
+max_wal_size                     32GB
 min_wal_size                     4GB
 wal_buffers                      256MB
 wal_compression                  lz4
