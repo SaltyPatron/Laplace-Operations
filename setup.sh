@@ -80,6 +80,7 @@ listen_addresses                 *
 ssl                              on
 port                             5432
 max_connections                  100
+max_prepared_transactions        32
 "
 # Who may connect, and how: the whole file, not a line added to whatever is there.
 HBA="# Laplace (setup.sh). Local: the server's own user and the operator, over the socket. The network: laplace and postgres, scram over TLS; postgres also by password from the host itself.
