@@ -1,13 +1,28 @@
-# Laplace-Operations on its runner. On a push, or when someone runs it: the machine declared and converged (setup.sh,
-# as root: the one right this runner has), the build, the perf-caches, and the database's schema and extension with
-# its status (deploy.sh). Minutes, and no data is loaded: the ingest is a workflow of its own (ingest.yml).
-# The three code repositories are checked out beside this one (private: the secret LAPLACE_CHECKOUT); builds and
-# work are the runner's own (runner/.env); the database is the machine's.
+# Laplace-Operations on its runner: the machine (setup.sh, as root: the one right this runner has) and the deployment
+# (deploy.sh: the build, the perf-caches, the database's schema and extension, and its status). Each runs only when it
+# is called for. A push converges the machine only when what declares it changed (setup.sh, laplace.env), and deploys.
+# Run by hand, each is chosen: the setup's parts, the drop (the cluster made again, empty), the deployment. No data is
+# loaded: the ingest is a workflow of its own (ingest.yml). The three code repositories are checked out beside this
+# one for the deployment (private: the secret LAPLACE_CHECKOUT); builds and work are the runner's own (runner/.env);
+# the database is the machine's.
 name: Laplace-Operations
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      setup:
+        description: "setup.sh parts, in order: all, or some of volumes packages kernel deps cluster settings access report; empty: none"
+        default: "all"
+        required: false
+      drop:
+        description: "drop the cluster first and make it again, empty (setup.sh drop): every database on the server is lost"
+        type: boolean
+        default: false
+      deploy:
+        description: "deploy.sh: the build, the perf-caches, the database's schema and extension, and its status"
+        type: boolean
+        default: true
 env:
   LAPLACE_SRC: ${{ github.workspace }}
   LAPLACE_CONNINFO: ""   # the database is laplace.env's, never a copy a runner kept from when it was registered
@@ -16,14 +31,48 @@ jobs:
     runs-on: [self-hosted, laplace, Laplace-Operations]
     steps:
       - uses: actions/checkout@v4
-        with: { path: Laplace-Operations }
+        with: { path: Laplace-Operations, fetch-depth: 0 }
+      - name: what this run does
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          IN_SETUP: ${{ inputs.setup }}
+          IN_DROP: ${{ inputs.drop }}
+          IN_DEPLOY: ${{ inputs.deploy }}
+        run: |
+          if [ "$EVENT" = push ]; then
+            # the machine is converged when what declares it changed; a push whose parent is not known converges it
+            changed=$(git -C Laplace-Operations diff --name-only "$BEFORE" "$GITHUB_SHA" 2>/dev/null) || changed=setup.sh
+            if echo "$changed" | grep -qx 'setup.sh\|laplace.env'; then setup=all; else setup=""; fi
+            drop=false; deploy=true
+          else
+            setup=$IN_SETUP; drop=$IN_DROP; deploy=$IN_DEPLOY
+          fi
+          # a dropped cluster is made again by the parts that make it
+          if [ "$drop" = true ]; then
+            case " $setup " in *" all "*|*" cluster "*) ;; *) setup="$setup cluster settings access report" ;; esac
+            setup="drop $setup"
+          fi
+          setup=$(echo $setup)
+          echo "setup=$setup" >> "$GITHUB_OUTPUT"; echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+          echo "setup.sh: ${setup:-not run}    deploy.sh: $deploy"
+      - name: the machine (setup.sh ${{ steps.plan.outputs.setup }})
+        if: steps.plan.outputs.setup != ''
+        env:
+          PARTS: ${{ steps.plan.outputs.setup }}
+        run: |
+          case " $PARTS " in *" drop "*) export LAPLACE_DROP=$(bash -c '. ./Laplace-Operations/laplace.env >/dev/null 2>&1; echo "$LAPLACE_PGDATA"') ;; esac
+          sudo -n --preserve-env=LAPLACE_SRC,LAPLACE_BUILD,LAPLACE_WORK,LAPLACE_DEPSRC,LAPLACE_DROP "$GITHUB_WORKSPACE/Laplace-Operations/setup.sh" $PARTS
       - uses: actions/checkout@v4
+        if: steps.plan.outputs.deploy == 'true'
         with: { repository: "${{ github.repository_owner }}/Laplace-Native", path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - uses: actions/checkout@v4
+        if: steps.plan.outputs.deploy == 'true'
         with: { repository: "${{ github.repository_owner }}/Laplace-postgres", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - uses: actions/checkout@v4
+        if: steps.plan.outputs.deploy == 'true'
         with: { repository: "${{ github.repository_owner }}/Laplace-Engine", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
-      - name: the machine
-        run: sudo -n --preserve-env=LAPLACE_SRC,LAPLACE_BUILD,LAPLACE_WORK,LAPLACE_DEPSRC "$GITHUB_WORKSPACE/Laplace-Operations/setup.sh"
       - name: the build, the perf-caches, the database with its schema and extension, and its status
+        if: steps.plan.outputs.deploy == 'true'
         run: ./Laplace-Operations/deploy.sh

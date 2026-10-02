@@ -3,6 +3,8 @@
 #
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | kernel | deps | cluster | settings | access | report
+#   sudo LAPLACE_DROP=/data/pgdata ./setup.sh drop all
+#                              the cluster dropped and made again, empty: never part of all, and named to be dropped
 #
 # Nothing here is a sequence of patches. Each part is a set: the volumes there are to be, the packages, the settings,
 # the access rules; the part compares the set with the machine and closes the difference. Running it again on a
@@ -19,6 +21,13 @@ as_pg(){ su "$PGUSER" -c "$*" </dev/null; }                                     
 as_op(){ su -s /bin/bash "$op" -c "$*" </dev/null; }                              # as whoever ran this (an agent has no shell of its own)
 q(){ as_pg "$PGBIN/psql -X -h /tmp -d postgres -Atc \"$1\""; }                  # one statement, its value
 run(){ as_pg "$PGBIN/psql -X -h /tmp -d postgres -qc \"$1\"" >/dev/null; }        # one statement, done
+# the server accepting connections, however long its recovery takes; a server that stops on the way is a failure
+ready(){ for _ in $(seq 7200); do as_pg "$PGBIN/pg_isready -q -h /tmp" && return 0
+           systemctl is-active -q "$SERVICE.service" || { journalctl -u "$SERVICE.service" -n 15 --no-pager; echo "$SERVICE.service stopped before it accepted connections"; exit 1; }
+           sleep 1; done; echo "$SERVICE.service did not accept connections in two hours"; exit 1; }
+# an ingest of the database laplace.env names holds its lock (ingest.sh)
+ingesting(){ local db l; db=$(echo "$LAPLACE_CONNINFO" | sed -n 's/.*dbname=\([^ ]*\).*/\1/p'); l=$LAPLACE_LOCKS/ingest-${db:-default}.lock
+             [ -e "$l" ] && ! flock -n "$l" true; }
 mkdir -p "$LAPLACE_WORK/logs/root"; chown "$op" "$LAPLACE_WORK/logs/root"
 log=$LAPLACE_WORK/logs/root/setup-$(date -u +%Y%m%dT%H%M%SZ).log; exec > >(tee "$log") 2>&1
 say(){ printf '  %-46s %s\n' "$1" "$2"; }
@@ -45,9 +54,17 @@ blake3      $LAPLACE_DEPSRC/blake3/c/blake3.h   source     https://github.com/BL
 core-math   $LAPLACE_DEPSRC/core-math/src       source     https://gitlab.inria.fr/core-math/core-math.git  master
 tree-sitter $LAPLACE_DEPSRC/tree-sitter/lib/src/lib.c   source   https://github.com/tree-sitter/tree-sitter.git   master
 "
-# The server's settings (Database.md), as ALTER SYSTEM makes them. Memory follows the machine.
+# The server's settings (Database.md), as ALTER SYSTEM makes them. Memory follows the machine, and the log follows
+# its volume: declared() is read once the volumes are mounted.
 ram_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo); cores=$(nproc)
-SETTINGS="
+# The log's bound is the volume it is on, not a number of its own. max_wal_size is what a checkpoint brings the log
+# back down to, not a limit: under a load the log runs past it while a checkpoint catches up, and a server that
+# crashed needs room for new segments before its recovery can end. Three eighths of the volume: a checkpoint a whole
+# cycle late, the log at twice the bound, still leaves a quarter of the volume free. A replication slot is held to
+# the same bound, so nothing can keep the log past it.
+wal_mb(){ local b; b=$(findmnt -n -b -o SIZE "$PGWAL" | sed -n 1p)                 # the volume, under anything mounted over it
+          [ -n "$b" ] || b=$(df -B1 --output=size "$PGWAL" | tail -1 | tr -d ' '); echo $(( b / 1048576 * 3 / 8 )); }
+declared(){ cat <<SET
 shared_buffers                   $((ram_kb / 4 / 1024 / 1024))GB
 effective_cache_size             $((ram_kb * 7 / 10 / 1024 / 1024))GB
 work_mem                         256MB
@@ -59,7 +76,8 @@ effective_io_concurrency         256
 maintenance_io_concurrency       256
 random_page_cost                 1.1
 default_toast_compression        lz4
-max_wal_size                     32GB
+max_wal_size                     $(wal_mb)MB
+max_slot_wal_keep_size           $(wal_mb)MB
 min_wal_size                     4GB
 wal_buffers                      256MB
 wal_compression                  lz4
@@ -82,7 +100,8 @@ ssl                              on
 port                             5432
 max_connections                  100
 max_prepared_transactions        32
-"
+SET
+}
 # Who may connect, and how: the whole file, not a line added to whatever is there.
 HBA="# Laplace (setup.sh). Local: the server's own user and the operator, over the socket. The network: laplace and postgres, scram over TLS; postgres also by password from the host itself.
 local     all   $PGUSER                           peer
@@ -152,7 +171,7 @@ packages(){ part packages
 kernel(){ part kernel
   # huge pages: what the server says it needs, 3% over, from the shared_buffers declared above; takes effect at boot
   # and now, as far as free memory allows
-  sb=$(echo "$SETTINGS" | awk '$1=="shared_buffers"{print $2}' | tr -d GB); declared=$((sb * 512 * 103 / 100 + 64))   # 2 MB pages for the buffers declared, 3% and the rest of shared memory over
+  sb=$(declared | awk '$1=="shared_buffers"{print $2}' | tr -d GB); declared=$((sb * 512 * 103 / 100 + 64))   # 2 MB pages for the buffers declared, 3% and the rest of shared memory over
   need=$(q "SHOW shared_memory_size_in_huge_pages" 2>/dev/null || echo 0); [ "${need:-0}" -gt "$declared" ] || need=$declared
   want=$((need + need * 3 / 100))
   printf 'vm.nr_hugepages = %s\n' "$want" > /etc/sysctl.d/60-laplace.conf
@@ -213,26 +232,42 @@ TimeoutStopSec=infinity
 [Install]
 WantedBy=multi-user.target
 EOF
-  systemctl daemon-reload; systemctl enable -q "$SERVICE.service"; systemctl is-active -q "$SERVICE.service" || systemctl start "$SERVICE.service"
-  for _ in $(seq 30); do as_pg "$PGBIN/pg_isready -q -h /tmp" && break; sleep 1; done
-  say "$SERVICE.service" "$(systemctl is-active "$SERVICE.service")"
+  systemctl daemon-reload; systemctl enable -q "$SERVICE.service"
+  systemctl is-active -q "$SERVICE.service" || { systemctl reset-failed "$SERVICE.service" 2>/dev/null || true; systemctl start "$SERVICE.service"; }
+  ready
+  say "$SERVICE.service" "$(systemctl is-active "$SERVICE.service"), accepting connections"
   [ "$(q "SELECT count(*) FROM pg_tablespace WHERE spcname = 'pgtemp'")" = 1 ] || run "CREATE TABLESPACE pgtemp LOCATION '$PGTEMP'"
   say "tablespace pgtemp" "$PGTEMP"
   # the server's certificate, before ssl = on is declared: a server told to use TLS without one does not start
   [ -s "$PGDATA/server.crt" ] || { as_pg "openssl req -new -x509 -days 3650 -nodes -subj '/CN=$(hostname)' -keyout $PGDATA/server.key -out $PGDATA/server.crt 2>/dev/null && chmod 600 $PGDATA/server.key"; say "certificate" "made, 10 years"; }
+}
+# The cluster dropped, for cluster to make again: the server stopped and disabled, and everything in its data
+# directory, its log's volume and its temporary volume removed. The volumes themselves stay as they are. Every
+# database on the server is lost, so it is never part of all, it asks for the data directory by name, and it does
+# not run under an ingest or on a volume that is not mounted.
+drop(){ part drop
+  [ "${LAPLACE_DROP:-}" = "$PGDATA" ] || { say "drop" "REFUSED: name the cluster to drop: LAPLACE_DROP=$PGDATA"; exit 1; }
+  ! ingesting || { say "drop" "REFUSED: an ingest is running"; exit 1; }
+  systemctl disable -q "$SERVICE.service" 2>/dev/null || true; systemctl stop "$SERVICE.service" 2>/dev/null || true; systemctl reset-failed "$SERVICE.service" 2>/dev/null || true
+  for d in "$PGDATA" "$PGWAL" "$PGTEMP"; do mountpoint -q "$d" || { say "drop" "REFUSED: $d is not mounted"; exit 1; }; done
+  find "$PGWAL" "$PGTEMP" -mindepth 1 -delete
+  find "$PGDATA" -mindepth 1 -maxdepth 1 ! -path "$PGWAL" -exec rm -rf {} +
+  say "drop" "$PGDATA, $PGWAL and $PGTEMP emptied: cluster makes the cluster again"
 }
 settings(){ part settings
   # every setting is stated; the server itself says which of them changed and which need a restart
   while read -r name value; do [ -n "$name" ] || continue
     case $name in shared_preload_libraries) v="$value" ;; *) v="'$value'" ;; esac
     run "ALTER SYSTEM SET $name = $v" 2>/dev/null || say "$name" "REFUSED $value"
-  done <<SET
-$SETTINGS
-SET
+  done < <(declared)
   q "SELECT pg_reload_conf()" >/dev/null
   pending=$(q "SELECT string_agg(name, ', ') FROM pg_settings WHERE pending_restart")
-  say "settings" "$(echo "$SETTINGS" | grep -c .) declared, reloaded"
-  [ -z "$pending" ] || { systemctl restart "$SERVICE.service"; for _ in $(seq 30); do as_pg "$PGBIN/pg_isready -q -h /tmp" && break; sleep 1; done; say "restarted for" "$pending"; }
+  say "settings" "$(declared | grep -c .) declared, reloaded"
+  # a restart is never made under a running ingest: it would cut the load off and send the server through recovery
+  if [ -n "$pending" ]; then
+    if ingesting; then say "restart for $pending" "DEFERRED: an ingest is running; sudo ./setup.sh settings once it is done"
+    else systemctl restart "$SERVICE.service"; ready; say "restarted for" "$pending"; fi
+  fi
   [ "$(q "SHOW huge_pages_status")" = on ] || say "huge pages" "NOT IN USE: the server needs $(q "SHOW shared_memory_size_in_huge_pages") pages; sudo ./setup.sh kernel settings"
   q "SELECT '  '||rpad(name, 46)||current_setting(name) FROM pg_settings WHERE name IN ('shared_buffers','huge_pages_status','effective_cache_size','work_mem','maintenance_work_mem','io_method','max_wal_size','wal_buffers','listen_addresses','ssl') ORDER BY name"
 }
@@ -244,8 +279,10 @@ access(){ part access
   works(){ PGPASSWORD=$1 "$PGBIN/psql" -X "host=127.0.0.1 port=5432 user=$LAPLACE_ROLE dbname=postgres" -Atc 'SELECT 1' 2>/dev/null | grep -q 1; }
   pw=""; [ -s "$canon" ] && pw=$(sed -n "s/^[^:]*:[^:]*:[^:]*:$LAPLACE_ROLE:\(.*\)$/\1/p" "$canon" | head -1)
   if [ -z "$pw" ] || ! works "$pw"; then
-    pw=""; for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [ -s "$h/.pgpass" ] || continue
+    keep=$pw; pw=""; for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [ -s "$h/.pgpass" ] || continue
       for c in $(sed -n "s/^[^:]*:[^:]*:[^:]*:$LAPLACE_ROLE:\(.*\)$/\1/p" "$h/.pgpass"); do works "$c" && { pw=$c; say "role $LAPLACE_ROLE" "password adopted from $u"; break 2; }; done; done
+    # a cluster made again has the role without a password: it is given the canonical one, so no client's copy breaks
+    if [ -z "$pw" ] && [ -n "$keep" ]; then pw=$keep; run "ALTER ROLE $LAPLACE_ROLE PASSWORD '$pw'"; say "role $LAPLACE_ROLE" "password from $canon"; fi
     if [ -z "$pw" ]; then pw=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-32); run "ALTER ROLE $LAPLACE_ROLE PASSWORD '$pw'"; say "role $LAPLACE_ROLE" "password made"; fi
     umask 077; printf '*:5432:*:%s:%s\n' "$LAPLACE_ROLE" "$pw" > "$canon"
   else say "role $LAPLACE_ROLE" "password in $canon"; fi
@@ -271,9 +308,11 @@ report(){ part report
   echo; echo "next, as $op: ./deploy.sh;   the repositories' agents: sudo ./agents.sh"
 }
 
-case ${1:-all} in
+parts=${*:-all}
+for p in $parts; do case $p in all|drop|volumes|packages|kernel|deps|cluster|settings|access|report) ;;
+  *) echo "setup.sh [drop] [all|volumes|packages|kernel|deps|cluster|settings|access|report ...]"; exit 2 ;; esac; done
+for p in $parts; do case $p in
   all) volumes; packages; kernel; deps; cluster; settings; access; report ;;
-  volumes|packages|kernel|deps|cluster|settings|access|report) for p in "$@"; do "$p"; done ;;
-  *) echo "setup.sh [volumes|packages|kernel|deps|cluster|settings|access|report]"; exit 2 ;;
-esac
+  *) "$p" ;;
+esac; done
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
