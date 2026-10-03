@@ -32,7 +32,7 @@ command -v laplace >/dev/null || { echo "no laplace program on the path: deploy.
 # log while it still holds it (pg_walinspect: a checkpoint recycles what is older), and the totals are added up when
 # the ingest ends. Full-page images and their bytes, and the bytes of the records' own data ($log/wal.tsv: time, the
 # relation, its resource manager, blocks, full-page images, their bytes, data bytes). XLOG rows are hint-bit images.
-sql(){ psql -X "$LAPLACE_CONNINFO" -Atq -F '	' -c "$1"; }
+sql(){ psql -X "$LAPLACE_CONNINFO" -Atq -F '	' -c "$1" 9>&-; }                  # 9>&-: no query outlives the ingest holding its lock
 wal_read(){ sql "SELECT now()::timestamp(0), coalesce(pg_partition_root(c.oid)::regclass::text, c.relname, 'relfilenode ' || b.relfilenode), b.resource_manager,
                  count(*), count(*) FILTER (WHERE b.block_fpi_length > 0), coalesce(sum(b.block_fpi_length), 0), coalesce(sum(b.block_data_length), 0)
                FROM pg_get_wal_block_info('$1', '$2', false) b
@@ -40,7 +40,7 @@ wal_read(){ sql "SELECT now()::timestamp(0), coalesce(pg_partition_root(c.oid)::
                GROUP BY 2, 3" >> "$log/wal.tsv" || echo "  the log from $1 to $2 was not read: recycled before it was" >&2; }
 wal_sampler(){ while sleep 60; do from=$(cat "$log/wal.from"); to=$(sql "SELECT pg_current_wal_lsn()") || continue
                  wal_read "$from" "$to"; echo "$to" > "$log/wal.from"; done; }
-wal_stop(){ [ -n "${sampler:-}" ] || return 0; kill "$sampler" 2>/dev/null; wait "$sampler" 2>/dev/null; sampler=""
+wal_stop(){ [ -n "${sampler:-}" ] || return 0; kill "$sampler" 2>/dev/null; wait "$sampler" 2>/dev/null || true; sampler=""   # killed: its status is not the ingest's
             wal_read "$(cat "$log/wal.from")" "$(sql "SELECT pg_current_wal_lsn()")"; }
 wal_summary(){ [ -s "$log/wal.tsv" ] || { echo "  no log was read"; return 0; }
   printf '  %-44s %-8s %12s %10s %10s\n' relation kind 'page images' 'images GB' 'data GB'
@@ -50,7 +50,7 @@ wal_summary(){ [ -s "$log/wal.tsv" ] || { echo "  no log was read"; return 0; }
   awk -F '\t' '{ n += $5; f += $6; d += $7 } END { printf "  every relation: %d page images, %.2f GB of them; %.2f GB of data\n", n, f / 2^30, d / 2^30 }' "$log/wal.tsv"; }
 sql "CREATE EXTENSION IF NOT EXISTS pg_walinspect" || exit 1
 sql "SELECT pg_current_wal_lsn()" > "$log/wal.from"
-wal_sampler & sampler=$!
+wal_sampler 9>&- & sampler=$!                                  # 9>&-: the lock is the ingest's, never held on by the sampler or its sleep
 trap wal_stop EXIT
 
 # shellcheck disable=SC2086
