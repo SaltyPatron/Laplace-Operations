@@ -33,7 +33,7 @@ runner_version(){ [ -n "${RUNNER_VERSION:-}" ] || RUNNER_VERSION=$(curl -fsSL ht
 agent(){ repo=$1; part "$repo"
   id "$user" >/dev/null 2>&1 || { echo "no user $user: sudo ./setup.sh packages first"; exit 1; }
   gh_op "api repos/$owner/$repo --jq .name" >/dev/null 2>&1 || { say "$owner/$repo" "NOT ON GITHUB: gh repo create $owner/$repo --private --source $LAPLACE_SRC/$repo --push, then again"; return; }
-  d=$home/$repo; r=$d/runner; ws=$d/work/$repo/$repo                             # the workflow's workspace, as the runner lays it out
+  d=$home/$repo; r=$d/runner
   # the directories: the agent's, the shared group's, group-writable, so the operator reads its logs and builds
   install -d -o "$user" -g "$group" -m 2775 "$home" "$d" "$r" "$d/work" "$d/build"
   # the environment every job on this runner gets (the runner reads .env at its root): its own builds and work, the
@@ -74,12 +74,11 @@ EOF
   # its service
   ( cd "$r"; [ -f .service ] || ./svc.sh install "$user" >/dev/null; ./svc.sh status 2>/dev/null | grep -q "active (running)" || ./svc.sh start >/dev/null )
   say "service" "$(cat "$r/.service" 2>/dev/null)   $(cd "$r" && ./svc.sh status 2>/dev/null | grep -o 'active ([a-z]*)' | head -1)"
-  # its rights: the Operations runner runs setup.sh of its checkout as root, and restarts the server; the others need none
-  if [ "$repo" = Laplace-Operations ]; then
-    printf '%s ALL=(root) NOPASSWD:SETENV: %s/setup.sh, /bin/systemctl restart %s.service\n' "$user" "$ws/Laplace-Operations" "$LAPLACE_PGSERVICE" > /etc/sudoers.d/laplace-agent
-    chmod 440 /etc/sudoers.d/laplace-agent; visudo -cq -f /etc/sudoers.d/laplace-agent || { rm -f /etc/sudoers.d/laplace-agent; say "rights" "REFUSED by visudo"; }
-    say "rights" "setup.sh of its checkout as root; restart $LAPLACE_PGSERVICE"
-  else say "rights" "none beyond the shared group"; fi
+  # its rights: none. An agent never has root: what needs root is setup.sh, run by a person (setup.sh rights says so for
+  # every agent, and removes what said otherwise). Its unit is root's and read-only, so no member of the group edits it.
+  unit=$(cat "$r/.service" 2>/dev/null); [ -n "$unit" ] && [ -f "/etc/systemd/system/$unit" ] && { chown root:root "/etc/systemd/system/$unit"; chmod 644 "/etc/systemd/system/$unit"; }
+  rm -f /etc/sudoers.d/laplace-agent
+  say "rights" "none: root is setup.sh's, run by a person; unit root's, 644"
   # the secret that reads the private repositories it checks out beside itself
   case $repo in Laplace-postgres|Laplace-Engine|Laplace-Operations)
     if gh_op "secret list -R $owner/$repo" 2>/dev/null | grep -q "^LAPLACE_CHECKOUT"; then say "secret LAPLACE_CHECKOUT" "set"
@@ -102,7 +101,7 @@ remove(){ repo=$1; part "remove $repo"; r=$home/$repo/runner
     token=$(gh_op "api -X POST repos/$owner/$repo/actions/runners/remove-token --jq .token" 2>/dev/null || true)
     [ -n "$token" ] && as_agent "cd $r && ./config.sh remove --token $token" >/dev/null && say "registration" "removed from $owner/$repo" || say "registration" "could not unregister: remove $(hostname)-$repo on GitHub"
   fi
-  rm -rf "${home:?}/${repo:?}"; [ "$repo" = Laplace-Operations ] && rm -f /etc/sudoers.d/laplace-agent; say "$repo" "removed"
+  rm -rf "${home:?}/${repo:?}"; say "$repo" "removed"
 }
 
 case ${1:-all} in

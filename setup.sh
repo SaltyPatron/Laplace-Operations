@@ -2,7 +2,7 @@
 # The machine Laplace runs on, declared once and converged: the one step that needs root (Operations: Setup, Database).
 #
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
-#   sudo ./setup.sh access     one part, or several: volumes | packages | kernel | deps | cluster | settings | access | report
+#   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access | report
 #   sudo LAPLACE_DROP=/data/pgdata ./setup.sh drop all
 #                              the cluster dropped and made again, empty: never part of all, and named to be dropped
 #
@@ -248,6 +248,30 @@ EOF
 # directory, its log's volume and its temporary volume removed. The volumes themselves stay as they are. Every
 # database on the server is lost, so it is never part of all, it asks for the data directory by name, and it does
 # not run under an ingest or on a volume that is not mounted.
+# Rights: what an agent may do as root is nothing. Every sudo rule that names the agent's user is removed (agents.sh
+# once gave it its own checkout's setup.sh, writable by the shared group: root for anyone in it); the runners' units
+# are root's and read-only; the shared group holds people, root and the agent, never another service's account (it
+# would get the role's password in its ~/.pgpass). What earlier set-ups left (LEGACY) is removed: units of clusters
+# and services that are gone, the sudo rules and helpers that pointed at them, and the directories those rules would
+# let the group create and run as root.
+LEGACY_UNITS="laplace-postgresql.service laplace-refactor-postgresql.service laplace-lichess.service laplace-stripe.service laplace-pg-log-prune.service laplace-pg-log-prune.timer"
+LEGACY_PATHS="/opt/laplace /usr/local/libexec/laplace-managed-deploy /usr/local/libexec/laplace-service-control /var/lib/laplace-managed /var/lib/laplace-mcp /var/log/laplace-mcp /etc/nginx/sites-enabled/laplace-managed /etc/nginx/sites-available/laplace-managed /etc/nginx/sites-available/laplace /build"
+LEGACY_USERS="laplace-mcp laplace-lichess"
+rights(){ part rights
+  for f in /etc/sudoers.d/*; do [ -f "$f" ] || continue
+    if grep -qE "^[^#]*\b$LAPLACE_AGENT_USER\b" "$f" || case $(basename "$f") in laplace-*) true ;; *) false ;; esac; then rm -f "$f"; say "sudo" "removed $f"; fi; done
+  sudo -l -U "$LAPLACE_AGENT_USER" 2>/dev/null | grep -q "may run the following" && say "sudo" "STILL GRANTED to $LAPLACE_AGENT_USER: see sudo -l -U $LAPLACE_AGENT_USER" || say "sudo" "$LAPLACE_AGENT_USER: none"
+  for u in /etc/systemd/system/actions.runner.*.service; do [ -f "$u" ] || continue; chown root:root "$u"; chmod 644 "$u"; done; say "runner units" "root's, 644"
+  for m in $(getent group "$LAPLACE_GROUP" | cut -d: -f4 | tr , ' '); do uid=$(id -u "$m" 2>/dev/null || echo 0)
+    [ "$m" = root ] || [ "$m" = "$LAPLACE_AGENT_USER" ] || [ "$uid" -ge 1000 ] || { gpasswd -d "$m" "$LAPLACE_GROUP" >/dev/null; say "group $LAPLACE_GROUP" "removed $m (a service's account)"; }; done
+  for u in $LEGACY_UNITS; do [ -e "/etc/systemd/system/$u" ] || [ -e "/etc/systemd/system/$u.d" ] || continue
+    systemctl disable --now -q "$u" 2>/dev/null || true; rm -rf "/etc/systemd/system/$u" "/etc/systemd/system/$u.d"; say "unit" "removed $u"; done
+  systemctl daemon-reload
+  for pth in $LEGACY_PATHS; do [ -e "$pth" ] || [ -L "$pth" ] || continue; rm -rf "$pth"; say "removed" "$pth"; done
+  command -v nginx >/dev/null && nginx -t -q 2>/dev/null && systemctl reload nginx 2>/dev/null || true
+  for u in $LEGACY_USERS; do id "$u" >/dev/null 2>&1 && { userdel "$u" 2>/dev/null; say "user" "removed $u"; }; done
+  return 0
+}
 drop(){ part drop
   [ "${LAPLACE_DROP:-}" = "$PGDATA" ] || { say "drop" "REFUSED: name the cluster to drop: LAPLACE_DROP=$PGDATA"; exit 1; }
   ! ingesting || { say "drop" "REFUSED: an ingest is running"; exit 1; }
@@ -312,10 +336,10 @@ report(){ part report
 }
 
 parts=${*:-all}
-for p in $parts; do case $p in all|drop|volumes|packages|kernel|deps|cluster|settings|access|report) ;;
-  *) echo "setup.sh [drop] [all|volumes|packages|kernel|deps|cluster|settings|access|report ...]"; exit 2 ;; esac; done
+for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|report) ;;
+  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|report ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
-  all) volumes; packages; kernel; deps; cluster; settings; access; report ;;
+  all) volumes; packages; rights; kernel; deps; cluster; settings; access; report ;;
   *) "$p" ;;
 esac; done
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"

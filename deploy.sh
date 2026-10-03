@@ -8,6 +8,7 @@
 #
 #   ./deploy.sh                                      the database laplace.env names
 #   LAPLACE_CONNINFO="... dbname=NAME" ./deploy.sh   another database; it is made if the server does not have it
+#   ./deploy.sh drop                                 the database dropped first and made again, empty
 #
 # What it needs first: PostgreSQL 18 with PostGIS running, a role that may create databases and extensions, and the
 # data under $LAPLACE_DATA (Operations: Setup, Builds). What each step said is kept in $LAPLACE_WORK/logs/deploy.
@@ -27,6 +28,13 @@ echo $$ > "$lock.pid"
 # never under an ingest: it rebuilds the program the ingest runs and changes the schema it writes into
 ingest=$LAPLACE_LOCKS/ingest-${db:-default}.lock
 if [ -e "$ingest" ] && ! flock -n "$ingest" true 2>/dev/null; then echo "an ingest of $db is running (pid $(cat "$ingest.pid" 2>/dev/null)): this deployment leaves: run it again when the ingest is done"; exit 3; fi
+# ./deploy.sh drop: the database dropped and made again, empty, before it is deployed: by the role, which may drop
+# databases, never by root (the cluster itself is setup.sh drop's, run by a person)
+if [ "${1:-}" = drop ]; then
+  [ -n "$db" ] && [ "$db" != postgres ] || { echo "deploy.sh drop: LAPLACE_CONNINFO names no database of Laplace's"; exit 2; }
+  psql -X "$(echo "$LAPLACE_CONNINFO" | sed 's/dbname=[^ ]*/dbname=postgres/')" -v ON_ERROR_STOP=1 -qc "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" || exit 1
+  echo "=== $db dropped: it is made again below"
+fi
 log=$LAPLACE_WORK/logs/deploy/$(date -u +%Y%m%dT%H%M%SZ); mkdir -p "$log"
 step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
         { "$@" 2>&1; echo $? > "$log/$name.exit"; } | grep --line-buffered -v "^OMP: " | tee "$log/$name.log"
