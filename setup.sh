@@ -177,7 +177,7 @@ kernel(){ part kernel
   sb=$(declared | awk '$1=="shared_buffers"{print $2}' | tr -d GB); declared=$((sb * 512 * 103 / 100 + 64))   # 2 MB pages for the buffers declared, 3% and the rest of shared memory over
   need=$(q "SHOW shared_memory_size_in_huge_pages" 2>/dev/null || echo 0); [ "${need:-0}" -gt "$declared" ] || need=$declared
   want=$((need + need * 3 / 100))
-  printf 'vm.nr_hugepages = %s\n' "$want" > /etc/sysctl.d/60-laplace.conf
+  printf 'vm.nr_hugepages = %s\nkernel.kptr_restrict = 0\nkernel.perf_event_paranoid = 0\n' "$want" > /etc/sysctl.d/60-laplace.conf   # the profilers see the kernel's symbols
   sysctl -q -p /etc/sysctl.d/60-laplace.conf; say "vm.nr_hugepages" "$want (the server needs $need)   reserved now: $(awk '/HugePages_Total/{print $2}' /proc/meminfo)"
 }
 deps(){ part dependencies
