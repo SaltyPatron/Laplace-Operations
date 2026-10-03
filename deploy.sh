@@ -24,6 +24,9 @@ if [ -e "$lock" ] && [ ! -w "$lock" ]; then                                    #
 exec 9>>"$lock"
 flock -n 9 || { echo "a deployment of $db is already running (pid $(cat "$lock.pid" 2>/dev/null)): this one leaves"; exit 3; }
 echo $$ > "$lock.pid"
+# never under an ingest: it rebuilds the program the ingest runs and changes the schema it writes into
+ingest=$LAPLACE_LOCKS/ingest-${db:-default}.lock
+if [ -e "$ingest" ] && ! flock -n "$ingest" true 2>/dev/null; then echo "an ingest of $db is running (pid $(cat "$ingest.pid" 2>/dev/null)): this deployment leaves: run it again when the ingest is done"; exit 3; fi
 log=$LAPLACE_WORK/logs/deploy/$(date -u +%Y%m%dT%H%M%SZ); mkdir -p "$log"
 step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
         { "$@" 2>&1; echo $? > "$log/$name.exit"; } | grep --line-buffered -v "^OMP: " | tee "$log/$name.log"
