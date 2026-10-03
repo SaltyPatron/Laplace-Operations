@@ -40,7 +40,7 @@ VOLUMES=$LAPLACE_VOLUMES
 # Packages from the distribution: the build tools and the libraries PostgreSQL, PostGIS, PROJ and GDAL are built on.
 PACKAGES="build-essential cmake ninja-build meson pkg-config flex bison liburing-dev libssl-dev liblz4-dev libzstd-dev
 libreadline-dev zlib1g-dev libxml2-dev libsqlite3-dev libtiff-dev libcurl4-openssl-dev libprotobuf-c-dev
-protobuf-c-compiler libjson-c-dev libeigen3-dev xfsprogs lvm2 openssl"
+protobuf-c-compiler libjson-c-dev libeigen3-dev xfsprogs lvm2 openssl linux-tools-$(uname -r) linux-tools-generic"   # linux-tools: perf for the running kernel
 # Dependencies built from source under $LAPLACE_SRC, in this order; each is known by the file it installs, and is
 # cloned when its source is not there. name  proof  how  origin  branch
 DEPS="
@@ -193,13 +193,20 @@ deps(){ part dependencies
       headers)   install -d "$PREFIX/include/Spectra"; cp -a "$src/include/Spectra/." "$PREFIX/include/Spectra/" ;;
       configure) mkdir -p "$b"; ( cd "$b"; [ -f config.status ] || CC=icx CXX=icpx "$src/configure" --prefix="$LAPLACE_PG_DIR" --with-icu --with-ssl=openssl --with-lz4 --with-zstd --with-liburing \
                    ICU_CFLAGS="-I$LAPLACE_ICU_DIR/include" ICU_LIBS="-L$LAPLACE_ICU_DIR/lib -licui18n -licuuc -licudata" >/dev/null
-                   make -j"$cores" >/dev/null; make install >/dev/null; make -C contrib/pg_stat_statements install >/dev/null; make -C contrib/pg_buffercache install >/dev/null )
+                   make -j"$cores" >/dev/null; make install >/dev/null )
                  ln -sfn "$PGBIN/psql" "$PREFIX/bin/psql"; ln -sfn "$PGBIN/pg_config" "$PREFIX/bin/pg_config" ;;
       postgis)   [ -x "$src/configure" ] || as_op "cd $src && ./autogen.sh" >/dev/null
                  mkdir -p "$b"; ( cd "$b"; [ -f config.status ] || "$src/configure" --with-pgconfig="$PGBIN/pg_config" --with-geosconfig=$PREFIX/bin/geos-config --with-projdir=$PREFIX --with-gdalconfig=$PREFIX/bin/gdal-config >/dev/null
                    make -j"$cores" >/dev/null; make install >/dev/null ); ldconfig ;;
     esac
     [ -e "$proof" ] && say "$name" "built and installed" || say "$name" "DID NOT INSTALL: $b"
+  done
+  # PostgreSQL's contrib modules Laplace uses, each known by its library: pg_stat_statements and auto_explain are
+  # preloaded (the settings), pg_buffercache inspects the cache, pg_walinspect reads the log while an ingest runs
+  for m in pg_stat_statements pg_buffercache auto_explain pg_walinspect; do
+    if [ -e "$LAPLACE_PG_DIR/lib/$m.so" ]; then say "contrib $m" "installed"; continue; fi
+    [ -d "$LAPLACE_WORK/postgresql/contrib/$m" ] && make -C "$LAPLACE_WORK/postgresql/contrib/$m" install >/dev/null 2>&1
+    [ -e "$LAPLACE_PG_DIR/lib/$m.so" ] && say "contrib $m" "built and installed" || say "contrib $m" "DID NOT INSTALL: PostgreSQL's build is not at $LAPLACE_WORK/postgresql"
   done
   shared
 }
