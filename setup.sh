@@ -56,7 +56,9 @@ tree-sitter $LAPLACE_DEPSRC/tree-sitter/lib/src/lib.c   source   https://github.
 "
 # The server's settings (Database.md), as ALTER SYSTEM makes them. Memory follows the machine, and the log follows
 # its volume: declared() is read once the volumes are mounted.
-ram_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo); cores=$(nproc)
+ram_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+# nproc reports OMP_NUM_THREADS when a shell has set it. The server is sized to the machine.
+cores=$(env -u OMP_NUM_THREADS -u MKL_NUM_THREADS nproc)
 # The log's bound is the volume it is on, not a number of its own. max_wal_size is what a checkpoint brings the log
 # back down to, not a limit: under a load the log runs past it while a checkpoint catches up, and a server that
 # crashed needs room for new segments before its recovery can end. Three eighths of the volume: a checkpoint a whole
@@ -92,6 +94,16 @@ max_parallel_workers             $cores
 max_parallel_workers_per_gather  $((cores / 2))
 max_parallel_maintenance_workers $((cores / 2))
 jit                              off
+enable_parallel_append           on
+gin_pending_list_limit           32MB
+autovacuum_max_workers           $((cores / 2 < 3 ? 3 : cores / 2))
+autovacuum_naptime               10s
+autovacuum_vacuum_cost_delay     0
+autovacuum_vacuum_cost_limit     2000
+autovacuum_vacuum_scale_factor   0.05
+autovacuum_analyze_scale_factor  0.02
+autovacuum_vacuum_insert_scale_factor 0.01
+autovacuum_work_mem              1GB
 shared_preload_libraries         pg_stat_statements,auto_explain
 pg_stat_statements.track         all
 auto_explain.log_min_duration    5s
