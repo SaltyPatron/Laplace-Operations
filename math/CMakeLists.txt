@@ -1,11 +1,15 @@
-# laplace-math: the static library every Laplace build links ahead of the platform libm (see names.c). Built with
-# toolchain/laplace.cmake from the CORE-MATH checkout the manifest pins:
+# laplace-math: the static library every Laplace build links ahead of the platform libm (see names.c), from the
+# CORE-MATH checkout the manifest pins. Standalone:
 #   cmake -S math -B <build> -G Ninja -DCMAKE_TOOLCHAIN_FILE=toolchain/laplace.cmake -DCORE_MATH=<checkout>
 #         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=<deps>/laplace-math/<pin>
+# or inside another build (Laplace-Native): add_subdirectory(<Laplace-Operations>/math) with CORE_MATH set, then link
+# laplace::math, which carries the whole-archive link and the contract's link flags.
 cmake_minimum_required(VERSION 3.25)
 project(laplace_math C)
 
 set(CORE_MATH "" CACHE PATH "CORE-MATH checkout")
+include("${CMAKE_CURRENT_SOURCE_DIR}/../toolchain/flags.cmake")
+laplace_fp_flags(LAPLACE_FP_COMPILE LAPLACE_FP_LINK)   # applied here too: CORE-MATH is only correctly rounded under it
 if(NOT EXISTS "${CORE_MATH}/src/binary64/cos/cos.c")
   message(FATAL_ERROR "CORE_MATH: no CORE-MATH checkout at '${CORE_MATH}'")
 endif()
@@ -22,6 +26,7 @@ endforeach()
 
 add_library(laplace_math STATIC ${SOURCES})
 set_target_properties(laplace_math PROPERTIES OUTPUT_NAME laplace-math)
+target_compile_options(laplace_math PRIVATE ${LAPLACE_FP_COMPILE})
 # errno as the C library sets it (EDOM, ERANGE): callers such as PostgreSQL check it.
 target_compile_definitions(laplace_math PRIVATE CORE_MATH_SUPPORT_ERRNO)
 # Under icx CORE-MATH's rsqrt and rsqrtf are Intel's invsqrt; without the compiler's macro they are its own, and
@@ -40,15 +45,23 @@ else()
 endif()
 install(TARGETS laplace_math ARCHIVE DESTINATION lib)
 
-# The fingerprint (test/determinism.c), linked the way every consumer links laplace-math: ahead of libm, through the
-# toolchain's own rule, not by naming the library on this target.
-enable_testing()
+# What a consumer links: the whole library (its definitions win over libm's, whatever is listed after it) and the
+# contract's link flags.
+add_library(laplace_math_link INTERFACE)
+add_library(laplace::math ALIAS laplace_math_link)
+target_link_libraries(laplace_math_link INTERFACE "$<LINK_LIBRARY:WHOLE_ARCHIVE,laplace_math>")
+target_link_options(laplace_math_link INTERFACE ${LAPLACE_FP_LINK})
+
+# The fingerprint (test/determinism.c), linked the way every consumer links laplace-math.
 add_executable(determinism test/determinism.c)
-add_dependencies(determinism laplace_math)
-if(MSVC)
-  target_link_options(determinism PRIVATE "$<TARGET_FILE:laplace_math>")
-else()
-  target_link_options(determinism PRIVATE -Wl,--whole-archive "$<TARGET_FILE:laplace_math>" -Wl,--no-whole-archive)
+target_compile_options(determinism PRIVATE ${LAPLACE_FP_COMPILE})
+target_link_libraries(determinism PRIVATE laplace::math)
+if(NOT MSVC)
   target_link_libraries(determinism PRIVATE m)
 endif()
-add_test(NAME determinism COMMAND determinism)
+if(PROJECT_IS_TOP_LEVEL)
+  enable_testing()
+  add_test(NAME determinism COMMAND determinism)
+else()
+  set_target_properties(determinism PROPERTIES EXCLUDE_FROM_ALL ON)
+endif()
