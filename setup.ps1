@@ -85,6 +85,16 @@ $RetireMachineVars = @(
     'CUDA_VISIBLE_DEVICES', 'CUDA_PATH_V12_9', 'ChocolateyInstall', 'ChocolateyLastPathUpdate', 'OLLAMA_MODELS'
 )
 
+# The machine environment Laplace's builds read: stable roots only (Laplace-Operations#2). CUDA_PATH names the newest
+# CUDA toolkit installed (CUDA_PATH_V<major>_<minor>); its uninstallers remove it even when it pointed at another one.
+function DeclaredMachineVars {
+    $cuda = (Get-Item $MachineEnv).Property | Where-Object { $_ -match '^CUDA_PATH_V(\d+)_(\d+)$' } |
+        Sort-Object { [version]($_ -replace '^CUDA_PATH_V(\d+)_(\d+)$', '$1.$2') } | Select-Object -Last 1
+    $vars = [ordered]@{}
+    if ($cuda) { $vars['CUDA_PATH'] = (Get-ItemProperty $MachineEnv -Name $cuda).$cuda }
+    $vars
+}
+
 # ------------------------------------------------------------------------------------------------------ helpers
 $UninstallKeys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
 $MachineEnv = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
@@ -200,8 +210,24 @@ function retire {
     $r = [UIntPtr]::Zero; [void][LaplaceSetup.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$r)
 }
 
+function environment {
+    Part 'environment'
+    if (-not (Admin)) { Say 'environment' 'REFUSED: run from an elevated PowerShell'; $failed.Add('environment: not elevated'); return }
+    $declared = DeclaredMachineVars
+    foreach ($name in $declared.Keys) {
+        $have = (Get-ItemProperty $MachineEnv -Name $name -ErrorAction SilentlyContinue).$name
+        if ($have -eq $declared[$name]) { Say "machine variable $name" $have; continue }
+        Attempt "machine variable $name" { Set-ItemProperty -Path $MachineEnv -Name $name -Value $declared[$name]; Say "machine variable $name" "set: $($declared[$name])" }
+    }
+    $r = [UIntPtr]::Zero
+    Add-Type -Namespace LaplaceSetup -Name Native -MemberDefinition '[DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);' -ErrorAction SilentlyContinue
+    [void][LaplaceSetup.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$r)
+}
+
 function report {
     Part 'report'
+    $declared = DeclaredMachineVars
+    foreach ($name in $declared.Keys) { $have = (Get-ItemProperty $MachineEnv -Name $name -ErrorAction SilentlyContinue).$name; Say "machine variable $name" $(if ($have -eq $declared[$name]) { $have } else { "WRONG: '$have', declared '$($declared[$name])'" }) }
     $left = [System.Collections.Generic.List[string]]::new()
     $intel = @(IntelInstalled)
     foreach ($r in $RetireIntel) { if ($intel -contains "$($r.Id) $($r.Ver)") { $left.Add("$($r.Id) $($r.Ver)") } }
@@ -223,7 +249,7 @@ function report {
     }
 }
 
-$known = 'retire', 'report'
+$known = 'retire', 'environment', 'report'
 foreach ($p in $Parts) { if ($known -notcontains $p) { "setup.ps1 [$($known -join '|') ...]"; Stop-Transcript | Out-Null; exit 2 } }
 foreach ($p in $Parts) { & $p }
 ''
