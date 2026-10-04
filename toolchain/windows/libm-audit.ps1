@@ -1,7 +1,7 @@
 # Every DLL and EXE under the given directories, checked for libm functions imported from libmmd (Intel's libm). Only
 # exact operations may come from it (determinism.tsv); a transcendental function imported from it means a link that
 # did not end with laplace-math. Exit 1 when any binary imports one. Run from the oneAPI dev shell (dumpbin).
-#   toolchain\windows\libm-audit.ps1 D:\Libraries\postgresql\18.6\bin D:\Libraries\postgresql\18.6\lib
+#   toolchain\windows\libm-audit.ps1 D:\Libraries\postgresql\18.6\bin, D:\Libraries\postgresql\18.6\lib   (one array)
 param([Parameter(Mandatory)][string[]]$Directories)
 
 $exact = '^(sqrtf?|roundf?|l?lroundf?|l?rintf?|nearbyintf?|truncf?|floorf?|ceilf?|fminf?|fmaxf?|fabsf?|copysignf?|nanf?|ldexpf?|scalbnf?|frexpf?|modff?|fmodf?|remainderf?|remquof?|nextafterf?|nexttowardf?|ilogbf?|logbf?|__isnanf?|__isinff?|__finitef?|__signbitf?|__fpclassifyf?|fe\w+)$'

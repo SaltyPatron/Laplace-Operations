@@ -181,6 +181,7 @@ function sources {
                 if ($sha -ne $r.pin) { throw "SHA-256 $sha differs from the pin $($r.pin)" }
                 $stage = "$prefix.part"; Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
                 if ($r.build -eq 'sfx') { Run $file @('-y', "-o$stage") @(0) }
+                elseif ($file -match '\.tar\.(xz|gz|bz2)$') { New-Item -ItemType Directory -Force $stage | Out-Null; & tar.exe -xf $file -C $stage; if ($LASTEXITCODE) { throw "tar could not unpack $file" } }   # Windows' bsdtar
                 else { Expand-Archive -LiteralPath $file -DestinationPath $stage }
                 $inner = @(Get-ChildItem $stage); if ($inner.Count -eq 1 -and $inner[0].PSIsContainer) { $stage = $inner[0].FullName }   # one top folder: its contents are the prefix
                 New-Item -ItemType Directory -Force (Split-Path $prefix) | Out-Null
