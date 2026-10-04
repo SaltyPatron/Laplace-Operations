@@ -3,9 +3,12 @@
 # tag cannot change a build. Sources are fetched into $LAPLACE_DEPSRC/<name>; builds go to $LAPLACE_BUILD/deps/<name>;
 # installs to $LAPLACE_DEPS/<name>/<version>, one prefix each.
 #
-# kind      source: Git checkout at the commit. release: upstream binary archive. tool: a build tool, not linked.
-# build     how the build part makes it: cmake, configure, meson, openssl, headers, none (consumed as source by
-#           Laplace-Native or the Engine), unpack.
+# kind      source: Git checkout at the commit. release: upstream archive (binaries, or SQLite's amalgamation). tool: a
+#           build tool, not linked.
+# build     how the build part makes it: cmake, configure, meson, openssl, headers, amalgamation (one C file, compiled
+#           as a DLL), none (consumed as source by Laplace-Native or the Engine), unpack, sfx (a self-extracting
+#           archive). PostGIS on Windows:
+#           toolchain/windows/postgis.sh.
 # profile   icx-deterministic: Laplace-Native's flags (precise FP, no contraction, no fast math), spelled per driver.
 #           icx: icx with precise FP (icx defaults to -fp-model=fast; Laplace-Operations#3). none: not compiled here.
 # use       who needs it. A row without a consumer does not belong here.
@@ -21,14 +24,16 @@ zstd	1.5.7	source	https://github.com/facebook/zstd.git	v1.5.7	f8745da6ff1ad1e7ba
 openssl	3.5.9	source	https://github.com/openssl/openssl.git	openssl-3.5.9	45e844fa2a14ec92d146bd8f5778ac130b6625fb	openssl	icx	windows	zlib,strawberry-perl,nasm	PostgreSQL (TLS), curl. 3.5 is the LTS line, supported to 2030-04-08
 libxml2	2.15.4	source	https://gitlab.gnome.org/GNOME/libxml2.git	v2.15.4	96498992efa48d52b0e8b83058bd88dbdaf153c1	cmake	icx	windows	zlib	PostGIS (required)
 json-c	0.19	source	https://github.com/json-c/json-c.git	json-c-0.19-20260627	aa716cd8d663c976b99b0f30f102ee1d8ef63146	cmake	icx	windows	-	PostGIS (GeoJSON input)
-sqlite	3.53.4	source	https://github.com/sqlite/sqlite.git	version-3.53.4	b09c88c14082339b66c7b7158d609a771e64ca69	configure	icx	windows	-	PROJ (its database)
+sqlite	3.53.4	release	https://sqlite.org/2026/sqlite-amalgamation-3530400.zip	3.53.4	1e71ddf93849c6a6ecf58b827c0692073d2dd7ee40196158068f7b29f422e87d	amalgamation	icx	windows	-	PROJ (its database). Compiled with RTREE, COLUMN_METADATA, FTS5 and the math functions
 libtiff	4.7.2	source	https://gitlab.com/libtiff/libtiff.git	v4.7.2	d01a94be176f5f6a87f7ee1c0b32e65416aa2b4d	cmake	icx	windows	zlib	PROJ (grids)
 curl	8.22.0	source	https://github.com/curl/curl.git	curl-8_22_0	01346829096c61b372692f6dc43ffa778c6caccd	cmake	icx	windows	zlib,openssl	PROJ (network grids)
+win-iconv	70a279d	source	https://github.com/win-iconv/win-iconv.git	-	70a279dcfe6318bbe63e019e33b3230b55c19762	cmake	icx	windows	-	PostGIS (iconv: the shapefile loader's encodings)
 geos	3.15.0	source	https://github.com/libgeos/geos.git	3.15.0	d0228513abb0c29c185443cf2bfb06c9281024b5	cmake	icx	linux,windows	-	PostGIS (required). hart-server is at 3.14.1
 proj	9.9.0	source	https://github.com/OSGeo/PROJ.git	9.9.0	1df2be61c0e4732aa1326126113776b291ae7657	cmake	icx	linux,windows	sqlite,libtiff,curl	PostGIS (required). 9.9.0 fixes the IntelLLVM flag mangling on Windows (PR #4784). hart-server is at 9.8.1
 postgresql	18.6	source	https://github.com/postgres/postgres.git	REL_18_6	724edf9bde9d356724ad384a2e196edc3c9f80f7	meson	icx	linux,windows	icu,zlib,lz4,zstd,openssl,libxml2,strawberry-perl,winflexbison,meson	the Laplace database (Laplace-Operations#4)
-postgis	3.6.4	source	https://github.com/postgis/postgis.git	3.6.4	94d984bd083635c1d253db0f87cf80b32548e406	configure	icx	linux,windows	postgresql,geos,proj,libxml2,json-c	Laplace-postgres geometry (POINT ZM, GiST); raster (GDAL) not built: Laplace does not use it
+postgis	3.6.4	source	https://github.com/postgis/postgis.git	3.6.4	94d984bd083635c1d253db0f87cf80b32548e406	configure	icx	linux,windows	postgresql,geos,proj,libxml2,json-c,win-iconv,msys2	Laplace-postgres geometry (POINT ZM, GiST); raster (GDAL) not built: Laplace does not use it
 strawberry-perl	5.42.3.1	tool	https://github.com/StrawberryPerl/Perl-Dist-Strawberry/releases/download/SP_54231_64bit/strawberry-perl-5.42.3.1-64bit-portable.zip	SP_54231_64bit	6a081a811781c30aca51dbc036afd93092af91e3297901f02c17043795a10690	unpack	none	windows	-	PostgreSQL and OpenSSL builds (PostgreSQL requires Strawberry Perl on Windows)
 winflexbison	2.5.25	tool	https://github.com/lexxmark/winflexbison/releases/download/v2.5.25/win_flex_bison-2.5.25.zip	v2.5.25	8d324b62be33604b2c45ad1dd34ab93d722534448f55a16ca7292de32b6ac135	unpack	none	windows	-	PostgreSQL build (bison, flex)
 nasm	3.02	tool	https://www.nasm.us/pub/nasm/releasebuilds/3.02/win64/nasm-3.02-win64.zip	nasm-3.02	161d0bfaff53c2f9e9f3e69fd0672323ebabafd1268976a5cec11be92a19aee7	unpack	none	windows	-	OpenSSL build (assembly)
 meson	1.12.1	tool	https://pypi.org/project/meson/1.12.1/	1.12.1	-	none	none	linux,windows	-	PostgreSQL build; installed as a uv tool
+msys2	20260927	tool	https://github.com/msys2/msys2-installer/releases/download/2026-09-27/msys2-base-x86_64-20260927.sfx.exe	2026-09-27	ad336cccfda47758b5e15cda993fbba421115cb0b126697daef1ee4dfe37209f	sfx	none	windows	-	PostGIS build (sh, make, autoconf, automake, libtool, pkgconf; mingw-w64-ucrt-x86_64-gcc for cpp on the SQL)

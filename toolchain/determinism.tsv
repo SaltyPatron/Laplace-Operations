@@ -31,9 +31,10 @@ compile	msvc	-Wno-overriding-option
 # emits for copies: exact) and its libintlc stay, because separate compile and link steps need them.
 link	gnu	-no-intel-lib=libimf,libsvml,libirng
 # Windows keeps libmmd for exact operations only (sqrt, round, fmin/fmax, ldexp, the fenv calls): icx's headers
-# declare those as imports from it, and the UCRT defines feraiseexcept only inline. The transcendental functions are
-# plain calls, and laplace-math comes first on the link line, so none reaches libmmd; the fingerprint's override
-# check proves it per binary (math/test/determinism.c).
+# declare those as imports from it, and the UCRT defines feraiseexcept only inline. Every icx object names libmmd as a
+# default library, and link.exe can search a default library before a library named later on the command line (PostGIS
+# topology took sin, cos and atan2 from libmmd that way), so a link drops it (/NODEFAULTLIB:libmmd) and names it
+# explicitly after laplace-math. The fingerprint's override check proves it per binary (math/test/determinism.c).
 # x86-64-v3 is what both machines have (i7-6850K Broadwell-E, i9-14900KS; neither has AVX-512). With contraction and
 # reassociation off, vectorizing does not change results, so the ISA level is speed only.
 nobuiltin	any	acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp exp10 exp2 expm1 hypot lgamma log log10 log1p log2 pow sin sincos sinh tan tanh tgamma

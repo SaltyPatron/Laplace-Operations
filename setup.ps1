@@ -162,14 +162,17 @@ function sources {
                 Say $what "checked out $($r.pin.Substring(0,12))"
             }
         } elseif ($r.kind -in 'release', 'tool') {
-            if (-not $r.origin.StartsWith('https://') -or $r.build -ne 'unpack') { continue }   # installed another way (uv tool)
+            # unpack: an archive whose contents are the install. sfx: a self-extracting archive (MSYS2), likewise.
+            # amalgamation: a source archive, unpacked in the source store for the build part. Anything else is
+            # installed another way (uv tool).
+            if (-not $r.origin.StartsWith('https://') -or $r.build -notin 'unpack', 'sfx', 'amalgamation') { continue }
             Attempt $what {
-                $prefix = Join-Path (Join-Path $Deps $r.name) $r.version
+                $store = Join-Path (Join-Path $DepSrc $r.name) $r.version
+                $prefix = if ($r.build -eq 'amalgamation') { Join-Path $store 'source' } else { Join-Path (Join-Path $Deps $r.name) $r.version }
                 if (Test-Path (Join-Path $prefix '.pin')) {
-                    if ((Get-Content (Join-Path $prefix '.pin') -Raw).Trim() -eq $r.pin) { Say $what "installed at $prefix"; return }
+                    if ((Get-Content (Join-Path $prefix '.pin') -Raw).Trim() -eq $r.pin) { Say $what "at $prefix"; return }
                     throw "$prefix holds another archive than the pin; remove it to reinstall"
                 }
-                $store = Join-Path (Join-Path $DepSrc $r.name) $r.version
                 New-Item -ItemType Directory -Force $store | Out-Null
                 $file = Join-Path $store ([IO.Path]::GetFileName(([uri]$r.origin).AbsolutePath))
                 if (-not (Test-Path $file)) { & curl.exe -fsSL --retry 3 -o $file $r.origin; if ($LASTEXITCODE) { Remove-Item $file -ErrorAction SilentlyContinue; throw "download failed: $($r.origin)" } }
@@ -177,13 +180,14 @@ function sources {
                 if (-not $r.pin) { throw "no pin in dependencies.tsv; downloaded $file with SHA-256 ${sha}: review it, write the hash into the manifest, run again" }
                 if ($sha -ne $r.pin) { throw "SHA-256 $sha differs from the pin $($r.pin)" }
                 $stage = "$prefix.part"; Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-                Expand-Archive -LiteralPath $file -DestinationPath $stage
+                if ($r.build -eq 'sfx') { Run $file @('-y', "-o$stage") @(0) }
+                else { Expand-Archive -LiteralPath $file -DestinationPath $stage }
                 $inner = @(Get-ChildItem $stage); if ($inner.Count -eq 1 -and $inner[0].PSIsContainer) { $stage = $inner[0].FullName }   # one top folder: its contents are the prefix
                 New-Item -ItemType Directory -Force (Split-Path $prefix) | Out-Null
                 Move-Item -LiteralPath $stage -Destination $prefix
                 Remove-Item "$prefix.part" -Recurse -Force -ErrorAction SilentlyContinue
                 Set-Content (Join-Path $prefix '.pin') $r.pin
-                Say $what "installed at $prefix"
+                Say $what "at $prefix"
             }
         }
     }

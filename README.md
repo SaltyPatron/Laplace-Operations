@@ -66,6 +66,17 @@ The three code repositories sit side by side under one source root, `$LAPLACE_SR
 `$LAPLACE_DEPSRC` (the same root, unless an agent's); build trees under `$LAPLACE_BUILD`; generated data, logs and
 tier 0 under `$LAPLACE_WORK`; installed dependencies under `$LAPLACE_DEPS`; the data sets under `$LAPLACE_DATA`.
 
+## Windows (the development machine)
+
+`setup.ps1` reads the same `dependencies.tsv`: every row for `windows` checked out at its commit, or downloaded,
+verified by SHA-256 and unpacked. The builds use icx under the floating-point contract in `toolchain/determinism.tsv`:
+CMake builds through `-DCMAKE_TOOLCHAIN_FILE=toolchain/laplace.cmake -DLAPLACE_MATH=<laplace-math.lib>`, PostgreSQL's
+Meson build through the native file `toolchain/meson-native.py msvc <laplace-math.lib>` writes, with
+`patches/postgresql`. PostGIS is built by `toolchain/windows/postgis.sh` in MSYS2's shell (from the oneAPI dev shell,
+`MSYSTEM=MSYS MSYS2_PATH_TYPE=inherit`, `LAPLACE_MATH` set), which applies `patches/postgis`, configures, builds and
+installs into that PostgreSQL. On Windows every link ends with laplace-math and then libmmd, Intel's libm, kept for the
+exact operations only; no transcendental function in any installed binary comes from it.
+
 ## Repair
 
 Every script here is a declaration compared with the machine, so repair is running it again: `sudo ./setup.sh` after a
