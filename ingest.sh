@@ -57,10 +57,25 @@ sql "SELECT pg_current_wal_lsn()" > "$log/wal.from"
 wal_sampler 9>&- & sampler=$!                                  # 9>&-: the lock is the ingest's, never held on by the sampler or its sleep
 trap wal_stop EXIT
 
+# Where the time goes, measured on the run itself. The engine: perf samples every thread of the ingest and of each
+# source's process (its children) 99 times a second for the whole run, as the user the runner is, so nothing attaches
+# and no root is asked; reported by symbol (perf.txt). The database: pg_stat_statements is emptied as the ingest begins
+# and its statements by total time are reported as it ends (statements.txt).
+prof(){ if command -v perf >/dev/null 2>&1; then perf record -q -F 99 -o "$log/perf.data" -- "$@"; else "$@"; fi; }
+perf_summary(){ [ -s "$log/perf.data" ] || { echo "  not profiled (no perf)"; return 0; }
+  perf report -i "$log/perf.data" --stdio --sort comm,dso,symbol 2>/dev/null | grep -v -e '^#' -e '^$' | head -50 > "$log/perf.txt"; cat "$log/perf.txt"; }
+statements_summary(){ sql "SELECT calls, round(total_exec_time / 1000) AS s, round(mean_exec_time::numeric, 2) AS ms, rows,
+                             left(regexp_replace(query, '\s+', ' ', 'g'), 160) FROM pg_stat_statements
+                           WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database()) ORDER BY total_exec_time DESC LIMIT 25" \
+                        | tee "$log/statements.txt"; }
+sql "SELECT pg_stat_statements_reset()" >/dev/null || echo "  pg_stat_statements was not emptied: the statements report counts from before this run" >&2
+
 # shellcheck disable=SC2086
-step ingest     laplace ingest ${*:-$LAPLACE_SOURCES}             # the sources named, or every source in order
+step ingest     prof laplace ingest ${*:-$LAPLACE_SOURCES}        # the sources named, or every source in order
 wal_stop
 step wal        wal_summary
+step profile    perf_summary
+step statements statements_summary
 step status     laplace status
 step bench      laplace bench
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
