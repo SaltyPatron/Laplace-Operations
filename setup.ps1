@@ -119,7 +119,76 @@ function Attempt([string]$what, [scriptblock]$body) {
 }
 function IntelInstalled { & 'C:\Program Files (x86)\Intel\oneAPI\Installer\installer.exe' --list-products 2>$null | Where-Object { $_ -match '\btrue\b' } | ForEach-Object { ($_ -split '\s+')[0..1] -join ' ' } }
 
+# The dependency manifest (dependencies.tsv), this platform's rows, in file order.
+$DepSrc = if ($env:LAPLACE_DEPSRC) { $env:LAPLACE_DEPSRC } else { 'D:\Libraries\src' }
+$Deps   = if ($env:LAPLACE_DEPS) { $env:LAPLACE_DEPS } else { 'D:\Libraries' }
+function Manifest {
+    $cols = $null
+    foreach ($line in Get-Content (Join-Path $PSScriptRoot 'dependencies.tsv')) {
+        if (-not $line.Trim() -or $line.StartsWith('#')) { continue }
+        $f = $line -split "`t"
+        if (-not $cols) { $cols = $f; continue }
+        $row = [ordered]@{}; for ($i = 0; $i -lt $cols.Count; $i++) { $row[$cols[$i]] = if ($i -lt $f.Count -and $f[$i] -ne '-') { $f[$i] } else { '' } }
+        if (($row.platforms -split ',') -contains 'windows') { [pscustomobject]$row }
+    }
+}
+function GitIn([string]$dir) { & git.exe -C $dir @args 2>&1 }   # not named Git: a function would shadow git.exe
+
 # ------------------------------------------------------------------------------------------------------ the parts
+# Every manifest row present at its pin. A source is a checkout at its exact commit: cloned when missing, moved to the
+# pin only when its working tree is clean (local changes are reported, never reset). A release or tool is an archive,
+# verified by SHA-256 before it is unpacked into its own prefix; a row without a pin is downloaded, its hash printed,
+# and not used until that hash is written into the manifest.
+function sources {
+    Part 'sources'
+    foreach ($r in Manifest) {
+        $what = "$($r.name) $($r.version)"
+        if ($r.kind -eq 'source') {
+            Attempt $what {
+                $dir = Join-Path $DepSrc $r.name
+                if (-not (Test-Path (Join-Path $dir '.git'))) {
+                    & git.exe clone -q --filter=blob:none --no-checkout $r.origin $dir 2>&1 | Out-Null
+                    if ($LASTEXITCODE) { throw "clone failed: $($r.origin)" }
+                }
+                $origin = (GitIn $dir remote get-url origin | Select-Object -First 1)
+                if ($origin.TrimEnd('/') -replace '\.git$' -ne ($r.origin.TrimEnd('/') -replace '\.git$')) { throw "checkout's origin is $origin, the manifest says $($r.origin)" }
+                $head = (GitIn $dir rev-parse HEAD | Select-Object -First 1)
+                $fresh = -not (Test-Path (Join-Path $dir '.git\index'))           # cloned, never checked out: nothing to keep
+                if ($head -eq $r.pin -and -not $fresh) { Say $what "at $($r.pin.Substring(0,12))"; return }
+                if (-not $fresh -and (GitIn $dir status --porcelain --untracked-files=no)) { throw "has local changes at $head; not moved to $($r.pin)" }
+                GitIn $dir fetch -q origin $r.pin | Out-Null
+                GitIn $dir -c advice.detachedHead=false checkout -q $r.pin | Out-Null
+                if ((GitIn $dir rev-parse HEAD | Select-Object -First 1) -ne $r.pin) { throw "could not check out $($r.pin)" }
+                Say $what "checked out $($r.pin.Substring(0,12))"
+            }
+        } elseif ($r.kind -in 'release', 'tool') {
+            if (-not $r.origin.StartsWith('https://') -or $r.build -ne 'unpack') { continue }   # installed another way (uv tool)
+            Attempt $what {
+                $prefix = Join-Path (Join-Path $Deps $r.name) $r.version
+                if (Test-Path (Join-Path $prefix '.pin')) {
+                    if ((Get-Content (Join-Path $prefix '.pin') -Raw).Trim() -eq $r.pin) { Say $what "installed at $prefix"; return }
+                    throw "$prefix holds another archive than the pin; remove it to reinstall"
+                }
+                $store = Join-Path (Join-Path $DepSrc $r.name) $r.version
+                New-Item -ItemType Directory -Force $store | Out-Null
+                $file = Join-Path $store ([IO.Path]::GetFileName(([uri]$r.origin).AbsolutePath))
+                if (-not (Test-Path $file)) { & curl.exe -fsSL --retry 3 -o $file $r.origin; if ($LASTEXITCODE) { Remove-Item $file -ErrorAction SilentlyContinue; throw "download failed: $($r.origin)" } }
+                $sha = (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+                if (-not $r.pin) { throw "no pin in dependencies.tsv; downloaded $file with SHA-256 ${sha}: review it, write the hash into the manifest, run again" }
+                if ($sha -ne $r.pin) { throw "SHA-256 $sha differs from the pin $($r.pin)" }
+                $stage = "$prefix.part"; Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+                Expand-Archive -LiteralPath $file -DestinationPath $stage
+                $inner = @(Get-ChildItem $stage); if ($inner.Count -eq 1 -and $inner[0].PSIsContainer) { $stage = $inner[0].FullName }   # one top folder: its contents are the prefix
+                New-Item -ItemType Directory -Force (Split-Path $prefix) | Out-Null
+                Move-Item -LiteralPath $stage -Destination $prefix
+                Remove-Item "$prefix.part" -Recurse -Force -ErrorAction SilentlyContinue
+                Set-Content (Join-Path $prefix '.pin') $r.pin
+                Say $what "installed at $prefix"
+            }
+        }
+    }
+}
+
 function retire {
     Part 'retire'
     if (-not (Admin)) { Say 'retire' 'REFUSED: run from an elevated PowerShell'; $failed.Add('retire: not elevated'); return }
@@ -249,7 +318,7 @@ function report {
     }
 }
 
-$known = 'retire', 'environment', 'report'
+$known = 'sources', 'retire', 'environment', 'report'
 foreach ($p in $Parts) { if ($known -notcontains $p) { "setup.ps1 [$($known -join '|') ...]"; Stop-Transcript | Out-Null; exit 2 } }
 foreach ($p in $Parts) { & $p }
 ''
