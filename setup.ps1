@@ -72,7 +72,11 @@ $RetireFeatures = @('Microsoft-Windows-Subsystem-Linux', 'VirtualMachinePlatform
 $RetireDirs = @(
     'C:\ProgramData\chocolatey', 'D:\GitHub', 'D:\LlamaCPP', 'D:\Docker', 'D:\WSL',
     'D:\Data\Postgres', 'D:\Data\Laplace\deploy', 'D:\Data\Laplace\deps', 'D:\Data\Laplace\tools',
-    'C:\Program Files\PostgreSQL', 'C:\Program Files\PgBouncer', 'C:\Program Files (x86)\PostgreSQL'
+    'C:\Program Files\PostgreSQL', 'C:\Program Files\PgBouncer', 'C:\Program Files (x86)\PostgreSQL',
+    'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\PostgreSQL 18', 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\PgBouncer',
+    'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\psqlODBC',
+    'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Postgres Enterprise Manager',
+    'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Postgres Plus Add-ons'
 )
 # Machine environment values that go: blank leftovers, and values of programs that are gone.
 $RetireMachineVars = @(
@@ -145,8 +149,11 @@ function retire {
     foreach ($r in $RetireExe) {
         if (-not (Installed $r.Key)) { continue }
         Attempt $r.Key {
-            if (-not (Test-Path $r.Exe)) { throw "its uninstaller is missing: $($r.Exe)" }
-            Run $r.Exe $r.Args; Say $r.Key "removed ($($r.Why))"
+            if ((Test-Path $r.Exe) -and (Get-Item $r.Exe).Length -gt 0) { Run $r.Exe $r.Args; Say $r.Key "removed ($($r.Why))"; return }
+            # A missing or empty uninstaller cannot run (HART-DESKTOP's EDB uninstallers were 0 bytes). The product's
+            # services and folders are in the sets below; what remains is its registration, which goes here.
+            foreach ($k in $UninstallKeys) { if (Test-Path "$k\$($r.Key)") { Remove-Item -LiteralPath "$k\$($r.Key)" -Recurse -Force } }
+            Say $r.Key "uninstaller broken: registration removed; services and folders below ($($r.Why))"
         }
     }
     foreach ($r in $RetireVs) {
