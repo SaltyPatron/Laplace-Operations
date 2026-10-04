@@ -1,5 +1,6 @@
-# Laplace-Operations on its runner: the deployment (deploy.sh: the build, the perf-caches, the database's schema and
-# extension, and its status). The runner has no root: the machine is setup.sh's, run by a person. On a push, or when
+# Laplace-Operations on its runner: the deployment (deploy.sh: the server's settings, the build, the perf-caches,
+# the database's schema and extension, and its status). Settings are tune-pg.sh, as the role: the runner has no root.
+# Volumes, packages, kernel and access stay setup.sh, run by a person. On a push, or when
 # someone runs it; run by hand with drop, the database is dropped and made again, empty, by the role before it is
 # deployed. No data is loaded: the ingest is a workflow of its own (ingest.yml). The three code repositories are
 # checked out beside this one (private: the secret LAPLACE_CHECKOUT); builds and work are the runner's own

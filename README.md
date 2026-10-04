@@ -36,7 +36,8 @@ LAPLACE_CONNINFO="host=/tmp port=5432 user=laplace dbname=NAME" ./deploy.sh
 
 ```sh
 sudo ./setup.sh                                    # once per machine: volumes, packages, rights, kernel, dependencies, cluster, settings, access
-sudo ./setup.sh settings                           # one part again, after changing its declaration
+./tune-pg.sh                                       # the server's settings, as the role: apply the declaration, reload, check
+sudo ./setup.sh settings                           # the same declaration, when a pending restart needs root
 sudo LAPLACE_DROP=$LAPLACE_PGDATA ./setup.sh drop all   # the cluster emptied and made again (never part of all)
 ```
 
@@ -68,6 +69,7 @@ tier 0 under `$LAPLACE_WORK`; installed dependencies under `$LAPLACE_DEPS`; the 
 ## Repair
 
 Every script here is a declaration compared with the machine, so repair is running it again: `sudo ./setup.sh` after a
-volume, package, setting or access rule went missing (or one part of it: `sudo ./setup.sh settings access`);
+volume, package or access rule went missing; `./tune-pg.sh` after a server setting drifted (`deploy.sh` runs it, and
+the job fails when the live server does not match); `sudo ./setup.sh settings` when a pending restart needs root;
 `./deploy.sh` after a build or a database was cut off; `./ingest.sh` after a load was; `sudo ./agents.sh` after a runner was lost, or
 `sudo ./agents.sh remove REPO` and again to re-register one. What each did is under `$LAPLACE_WORK/logs`.

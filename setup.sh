@@ -54,69 +54,11 @@ blake3      $LAPLACE_DEPSRC/blake3/c/blake3.h   source     https://github.com/BL
 core-math   $LAPLACE_DEPSRC/core-math/src       source     https://gitlab.inria.fr/core-math/core-math.git  master
 tree-sitter $LAPLACE_DEPSRC/tree-sitter/lib/src/lib.c   source   https://github.com/tree-sitter/tree-sitter.git   master
 "
-# The server's settings (Database.md), as ALTER SYSTEM makes them. Memory follows the machine, and the log follows
-# its volume: declared() is read once the volumes are mounted.
-ram_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-# nproc reports OMP_NUM_THREADS when a shell has set it. The server is sized to the machine.
-cores=$(env -u OMP_NUM_THREADS -u MKL_NUM_THREADS nproc)
-# The log's bound is the volume it is on, not a number of its own. max_wal_size is what a checkpoint brings the log
-# back down to, not a limit: under a load the log runs past it while a checkpoint catches up, and a server that
-# crashed needs room for new segments before its recovery can end. Three eighths of the volume: a checkpoint a whole
-# cycle late, the log at twice the bound, still leaves a quarter of the volume free. A replication slot is held to
-# the same bound, so nothing can keep the log past it.
-wal_mb(){ local b; b=$(findmnt -n -b -o SIZE "$PGWAL" | sed -n 1p)                 # the volume, under anything mounted over it
-          [ -n "$b" ] || b=$(df -B1 --output=size "$PGWAL" | tail -1 | tr -d ' '); echo $(( b / 1048576 * 3 / 8 )); }
-# wal_compression: a load's log is full-page images of random-key indexes; on 23,450 of ConceptNet's B-tree images
-# zstd (level 3) wrote 3,781 bytes a page against lz4's 4,711 (-20%), at 57 us a page against 17: about a quarter of
-# one core at the load's 6,500 images a second, for a log a fifth smaller and checkpoints a fifth further apart.
-declared(){ cat <<SET
-shared_buffers                   $((ram_kb / 4 / 1024 / 1024))GB
-effective_cache_size             $((ram_kb * 7 / 10 / 1024 / 1024))GB
-work_mem                         256MB
-maintenance_work_mem             8GB
-huge_pages                       try
-io_method                        worker
-io_workers                       $((cores * 2 / 3))
-effective_io_concurrency         256
-maintenance_io_concurrency       256
-random_page_cost                 1.1
-default_toast_compression        lz4
-max_wal_size                     $(wal_mb)MB
-max_slot_wal_keep_size           $(wal_mb)MB
-min_wal_size                     4GB
-wal_buffers                      256MB
-wal_compression                  zstd
-checkpoint_timeout               60min
-checkpoint_completion_target     0.9
-bgwriter_lru_maxpages            1000
-max_worker_processes             $((cores + 4))
-max_parallel_workers             $cores
-max_parallel_workers_per_gather  $((cores / 2))
-max_parallel_maintenance_workers $((cores / 2))
-jit                              off
-enable_parallel_append           on
-gin_pending_list_limit           32MB
-autovacuum_max_workers           $((cores / 2 < 3 ? 3 : cores / 2))
-autovacuum_naptime               10s
-autovacuum_vacuum_cost_delay     0
-autovacuum_vacuum_cost_limit     2000
-autovacuum_vacuum_scale_factor   0.05
-autovacuum_analyze_scale_factor  0.02
-autovacuum_vacuum_insert_scale_factor 0.01
-autovacuum_work_mem              1GB
-shared_preload_libraries         pg_stat_statements,auto_explain
-pg_stat_statements.track         all
-auto_explain.log_min_duration    5s
-track_io_timing                  on
-track_wal_io_timing              on
-temp_tablespaces                 pgtemp
-listen_addresses                 *
-ssl                              on
-port                             5432
-max_connections                  100
-max_prepared_transactions        32
-SET
-}
+# The server's settings (Database.md). tune-pg.sh holds the declaration and the check.
+# CI applies it on every deploy, as the role. This script applies the same set when a
+# restart needs root.
+# shellcheck source=tune-pg.sh
+. "$here/tune-pg.sh"
 # Who may connect, and how: the whole file, not a line added to whatever is there.
 HBA="# Laplace (setup.sh). Local: the server's own user and the operator, over the socket. The network: laplace and postgres, scram over TLS; postgres also by password from the host itself.
 local     all   $PGUSER                           peer
@@ -302,11 +244,7 @@ drop(){ part drop
 }
 settings(){ part settings
   # every setting is stated; the server itself says which of them changed and which need a restart
-  while read -r name value; do [ -n "$name" ] || continue
-    case $name in shared_preload_libraries) v="$value" ;; *) v="'$value'" ;; esac
-    run "ALTER SYSTEM SET $name = $v" 2>/dev/null || say "$name" "REFUSED $value"
-  done < <(declared)
-  q "SELECT pg_reload_conf()" >/dev/null
+  tune_apply
   pending=$(q "SELECT string_agg(name, ', ') FROM pg_settings WHERE pending_restart")
   say "settings" "$(declared | grep -c .) declared, reloaded"
   # a restart is never made under a running ingest: it would cut the load off and send the server through recovery
@@ -314,6 +252,7 @@ settings(){ part settings
     if ingesting; then say "restart for $pending" "DEFERRED: an ingest is running; sudo ./setup.sh settings once it is done"
     else systemctl restart "$SERVICE.service"; ready; say "restarted for" "$pending"; fi
   fi
+  tune_check
   [ "$(q "SHOW huge_pages_status")" = on ] || say "huge pages" "NOT IN USE: the server needs $(q "SHOW shared_memory_size_in_huge_pages") pages; sudo ./setup.sh kernel settings"
   q "SELECT '  '||rpad(name, 46)||current_setting(name) FROM pg_settings WHERE name IN ('shared_buffers','huge_pages_status','effective_cache_size','work_mem','maintenance_work_mem','io_method','max_wal_size','wal_buffers','listen_addresses','ssl') ORDER BY name"
 }

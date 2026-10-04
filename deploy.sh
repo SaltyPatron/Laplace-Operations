@@ -40,6 +40,7 @@ step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
         { "$@" 2>&1; echo $? > "$log/$name.exit"; } | grep --line-buffered -v "^OMP: " | tee "$log/$name.log"
         [ "$(cat "$log/$name.exit" 2>/dev/null)" = 0 ] || { echo "=== $name did not finish; what it said is in $log/$name.log"; exit 1; }; }
 
+step tune-pg    bash "$here/tune-pg.sh"                          # the server's settings: apply, reload, check. a drift fails the deploy
 step build      "$here/build.sh" install
 [ -s "$LAPLACE_TIER0" ] || step tier0 laplace tier0
 [ -s "${LAPLACE_TIER0%.bin}.flags" ] || step flags laplace flags
