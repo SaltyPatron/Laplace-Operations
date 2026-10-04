@@ -2,12 +2,13 @@
 # on Linux and Windows. The same input gives the same bits on every machine.
 #
 # Read by toolchain/laplace.cmake (CMake), and by setup.sh and setup.ps1 for Meson native files and autotools CFLAGS.
-# Columns: what (compile, link, nobuiltin), driver (gnu: icx/icpx/icx-cc; msvc: icx-cl on Windows; any), value.
+# Columns: what (compile, link, nobuiltin), driver (gnu: icx/icpx/icx-cc; msvc: icx-cl on Windows; gcc: gcc or clang,
+# the cross-compiler check; any), value.
 # A nobuiltin row is a libm function: the compiler may not fold it at build time with the build host's libm, turn it
 # into an SVML vector call or a vendor intrinsic; every call reaches laplace-math (core-math, correctly rounded).
 # Measured with icx 2026.1.1 on both machines (2026-10-04): the default is fast math, FMA contraction and SVML; the
 # precise flags remove those but cos(0.5) is still folded at build time until -fno-builtin-cos; on Linux an icx-built
-# object links libimf and libsvml unless -no-intel-lib.
+# object links libimf and libsvml unless -no-intel-lib=libimf,libsvml.
 #
 # what	driver	value
 compile	gnu	-fp-model=precise
@@ -16,13 +17,19 @@ compile	gnu	-fno-fast-math
 compile	gnu	-fsigned-zeros
 compile	gnu	-march=x86-64-v3
 compile	gnu	-Wno-overriding-option
+compile	gcc	-ffp-contract=off
+compile	gcc	-fno-fast-math
+compile	gcc	-fsigned-zeros
+compile	gcc	-march=x86-64-v3
 compile	msvc	/fp:precise
 compile	msvc	/clang:-ffp-contract=off
 compile	msvc	/clang:-fno-fast-math
 compile	msvc	/clang:-fsigned-zeros
 compile	msvc	/clang:-march=x86-64-v3
 compile	msvc	-Wno-overriding-option
-link	gnu	-no-intel-lib
+# Intel's math libraries (libimf, libsvml) and libirng are not linked; libirc (_intel_fast_memcpy/memset, which icx
+# emits for copies: exact) and its libintlc stay, because separate compile and link steps need them.
+link	gnu	-no-intel-lib=libimf,libsvml,libirng
 # Windows keeps libmmd for exact operations only (sqrt, round, fmin/fmax, ldexp, the fenv calls): icx's headers
 # declare those as imports from it, and the UCRT defines feraiseexcept only inline. The transcendental functions are
 # plain calls, and laplace-math comes first on the link line, so none reaches libmmd; the fingerprint's override

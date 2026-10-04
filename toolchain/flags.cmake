@@ -2,16 +2,20 @@
 # contract: toolchain/laplace.cmake (any CMake build), math/ (laplace-math) and Laplace-Native include it.
 #   laplace_fp_flags(<compile-list-var> <link-list-var>)
 include_guard(GLOBAL)
-set(LAPLACE_FP_CONTRACT "${CMAKE_CURRENT_LIST_DIR}/determinism.tsv")
 
 function(laplace_fp_flags compile_var link_var)
-  if(CMAKE_C_SIMULATE_ID STREQUAL "MSVC" OR (NOT CMAKE_C_COMPILER_ID AND CMAKE_HOST_WIN32))
+  # Found from this file's own place: a variable set when the file was first included is not visible from every
+  # directory scope that calls the function later (an Engine build includes it after Native).
+  set(contract "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/determinism.tsv")
+  if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
+    set(driver gcc)                                   # the cross-compiler check: the same contract, gcc's spelling
+  elseif(CMAKE_C_SIMULATE_ID STREQUAL "MSVC" OR (NOT CMAKE_C_COMPILER_ID AND CMAKE_HOST_WIN32))
     set(driver msvc)                                  # icx-cl: MSVC-style options, clang ones through /clang:
   else()
-    set(driver gnu)
+    set(driver gnu)                                   # icx, icpx, icx-cc
   endif()
-  file(STRINGS "${LAPLACE_FP_CONTRACT}" rows REGEX "^[a-z]")
-  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${LAPLACE_FP_CONTRACT}")
+  file(STRINGS "${contract}" rows REGEX "^[a-z]")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${contract}")
   set(compile "")
   set(link "")
   foreach(row IN LISTS rows)
@@ -37,6 +41,9 @@ function(laplace_fp_flags compile_var link_var)
       endforeach()
     endif()
   endforeach()
+  if(NOT compile)
+    message(FATAL_ERROR "laplace_fp_flags: no compile flags from ${contract}")
+  endif()
   set(${compile_var} "${compile}" PARENT_SCOPE)
   set(${link_var} "${link}" PARENT_SCOPE)
 endfunction()

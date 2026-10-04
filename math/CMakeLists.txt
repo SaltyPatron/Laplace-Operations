@@ -45,11 +45,22 @@ else()
 endif()
 install(TARGETS laplace_math ARCHIVE DESTINATION lib)
 
-# What a consumer links: the whole library (its definitions win over libm's, whatever is listed after it) and the
-# contract's link flags.
+# What a consumer links: laplace-math ahead of every libm, and the contract's link flags. On Linux a static library
+# listed after -lm would lose to libm.so, so it goes in whole; on Windows a library on the command line is searched
+# before the compiler's default libraries (libmmd, the UCRT), which is enough (and CMake spells WHOLE_ARCHIVE for icx
+# there in GNU form, which link.exe does not take).
 add_library(laplace_math_link INTERFACE)
 add_library(laplace::math ALIAS laplace_math_link)
-target_link_libraries(laplace_math_link INTERFACE "$<LINK_LIBRARY:WHOLE_ARCHIVE,laplace_math>")
+if(MSVC)
+  target_link_libraries(laplace_math_link INTERFACE laplace_math)
+else()
+  # Then libm itself, for the exact operations laplace-math leaves to it (sqrt, fmax, the fenv calls), after the
+  # library so a linker that drops unused libraries (--as-needed) keeps it. Its own imported target: CMake would fold
+  # a plain m into an earlier -lm, before laplace-math.
+  add_library(laplace_math_libm INTERFACE IMPORTED)
+  set_target_properties(laplace_math_libm PROPERTIES IMPORTED_LIBNAME m)
+  target_link_libraries(laplace_math_link INTERFACE "$<LINK_LIBRARY:WHOLE_ARCHIVE,laplace_math>" laplace_math_libm)
+endif()
 target_link_options(laplace_math_link INTERFACE ${LAPLACE_FP_LINK})
 
 # The fingerprint (test/determinism.c), linked the way every consumer links laplace-math.
