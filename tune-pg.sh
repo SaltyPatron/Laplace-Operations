@@ -210,24 +210,24 @@ tune_restart() {
     return 1
   fi
   unit="${SERVICE}.service"
+  local began; began=$(tune_psql "SELECT pg_postmaster_start_time()")
   if [ "$(id -u)" = 0 ]; then
     systemctl restart "$unit"
-  elif sudo -n systemctl restart "$unit"; then
-    :
+  elif [ -w "$LAPLACE_LOCKS" ] && systemctl is-active -q laplace-pg-restart.path; then
+    # the runner has no root: it asks, and root's laplace-pg-restart.service restarts the unit
+    # (setup.sh rights), never while an ingest holds its lock
+    date -u +%FT%TZ > "$LAPLACE_LOCKS/restart-pg"
   else
-    echo "tune-pg: $pending pending_restart; $unit was not restarted" >&2
+    echo "tune-pg: $pending pending_restart; $unit was not restarted (sudo ./setup.sh rights installs the restart the runner may ask for)" >&2
     return 1
   fi
-  for i in $(seq 120); do
-    if [ "$(id -u)" = 0 ]; then
-      su "$PGUSER" -c "$PGBIN/pg_isready -q -h /tmp" </dev/null && return 0
-    else
-      pg_isready -q -h /tmp && return 0
-    fi
-    systemctl is-active -q "$unit" || { echo "tune-pg: $unit stopped" >&2; return 1; }
+  # restarted when the server answers with a start time later than the one it had
+  for i in $(seq 180); do
     sleep 1
+    now=$(tune_psql "SELECT pg_postmaster_start_time()" 2>/dev/null) || continue
+    [ -n "$now" ] && [ "$now" != "$began" ] && { echo "tune-pg: $unit restarted for $pending"; return 0; }
   done
-  echo "tune-pg: $unit did not accept connections" >&2
+  echo "tune-pg: $unit was not restarted within 180 s (journalctl -u laplace-pg-restart.service)" >&2
   return 1
 }
 
