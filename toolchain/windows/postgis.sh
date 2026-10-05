@@ -130,7 +130,9 @@ build() {
   cp liblwgeom/.libs/lwgeom.lib liblwgeom/.libs/liblwgeom.a
   # Directory by directory: the top level stops at the first that fails, utils (scripts Laplace does not use) builds
   # raster's upgrade scripts even without raster, and so does extensions as a whole: only the two extensions built.
-  for d in libpgcommon postgis topology extensions/postgis extensions/postgis_topology; do pmake -j"$(nproc)" -C $d all; done
+  for d in libpgcommon postgis topology; do pmake -j"$(nproc)" -C $d all; done
+  pmake -C extensions postgis_extension_helper.sql                     # the parent's generated helper the extensions include
+  for d in extensions/postgis extensions/postgis_topology; do pmake -j"$(nproc)" -C $d all; done
   # libtool's launcher wrappers for the loader programs fail to link (it builds them without LDFLAGS); the programs
   # themselves are in loader/.libs.
   pmake -j"$(nproc)" -k -C loader all || true
