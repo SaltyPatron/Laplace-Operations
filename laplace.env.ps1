@@ -59,4 +59,11 @@ Set-Default LAPLACE_TREESITTER "$env:LAPLACE_DEPSRC\tree-sitter"
 Set-Default LAPLACE_ZLIB_DIR    "$env:LAPLACE_DEPS\zlib\1.3.2"              # Laplace-Engine on Windows: zlib's import library and headers (dependencies.tsv)
 Set-Default LAPLACE_EIGEN_DIR   "$env:LAPLACE_DEPSRC\eigen"                 # Laplace-Native's laplace_linalg: the checkouts at the manifest's pins
 Set-Default LAPLACE_SPECTRA_DIR "$env:LAPLACE_DEPSRC\spectra"
-Set-Default LAPLACE_MATH       "$env:LAPLACE_BUILD\..\laplace-math\icx-release\laplace-math.lib"
+Set-Default LAPLACE_MATH       "$env:LAPLACE_BUILD\..\laplace-math\icx-release\laplace-math.lib"   # setup.ps1 deps builds it first (math\CMakeLists.txt)
+
+# The engine's run-time libraries, on the PATH once (Toolchain 2.7: the one environment file sources oneAPI): MKL and
+# OpenMP from oneAPI's redistributable directories, libpq beside the server, ICU, zlib, and the engine itself.
+Set-Default LAPLACE_ONEAPI 'C:\Program Files (x86)\Intel\oneAPI'
+foreach ($d in @("$env:LAPLACE_BUILD\Laplace-Engine\icx-release", "$env:LAPLACE_PG_DIR\bin", "$env:LAPLACE_ICU_DIR\bin64", "$env:LAPLACE_ZLIB_DIR\bin", "$env:LAPLACE_ONEAPI\mkl\latest\bin", "$env:LAPLACE_ONEAPI\compiler\latest\bin")) {
+    if ((Test-Path $d) -and (($env:PATH -split ';') -notcontains $d)) { $env:PATH = "$d;$env:PATH" }
+}
