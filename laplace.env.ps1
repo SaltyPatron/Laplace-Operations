@@ -36,6 +36,8 @@ Set-Default LAPLACE_PEER_KEY "$env:USERPROFILE\.ssh\id_hartserver"
 Set-Default LAPLACE_PG_RESERVED    '34GB'   # memory the machine's other residents keep: the three llama-server services commit about 34 of 48 GB (2026-10-05)
 Set-Default LAPLACE_PG_BUFFERS_MAX '1GB'    # the largest shared memory this Windows build maps in every backend: at 4GB 826 backends in three hours could not (error 487); 1GB maps (2026-10-05)
 Set-Default LAPLACE_PGWAL_ROOM     '32GB'   # the log's bound when it shares its drive (D: holds the heap, the sources and the models); a dedicated drive gets half of itself
+Set-Default LAPLACE_PG_PRELOAD     'pg_stat_statements,auto_explain,laplace_substrate'   # the libraries the server loads at start: observability (tune-pg.sh), and the monorepo's substrate, which this server also serves (database laplace-mono)
+Set-Default LAPLACE_PG_LIBDIRS     'D:\Data\Laplace\deploy\lib'   # where the monorepo installs its extension DLLs (scripts\win\install-extensions.cmd); a preload library is declared only once its DLL is there
 
 # The toolchain: the developer shell (Visual Studio's vcvars64, oneAPI, CMake, the manifest's build tools) and the
 # MSYS2 that builds PostGIS (toolchain\windows\postgis.sh).

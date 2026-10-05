@@ -122,9 +122,9 @@ build() {
   make -C deps/flatgeobuf CXX="icx-cc -fms-runtime-lib=dll -std=c++17 -x c++"
   # libtool names the MSVC-format archive lwgeom.lib; PGXS links it by its MinGW name.
   cp liblwgeom/.libs/lwgeom.lib liblwgeom/.libs/liblwgeom.a
-  # Directory by directory: the top level stops at the first that fails, and utils (scripts Laplace does not use)
-  # builds raster's upgrade scripts even without raster.
-  for d in libpgcommon postgis topology extensions; do pmake -j"$(nproc)" -C $d all; done
+  # Directory by directory: the top level stops at the first that fails, utils (scripts Laplace does not use) builds
+  # raster's upgrade scripts even without raster, and so does extensions as a whole: only the two extensions built.
+  for d in libpgcommon postgis topology extensions/postgis extensions/postgis_topology; do pmake -j"$(nproc)" -C $d all; done
   # libtool's launcher wrappers for the loader programs fail to link (it builds them without LDFLAGS); the programs
   # themselves are in loader/.libs.
   pmake -j"$(nproc)" -k -C loader all || true
@@ -135,7 +135,7 @@ build() {
 
 install() {
   cd "$B"
-  for d in postgis topology extensions; do pmake -C $d install; done
+  for d in postgis topology extensions/postgis extensions/postgis_topology; do pmake -C $d install; done
   cp loader/.libs/shp2pgsql.exe loader/.libs/pgsql2shp.exe "$PG/bin/"
   # The DLLs PostGIS loads, beside postgres.exe: Windows finds a backend module's dependencies there.
   for f in "$GEOS/bin/geos.dll" "$GEOS/bin/geos_c.dll" "$PROJ/bin/proj_9.dll" "$JSONC/bin/json-c.dll" \

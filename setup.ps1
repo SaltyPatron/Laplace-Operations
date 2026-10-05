@@ -89,9 +89,16 @@ function MsysPath([string]$path) { '/' + ($path.Substring(0, 1).ToLowerInvariant
 function GitIn([string]$dir) { & git.exe -C $dir @args 2>&1 }   # not named Git: a function would shadow git.exe
 # the developer shell, once, when icx is not already on the PATH: Visual Studio's vcvars64, oneAPI, CMake, the tools
 function DevShell {
-    if (Get-Command icx.exe -ErrorAction SilentlyContinue) { return $true }
-    if (-not (Test-Path $DevShell)) { return $false }
-    . $DevShell *> $null
+    if (-not (Get-Command icx.exe -ErrorAction SilentlyContinue)) {
+        if (-not (Test-Path $DevShell)) { return $false }
+        . $DevShell *> $null
+    }
+    # the manifest's build tools first on the PATH, ahead of any same-named program the shell brought (Git's perl, whose
+    # modules are Unix's, configured OpenSSL and generated PostgreSQL's headers wrongly)
+    foreach ($t in @(Manifest | Where-Object { $_.kind -eq 'tool' -and $_.build -eq 'unpack' })) {
+        $p = Prefix $t; if ($t.name -eq 'strawberry-perl') { $p = Join-Path $p 'perl\bin' }
+        if ((Test-Path $p) -and (($env:PATH -split ';') -notcontains $p)) { $env:PATH = "$p;$env:PATH" }
+    }
     [bool](Get-Command icx.exe -ErrorAction SilentlyContinue)
 }
 function PgReady { & "$PgBin\pg_isready.exe" -h 127.0.0.1 -p 5432 2>$null | Out-Null; $LASTEXITCODE -eq 0 }
