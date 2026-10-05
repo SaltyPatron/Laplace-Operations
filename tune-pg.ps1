@@ -180,7 +180,11 @@ function TuneApply {
         # can mark a restart for a value the server is already running
         if ($r.match -eq 't' -and ($r.source -eq 'configuration file' -or $r.context -eq 'postmaster')) { continue }
         $v = $want[$r.name]
-        TunePsql "ALTER SYSTEM SET $($r.name) = '$($v -replace "'", "''")'" | Out-Null
+        # a list setting is written element by element: one quoted text holding commas is one element, and the server
+        # then looks for a library named "pg_stat_statements,auto_explain,..." and does not start
+        $sql = if ($r.name -in 'shared_preload_libraries', 'temp_tablespaces') { "ALTER SYSTEM SET $($r.name) = " + (($v -split ',' | ForEach-Object { "'" + ($_.Trim() -replace "'", "''") + "'" }) -join ', ') }
+               else { "ALTER SYSTEM SET $($r.name) = '$($v -replace "'", "''")'" }
+        TunePsql $sql | Out-Null
         "tune-pg: set $($r.name) = $v"; $n++
     }
     if ($n) {
