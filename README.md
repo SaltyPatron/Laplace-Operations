@@ -98,8 +98,10 @@ configures, builds and installs into that PostgreSQL. On Windows every link ends
 Intel's libm, kept for the exact operations only; no transcendental function in any installed binary comes from it.
 
 The Windows machine is one leg of the cross-OS check: a database the Linux machine's clients reach over `$LAPLACE_LAN`
-with TLS, and a client of the Linux machine's database (`LAPLACE_CONNINFO`); `report` tries both. `access` keeps the
-operator's pgpass lines for other hosts. HART-DESKTOP's one-time cleanup of what earlier set-ups left is
+with TLS, and a client of the Linux machine's database (`LAPLACE_CONNINFO`); `report` tries both. The role has one
+password across the installation, the deployment target's: `access` reads it from `LAPLACE_PEER`'s operator pgpass over
+the operator's SSH key and gives it to the role here, so one pgpass line reaches both databases; the operator's pgpass
+lines for other hosts are kept. HART-DESKTOP's one-time cleanup of what earlier set-ups left is
 `toolchain/windows/retire.ps1`, not part of setup.
 
 ## Repair

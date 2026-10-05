@@ -23,6 +23,11 @@ Set-Default LAPLACE_ROLE    'laplace'                                       # th
 Set-Default LAPLACE_LAN     '192.168.1.0/24'                                # the network the server is reachable from; hart-server is on it
 Set-Default LAPLACE_LOCKS   "$env:LAPLACE_WORK\locks"                       # one deployment or ingest per database at a time: the locks
 Set-Default LAPLACE_CONNINFO "host=127.0.0.1 port=5432 user=$env:LAPLACE_ROLE dbname=laplace"   # libpq form; names the database. hart-server's: host=192.168.1.2 port=5432 user=laplace dbname=laplace sslmode=require
+# The deployment target, whose operator holds the role's one password for the whole installation (setup.sh access writes
+# it into every operator's ~/.pgpass there): this machine's role takes it, so one pgpass line reaches both databases
+# and either machine is the other's client. Reached over the operator's SSH key. Unset: this machine makes its own.
+Set-Default LAPLACE_PEER     'ahart@hart-server'
+Set-Default LAPLACE_PEER_KEY "$env:USERPROFILE\.ssh\id_hartserver"
 
 # The server's settings follow the machine (tune-pg.ps1): a quarter of the memory the server may use for the buffers,
 # seven tenths of it for the cache estimate, the cores for the workers, half of a dedicated drive for the log. What a

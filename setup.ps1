@@ -450,6 +450,20 @@ function access {
     Attempt "role $PgRole" {
         if ((PgSql "SELECT count(*) FROM pg_roles WHERE rolname = '$PgRole'") -ne '1') { PgSql "CREATE ROLE $PgRole LOGIN SUPERUSER" | Out-Null }
         $pw = PgPassOf $PgCanon; $how = "password in $PgCanon"
+        # the installation's password is the deployment target's (LAPLACE_PEER): read from its operator's pgpass over SSH,
+        # given to the role here when the role does not already accept it. Never printed.
+        if ($env:LAPLACE_PEER) {
+            $sshOpts = @('-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'); if ($env:LAPLACE_PEER_KEY -and (Test-Path $env:LAPLACE_PEER_KEY)) { $sshOpts += '-i', $env:LAPLACE_PEER_KEY }
+            $peer = (& ssh.exe @sshOpts $env:LAPLACE_PEER "grep ':${PgRole}:' ~/.pgpass | head -1 | cut -d: -f5-" 2>$null | Select-Object -First 1)
+            if ($peer) {
+                $peer = $peer.Trim()
+                if (-not (PgWorks $peer)) { PgSql "ALTER ROLE $PgRole PASSWORD '$($peer -replace "'", "''")'" | Out-Null }
+                $pw = $peer; $how = "password the installation's, from $($env:LAPLACE_PEER)"
+                New-Item -ItemType Directory -Force (Split-Path $PgCanon) | Out-Null
+                Set-Content -Path $PgCanon -Value "*:5432:*:${PgRole}:$pw" -Encoding ascii -NoNewline
+                & icacls.exe $PgCanon /inheritance:r /grant '*S-1-5-32-544:F' /Q | Out-Null
+            } else { Say "role $PgRole" "$($env:LAPLACE_PEER) did not answer with a password for ${PgRole}: this machine's own is kept" }
+        }
         if (-not $pw -or -not (PgWorks $pw)) {
             $keep = $pw; $pw = $null
             $c = PgPassOf $operator; if ($c -and (PgWorks $c)) { $pw = $c; $how = "password adopted from $operator" }
