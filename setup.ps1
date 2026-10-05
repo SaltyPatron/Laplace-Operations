@@ -274,13 +274,18 @@ function deps {
     if (-not (Test-Path $Math) -or $missing.Count) {
         if (-not (DevShell)) { Say 'builds' "NOT BUILT: no icx; the developer shell $DevShell is missing or does not provide it"; $failed.Add('deps: no icx'); return }
     }
-    if (Test-Path $Math) { Say 'laplace-math' $Math }
+    $mathMark = Join-Path (Split-Path $Math) '.contract'
+    if ((Test-Path $Math) -and (Test-Path $mathMark) -and (Get-Content $mathMark -Raw) -eq (Contract)) { Say 'laplace-math' $Math }
     else {
+        if (Test-Path $Math) { Say 'laplace-math' $(if (Test-Path $mathMark) { 'the contract changed since it was built: built again' } else { 'built before the contract was recorded: built again' }) }
+        if (-not (DevShell)) { Say 'laplace-math' "NOT BUILT: no icx; the developer shell $DevShell is missing or does not provide it"; $failed.Add('deps: no icx'); return }
         Attempt 'laplace-math' {
             $b = Split-Path $Math
+            if (Test-Path $b) { Remove-Item $b -Recurse -Force }
             Exec cmake.exe @('-S', (Join-Path $PSScriptRoot 'math'), '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DCORE_MATH=$env:LAPLACE_COREMATH")
             Exec cmake.exe @('--build', $b)
             if (-not (Test-Path $Math)) { throw "no library at $Math" }
+            Set-Content -Path $mathMark -Value (Contract) -NoNewline
             Say 'laplace-math' "built: $Math"
         }
     }
