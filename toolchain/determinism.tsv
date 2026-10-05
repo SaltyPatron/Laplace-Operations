@@ -15,17 +15,17 @@ compile	gnu	-fp-model=precise
 compile	gnu	-ffp-contract=off
 compile	gnu	-fno-fast-math
 compile	gnu	-fsigned-zeros
-compile	gnu	-march=x86-64-v3
+compile	gnu	-march=x86-64-v2
 compile	gnu	-Wno-overriding-option
 compile	gcc	-ffp-contract=off
 compile	gcc	-fno-fast-math
 compile	gcc	-fsigned-zeros
-compile	gcc	-march=x86-64-v3
+compile	gcc	-march=x86-64-v2
 compile	msvc	/fp:precise
 compile	msvc	/clang:-ffp-contract=off
 compile	msvc	/clang:-fno-fast-math
 compile	msvc	/clang:-fsigned-zeros
-compile	msvc	/clang:-march=x86-64-v3
+compile	msvc	/clang:-march=x86-64-v2
 compile	msvc	-Wno-overriding-option
 # Intel's math libraries (libimf, libsvml) and libirng are not linked; libirc (_intel_fast_memcpy/memset, which icx
 # emits for copies: exact) and its libintlc stay, because separate compile and link steps need them.
@@ -35,8 +35,10 @@ link	gnu	-no-intel-lib=libimf,libsvml,libirng
 # default library, and link.exe can search a default library before a library named later on the command line (PostGIS
 # topology took sin, cos and atan2 from libmmd that way), so a link drops it (/NODEFAULTLIB:libmmd) and names it
 # explicitly after laplace-math. The fingerprint's override check proves it per binary (math/test/determinism.c).
-# x86-64-v3 is what both machines have (i7-6850K Broadwell-E, i9-14900KS; neither has AVX-512). With contraction and
-# reassociation off, vectorizing does not change results, so the ISA level is speed only.
+# x86-64-v2 is the baseline every build is compiled for (Wiki: Sequence 2.1, 3.3): one binary runs on every machine.
+# The higher levels (v3: AVX2, FMA, BMI2; AVX-VNNI; v4: AVX-512; AVX-512 VNNI) are Laplace-Native's kernels, each in
+# its own translation unit and chosen at run time. With contraction and reassociation off, vectorizing does not change
+# results, so the ISA level is speed only.
 nobuiltin	any	acos acosh asin asinh atan atan2 atanh cbrt cos cosh erf erfc exp exp10 exp2 expm1 hypot lgamma log log10 log1p log2 pow sin sincos sinh tan tanh tgamma
 nobuiltin	any	acospi asinpi atanpi atan2pi cospi sinpi tanpi exp10m1 exp2m1 log10p1 log2p1 rsqrt
 nobuiltin	any	acosf acoshf asinf asinhf atanf atan2f atanhf cbrtf cosf coshf erff erfcf expf exp10f exp2f expm1f hypotf lgammaf logf log10f log1pf log2f powf sinf sincosf sinhf tanf tanhf tgammaf
