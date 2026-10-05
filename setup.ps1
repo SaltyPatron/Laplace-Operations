@@ -282,7 +282,8 @@ function deps {
         Attempt 'laplace-math' {
             $b = Split-Path $Math
             if (Test-Path $b) { Remove-Item $b -Recurse -Force }
-            Exec cmake.exe @('-S', (Join-Path $PSScriptRoot 'math'), '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DCORE_MATH=$env:LAPLACE_COREMATH")
+            # the one build that needs no LAPLACE_MATH: the toolchain file would otherwise refuse the environment's, which is this library
+            Exec cmake.exe @('-S', (Join-Path $PSScriptRoot 'math'), '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", '-DLAPLACE_MATH=', "-DCORE_MATH=$env:LAPLACE_COREMATH")
             Exec cmake.exe @('--build', $b)
             if (-not (Test-Path $Math)) { throw "no library at $Math" }
             Set-Content -Path $mathMark -Value (Contract) -NoNewline
@@ -344,7 +345,9 @@ function deps {
                     if ($LASTEXITCODE) { throw 'meson-native.py failed' }
                     $inc = ($libs | ForEach-Object { "$_\include" -replace '\\', '/' }) -join ','
                     $lib = ($libs | ForEach-Object { foreach ($l in 'lib', 'lib64') { if (Test-Path "$_\$l") { "$_\$l" -replace '\\', '/' } } }) -join ','
-                    if (-not (Test-Path (Join-Path $b 'build.ninja'))) { Exec meson.exe (@('setup', $b, $checkout, "--native-file=$native", "-Dprefix=$prefix", "-Dextra_include_dirs=$inc", "-Dextra_lib_dirs=$lib") + $PgMesonOptions) }
+                    # ICU's Windows release carries no pkg-config or CMake package: Meson's CMake probe finds it, and the rest, by prefix
+                    $cmakePrefix = ($libs -replace '\\', '/') -join ','
+                    if (-not (Test-Path (Join-Path $b 'build.ninja'))) { Exec meson.exe (@('setup', $b, $checkout, "--native-file=$native", "-Dprefix=$prefix", "-Dextra_include_dirs=$inc", "-Dextra_lib_dirs=$lib", "-Dcmake_prefix_path=$cmakePrefix") + $PgMesonOptions) }
                     Exec ninja.exe @('-C', $b)
                     WithServerStopped $what { Exec ninja.exe @('-C', $b, 'install') }
                 }
