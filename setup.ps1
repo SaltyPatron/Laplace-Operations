@@ -493,8 +493,10 @@ function settings {
         foreach ($line in (TunePsql "SELECT '  '||rpad(name, 46)||current_setting(name) FROM pg_settings WHERE name IN ('shared_buffers','effective_cache_size','work_mem','maintenance_work_mem','io_method','max_wal_size','wal_buffers','listen_addresses','ssl') ORDER BY name")) { $line }
     } finally { Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue }
 }
-# Who may connect, and how (setup.sh: access). The whole pg_hba.conf, not a line added to whatever is there: laplace
-# and postgres by scram on loopback, by scram over TLS from $PgLan, nothing else (no socket on Windows: no peer). The
+# Who may connect, and how (setup.sh: access). The whole pg_hba.conf, not a line added to whatever is there: the role
+# on loopback by SSPI under the pg_ident map (the host authenticates the identities LAPLACE_PG_IDENTITIES names, the
+# counterpart of Linux's peer socket: no password on this machine for the operator, IIS's pool or a service), postgres
+# by scram on loopback, both by scram over TLS from $PgLan, nothing else. The
 # role's password is one canonical copy, administrators only, adopted from the operator's pgpass when it is the one
 # the server accepts, made when none is, and written into the operator's %APPDATA%\postgresql\pgpass.conf, which libpq
 # reads for psql and the laplace program. Only this host's line for the role is replaced there: the operator's lines
@@ -543,9 +545,9 @@ function access {
     Attempt 'role postgres' { if ((PgSql "SELECT count(*) FROM pg_roles WHERE rolname = 'postgres'") -ne '1') { PgSql 'CREATE ROLE postgres LOGIN SUPERUSER' | Out-Null }; PgSql "ALTER ROLE postgres PASSWORD 'postgres'" | Out-Null; Say 'role postgres' "password postgres: locally and from $PgLan over TLS (setup.sh declares the same)" }
     Attempt 'pg_hba.conf' {
         $hba = @(
-            "# Laplace (setup.ps1). Loopback: laplace and postgres by scram. The network: scram over TLS from $PgLan. Nothing else.",
-            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', $PgRole,    '127.0.0.1/32', 'scram-sha-256'),
-            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', $PgRole,    '::1/128',      'scram-sha-256'),
+            "# Laplace (setup.ps1). Loopback: $PgRole by SSPI under the map (pg_ident.conf), postgres by scram. The network: scram over TLS from $PgLan. Nothing else.",
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', $PgRole,    '127.0.0.1/32', "sspi map=$PgRole include_realm=0"),
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', $PgRole,    '::1/128',      "sspi map=$PgRole include_realm=0"),
             ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'hostssl',   'all', $PgRole,    $PgLan,         'scram-sha-256'),
             ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', 'postgres', '127.0.0.1/32', 'scram-sha-256'),
             ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', 'postgres', '::1/128',      'scram-sha-256'),
@@ -558,6 +560,18 @@ function access {
         Set-Content -Path $file -Value ($hba + "`n") -Encoding ascii -NoNewline
         PgSql 'SELECT pg_reload_conf()' | Out-Null
         Say 'pg_hba.conf' 'written'
+    }
+    Attempt 'pg_ident.conf' {
+        # the map: each identity LAPLACE_PG_IDENTITIES names, as SSPI presents it with the realm stripped, is the role
+        $ident = @("# Laplace (setup.ps1). The identities this host authenticates as $PgRole (LAPLACE_PG_IDENTITIES).") +
+            @(($env:LAPLACE_PG_IDENTITIES -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ } | ForEach-Object { '{0,-10}{1,-24}{2}' -f $PgRole, ('"' + $_ + '"'), $PgRole })
+        $ident = $ident -join "`n"
+        $file = Join-Path $PgData 'pg_ident.conf'
+        if ((Test-Path $file) -and ((Get-Content $file -Raw) -replace "`r`n", "`n").TrimEnd() -eq $ident) { Say 'pg_ident.conf' 'as declared'; return }
+        if (Test-Path $file) { Copy-Item $file "$file.before" -Force }
+        Set-Content -Path $file -Value ($ident + "`n") -Encoding ascii -NoNewline
+        PgSql 'SELECT pg_reload_conf()' | Out-Null
+        Say 'pg_ident.conf' 'written'
     }
     Attempt 'firewall' {
         # any enabled inbound allow rule for 5432/tcp admits the port already (an earlier install's rule counts); one is made only when none exists

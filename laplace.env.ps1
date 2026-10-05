@@ -21,6 +21,11 @@ Set-Default LAPLACE_PGSERVICE 'laplace-postgres'                            # th
 Set-Default LAPLACE_PGUSER  'NT AUTHORITY\NetworkService'                   # the account the service runs as (S-1-5-20): owns the data and the logs, reads the install
 Set-Default LAPLACE_ROLE    'laplace'                                       # the database role Laplace connects as
 Set-Default LAPLACE_LAN     '192.168.1.0/24'                                # the network the server is reachable from; hart-server is on it
+# The Windows identities this host authenticates as the role over loopback (SSPI, pg_ident map; setup.ps1 access): the
+# counterpart of Linux's peer socket. The operator; IIS's pool for the monorepo's site (deploy\windows\Install-LaplaceSite.ps1:
+# LaplacePool); the account the monorepo's managed services run as (scripts\win\ensure-managed-services.ps1: LocalService).
+# Realm-stripped names, as SSPI presents them (include_realm=0).
+Set-Default LAPLACE_PG_IDENTITIES "$env:USERNAME,LaplacePool,LOCAL SERVICE"
 Set-Default LAPLACE_LOCKS   "$env:LAPLACE_WORK\locks"                       # one deployment or ingest per database at a time: the locks
 Set-Default LAPLACE_CONNINFO "host=127.0.0.1 port=5432 user=$env:LAPLACE_ROLE dbname=laplace"   # libpq form; names the database. hart-server's: host=192.168.1.2 port=5432 user=laplace dbname=laplace sslmode=require
 # The deployment target, whose operator holds the role's one password for the whole installation (setup.sh access writes
