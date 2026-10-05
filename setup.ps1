@@ -60,7 +60,7 @@ $DepOptions = @{
     zstd      = @('-DZSTD_BUILD_PROGRAMS=OFF', '-DZSTD_BUILD_TESTS=OFF', '-DZSTD_BUILD_CONTRIB=OFF')
     libxml2   = @('-DLIBXML2_WITH_PROGRAMS=OFF', '-DLIBXML2_WITH_PYTHON=OFF', '-DLIBXML2_WITH_TESTS=OFF', '-DLIBXML2_WITH_ICONV=OFF', '-DLIBXML2_WITH_HTTP=OFF')
     'json-c'  = @('-DBUILD_APPS=OFF')
-    libtiff   = @('-DM_LIBRARY=')   # no libm: its find_library(m) finds Intel's, whose atan2/exp/log/pow collide with laplace-math's
+    libtiff   = @('-DCMAKE_DISABLE_FIND_PACKAGE_CMath=TRUE')   # no libm: its FindCMath finds Intel's, whose atan2/exp/log/pow collide with laplace-math's
     curl      = @('-DBUILD_CURL_EXE=OFF', '-DCURL_USE_SCHANNEL=ON', '-DCURL_USE_LIBPSL=OFF')   # TLS from Windows, not OpenSSL: PROJ fetches grids
     'win-iconv' = @('-DWIN_ICONV_BUILD_TEST=OFF')
 }
