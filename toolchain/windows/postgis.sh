@@ -107,7 +107,7 @@ configure() {
     --host=x86_64-w64-mingw32 --build=x86_64-w64-mingw32
   # the sources include ../postgis_config.h relative to themselves, an in-tree build's: the headers configure made
   # here go beside the sources, so a stale one from an earlier configure cannot shadow them
-  for f in postgis_config.h postgis_revision.h; do [ -f "$B/$f" ] && cp "$B/$f" "$SRC/$f"; done
+  for f in postgis_config.h postgis_revision.h; do if [ -f "$B/$f" ]; then cp "$B/$f" "$SRC/$f"; fi; done
 }
 
 # PostgreSQL's Windows port headers are on the include path only here: configure's probes break with them.
