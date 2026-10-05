@@ -185,7 +185,9 @@ function TuneApply {
 }
 
 function TuneRestart {
-    $pending = (TunePsql "SELECT coalesce(string_agg(name, ', ' ORDER BY name), '') FROM pg_settings WHERE pending_restart") -join ''
+    # pending_restart is a flag of the backend that handled the reload; on this Windows build a new connection never shows
+    # it. A postmaster setting that does not match is a restart owed, flag or no flag.
+    $pending = (@(TuneReport | Where-Object { $_.pending -eq 't' -or ($_.match -ne 't' -and $_.context -eq 'postmaster') } | ForEach-Object name) -join ', ')
     if (-not $pending) { return $true }
     if (TuneIngesting) { Write-Warning "tune-pg: restart for $pending DEFERRED: an ingest is running"; return $false }
     $svc = Get-Service -Name $env:LAPLACE_PGSERVICE -ErrorAction SilentlyContinue
