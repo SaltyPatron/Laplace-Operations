@@ -56,6 +56,7 @@ Set-Default LAPLACE_ICU_DIR  "$env:LAPLACE_DEPS\icu78"                      # IC
 Set-Default LAPLACE_BLAKE3_DIR "$env:LAPLACE_DEPSRC\blake3\c"
 Set-Default LAPLACE_COREMATH   "$env:LAPLACE_DEPSRC\core-math"
 Set-Default LAPLACE_TREESITTER "$env:LAPLACE_DEPSRC\tree-sitter"
+Set-Default LAPLACE_ZLIB_DIR    "$env:LAPLACE_DEPS\zlib\1.3.2"              # Laplace-Engine on Windows: zlib's import library and headers (dependencies.tsv)
 Set-Default LAPLACE_EIGEN_DIR   "$env:LAPLACE_DEPSRC\eigen"                 # Laplace-Native's laplace_linalg: the checkouts at the manifest's pins
 Set-Default LAPLACE_SPECTRA_DIR "$env:LAPLACE_DEPSRC\spectra"
 Set-Default LAPLACE_MATH       "$env:LAPLACE_BUILD\..\laplace-math\icx-release\laplace-math.lib"
