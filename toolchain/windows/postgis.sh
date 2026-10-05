@@ -121,7 +121,8 @@ pmake() {
 
 build() {
   cd "$B"
-  # postgis_revision.h is made in the build tree after configure; the sources include it through postgis_config.h
+  # postgis_revision.h is the top-level make's (utils/repo_revision.pl); the sources include it through postgis_config.h
+  make postgis_revision.h
   for f in postgis_config.h postgis_revision.h; do if [ -f "$B/$f" ]; then cp "$B/$f" "$SRC/$f"; fi; done
   make -C liblwgeom liblwgeom.la
   make -C deps/flatgeobuf CXX="icx-cc -fms-runtime-lib=dll -std=c++17 -x c++"
