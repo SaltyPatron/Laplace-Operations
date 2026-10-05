@@ -117,6 +117,23 @@ function GrantPg {
     foreach ($d in @($PgData, $PgWal, $PgTemp, $PgLogs)) { if ($d -and (Test-Path $d)) { & icacls.exe $d /grant '*S-1-5-20:(OI)(CI)M' /T /Q | Out-Null; if ($LASTEXITCODE) { throw "icacls $d exited $LASTEXITCODE" } } }
     & icacls.exe $PgDir /grant '*S-1-5-20:(OI)(CI)RX' /T /Q | Out-Null; if ($LASTEXITCODE) { throw "icacls $PgDir exited $LASTEXITCODE" }
 }
+# The floating-point contract as one text (toolchain\determinism.tsv). A build records the contract it was made under
+# beside what it installed, and is made again when the contract has changed since: a build tree keeps the flags it was
+# configured with, so it is made fresh.
+function Contract { ((Get-Content (Join-Path $PSScriptRoot 'toolchain\determinism.tsv') | Where-Object { $_ -match '^[a-z]' }) -join "`n") }
+function ContractMark($r) { Join-Path (Prefix $r) ".contract-$($r.name)" }
+# The server stopped around a step that replaces files it holds open (its own binaries, the DLLs beside them): the
+# service, elevated, never under an ingest; a hand-started server is not touched and the step is refused.
+function WithServerStopped([string]$what, [scriptblock]$body) {
+    $svc = Get-Service -Name $PgService -ErrorAction SilentlyContinue
+    $running = [bool]($svc -and $svc.Status -eq 'Running')
+    if (-not $svc -and (Test-Path (Join-Path $PgData 'postmaster.pid'))) { throw "$what replaces files the hand-started server holds; stop it first" }
+    if ($running -and -not (Admin)) { throw "$what replaces files the running server holds; elevated, or stop $PgService first" }
+    if ($running -and (TuneIngesting)) { throw "$what needs the server stopped, and an ingest is running" }
+    if ($running) { Stop-Service -Name $PgService -Force; Say $what "$PgService stopped" }
+    try { & $body }
+    finally { if ($running) { Start-Service -Name $PgService; if (PgWaitReady 120) { Say $what "$PgService started" } else { Say $what "$PgService DID NOT START; see its log" } } }
+}
 # The dependency manifest (dependencies.tsv), this platform's rows, in file order; the row's prefix, and the file that
 # proves it installed (proof, relative to the prefix: the checkout for a row built into Laplace, PostgreSQL's prefix
 # for PostGIS, <deps>\<name>\<version> for everything else).
@@ -223,7 +240,7 @@ function deps {
             # passed over when the machine's MSYS2 (LAPLACE_MSYS2) is already there. amalgamation: a source archive,
             # unpacked in the source store for the build below. Anything else is installed another way (uv tool).
             if (-not $r.origin.StartsWith('https://') -or $r.build -notin 'unpack', 'sfx', 'amalgamation') { continue }
-            if ($r.build -eq 'sfx' -and (Test-Path (Join-Path $Msys2 'usr$checkoutin$checkoutash.exe'))) { Say $what "MSYS2 is at $Msys2"; continue }
+            if ($r.build -eq 'sfx' -and (Test-Path (Join-Path $Msys2 'usr\bin\bash.exe'))) { Say $what "MSYS2 is at $Msys2"; continue }
             Attempt $what {
                 $store = Join-Path (Join-Path $DepSrc $r.name) $r.version
                 $prefix = if ($r.build -eq 'amalgamation') { Join-Path $store 'source' } else { Prefix $r }
@@ -271,10 +288,15 @@ function deps {
         $what = "$($r.name) $($r.version)"
         $proof = Proof $r; $prefix = Prefix $r; $checkout = Checkout $r; $b = Join-Path (Join-Path $Build 'deps') $r.name
         if (-not $proof) { Say $what 'NO PROOF in dependencies.tsv: not built'; continue }
-        if (Test-Path $proof) { Say $what "installed at $prefix"; continue }
+        $mark = ContractMark $r; $compiled = $r.build -ne 'headers'
+        if (Test-Path $proof) {
+            if (-not $compiled -or ((Test-Path $mark) -and (Get-Content $mark -Raw) -eq (Contract))) { Say $what "installed at $prefix"; continue }
+            Say $what $(if (Test-Path $mark) { 'the contract changed since it was built: built again' } else { 'built before the contract was recorded: built again' })
+        }
         if (-not (Test-Path $checkout)) { Say $what "NOT BUILT: no source at $checkout"; continue }
         $libs = @(DependsPrefixes $r)
         Attempt $what {
+            if (Test-Path $b) { Remove-Item $b -Recurse -Force }
             New-Item -ItemType Directory -Force $b | Out-Null
             switch ($r.build) {
                 'cmake' {
@@ -318,15 +340,19 @@ function deps {
                     $inc = ($libs | ForEach-Object { "$_\include" -replace '\\', '/' }) -join ','
                     $lib = ($libs | ForEach-Object { foreach ($l in 'lib', 'lib64') { if (Test-Path "$_\$l") { "$_\$l" -replace '\\', '/' } } }) -join ','
                     if (-not (Test-Path (Join-Path $b 'build.ninja'))) { Exec meson.exe (@('setup', $b, $checkout, "--native-file=$native", "-Dprefix=$prefix", "-Dextra_include_dirs=$inc", "-Dextra_lib_dirs=$lib") + $PgMesonOptions) }
-                    Exec ninja.exe @('-C', $b); Exec ninja.exe @('-C', $b, 'install')
+                    Exec ninja.exe @('-C', $b)
+                    WithServerStopped $what { Exec ninja.exe @('-C', $b, 'install') }
                 }
                 'configure' {
                     # PostGIS: toolchain\windows\postgis.sh in MSYS2's shell, started from the developer shell
-                    $bash = Join-Path $Msys2 'usr$checkoutin$checkoutash.exe'
+                    $bash = Join-Path $Msys2 'usr\bin\bash.exe'
                     if (-not (Test-Path $bash)) { throw "no MSYS2 at $Msys2 (LAPLACE_MSYS2)" }
                     $env:MSYSTEM = 'MSYS'; $env:MSYS2_PATH_TYPE = 'inherit'; $env:CHERE_INVOKING = '1'
-                    try { Exec $bash @('-l', '-c', (MsysPath (Join-Path $PSScriptRoot 'toolchain\windows\postgis.sh'))) }
-                    finally { Remove-Item Env:MSYSTEM, Env:MSYS2_PATH_TYPE, Env:CHERE_INVOKING -ErrorAction SilentlyContinue }
+                    $sh = MsysPath (Join-Path $PSScriptRoot 'toolchain\windows\postgis.sh')
+                    try {
+                        Exec $bash @('-l', '-c', "$sh configure build")
+                        WithServerStopped $what { Exec $bash @('-l', '-c', "$sh install") }   # the DLLs go beside postgres.exe
+                    } finally { Remove-Item Env:MSYSTEM, Env:MSYS2_PATH_TYPE, Env:CHERE_INVOKING -ErrorAction SilentlyContinue }
                 }
                 'headers' {
                     foreach ($h in $DepHeaders[$r.name]) {
@@ -335,7 +361,9 @@ function deps {
                     }
                 }
             }
-            if (Test-Path $proof) { Say $what "built and installed at $prefix" } else { throw "DID NOT INSTALL: no $proof; the build is $b" }
+            if (-not (Test-Path $proof)) { throw "DID NOT INSTALL: no $proof; the build is $b" }
+            if ($compiled) { Set-Content -Path $mark -Value (Contract) -NoNewline }
+            Say $what "built and installed at $prefix"
         }
     }
 }
@@ -357,7 +385,7 @@ function cluster {
         if (-not (Test-Path (Join-Path $PgData 'PG_VERSION'))) { return }
     } else {
         $checksums = (& "$PgBin\pg_controldata.exe" $PgData 2>$null | Where-Object { $_ -match 'checksum version:\s+(\d+)' } | ForEach-Object { $Matches[1] })
-        Say 'cluster' "$(Get-Content (Join-Path $PgData 'PG_VERSION')) in $PgData$(if ($checksums -eq '0') { '   NO DATA CHECKSUMS: Sequence 8 wants --data-checksums; drop makes the cluster again' })"
+        Say 'cluster' "$(Get-Content (Join-Path $PgData 'PG_VERSION')) in $PgData$(if ($checksums -eq '0') { '   no data checksums: enabled below (Sequence 8)' })"
     }
     Attempt 'rights' { GrantPg }
 
@@ -385,6 +413,10 @@ function cluster {
     # after an unclean stop the server replays its log before it listens
     if (-not (PgWaitReady 120)) { Say 'cluster' 'FAILED: not accepting connections after two hours; see the log'; $failed.Add('cluster: not ready'); return }
     Say 'cluster' "accepting connections on 127.0.0.1:5432 ($(PgSql 'SELECT version()'))"
+    # data checksums (Sequence 8): a cluster made without them gets them in place, stopped, by pg_checksums
+    if ((PgSql 'SHOW data_checksums') -ne 'on') {
+        Attempt 'data checksums' { WithServerStopped 'data checksums' { Exec "$PgBin\pg_checksums.exe" @('--enable', '-D', $PgData) }; Say 'data checksums' "$(PgSql 'SHOW data_checksums') (pg_checksums --enable)" }
+    } else { Say 'data checksums' 'on' }
     if ($PgTemp) { Attempt 'tablespace pgtemp' { if ((PgSql "SELECT count(*) FROM pg_tablespace WHERE spcname = 'pgtemp'") -ne '1') { PgSql "CREATE TABLESPACE pgtemp LOCATION '$($PgTemp -replace '\\', '/')'" | Out-Null }; Say 'tablespace pgtemp' $PgTemp } }
     if (-not (Test-Path (Join-Path $PgData 'server.crt'))) {
         Attempt 'certificate' {
