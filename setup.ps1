@@ -282,9 +282,13 @@ function deps {
         Attempt 'laplace-math' {
             $b = Split-Path $Math
             if (Test-Path $b) { Remove-Item $b -Recurse -Force }
-            # the one build that needs no LAPLACE_MATH: the toolchain file would otherwise refuse the environment's, which is this library
-            Exec cmake.exe @('-S', (Join-Path $PSScriptRoot 'math'), '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", '-DLAPLACE_MATH=', "-DCORE_MATH=$env:LAPLACE_COREMATH")
-            Exec cmake.exe @('--build', $b)
+            # the one build that needs no LAPLACE_MATH: the toolchain file reads the environment's in every compiler probe and
+            # would refuse it, since it is this library, so the variable is out of the environment while it builds
+            $saved = $env:LAPLACE_MATH; Remove-Item Env:LAPLACE_MATH
+            try {
+                Exec cmake.exe @('-S', (Join-Path $PSScriptRoot 'math'), '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DCORE_MATH=$env:LAPLACE_COREMATH")
+                Exec cmake.exe @('--build', $b)
+            } finally { $env:LAPLACE_MATH = $saved }
             if (-not (Test-Path $Math)) { throw "no library at $Math" }
             Set-Content -Path $mathMark -Value (Contract) -NoNewline
             Say 'laplace-math' "built: $Math"
