@@ -89,7 +89,9 @@ function MsysPath([string]$path) { '/' + ($path.Substring(0, 1).ToLowerInvariant
 function GitIn([string]$dir) { & git.exe -C $dir @args 2>&1 }   # not named Git: a function would shadow git.exe
 # the developer shell, once, when icx is not already on the PATH: Visual Studio's vcvars64, oneAPI, CMake, the tools
 function DevShell {
-    if (-not (Get-Command icx.exe -ErrorAction SilentlyContinue)) {
+    # icx alone on the PATH is not the developer shell (laplace.env.ps1 puts oneAPI's bin there for the engine's run-time
+    # DLLs): the MSVC environment, which vcvars marks with VSCMD_VER, is what a build needs
+    if (-not ($env:VSCMD_VER -and (Get-Command icx.exe -ErrorAction SilentlyContinue))) {
         if (-not (Test-Path $DevShell)) { return $false }
         . $DevShell *> $null
     }

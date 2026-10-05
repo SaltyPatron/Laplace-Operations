@@ -9,8 +9,10 @@
 param([string]$Step = '')
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\laplace.env.ps1"
-if (-not (Get-Command icx.exe -ErrorAction SilentlyContinue) -and (Test-Path $env:LAPLACE_DEVSHELL)) { . $env:LAPLACE_DEVSHELL *> $null }
-if (-not (Get-Command icx.exe -ErrorAction SilentlyContinue)) { Write-Error "no icx: the developer shell $env:LAPLACE_DEVSHELL (LAPLACE_DEVSHELL)"; exit 1 }
+# the developer shell, unless it is already loaded: icx alone on the PATH is not it (laplace.env.ps1 puts oneAPI's bin
+# there for the engine's run-time DLLs); the MSVC environment (vcvars sets VSCMD_VER) is what a link needs
+if (-not ($env:VSCMD_VER -and (Get-Command icx.exe -ErrorAction SilentlyContinue)) -and (Test-Path $env:LAPLACE_DEVSHELL)) { . $env:LAPLACE_DEVSHELL *> $null }
+if (-not ($env:VSCMD_VER -and (Get-Command icx.exe -ErrorAction SilentlyContinue))) { Write-Error "no developer shell: $env:LAPLACE_DEVSHELL (LAPLACE_DEVSHELL) must provide icx and the MSVC environment"; exit 1 }
 $contract = ((Get-Content (Join-Path $PSScriptRoot 'toolchain\determinism.tsv') | Where-Object { $_ -match '^[a-z]' }) -join "`n")
 $env:PATH = "$env:LAPLACE_PG_DIR\bin;$env:LAPLACE_ICU_DIR\bin64;$env:PATH"   # libpq and ICU, for the engine when it runs
 
