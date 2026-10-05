@@ -312,6 +312,7 @@ function deps {
             Say $what $(if (Test-Path $mark) { 'the contract changed since it was built: built again' } else { 'built before the contract was recorded: built again' })
         }
         if (-not (Test-Path $checkout)) { Say $what "NOT BUILT: no source at $checkout"; continue }
+        if (-not (DevShell)) { Say $what "NOT BUILT: no icx; the developer shell $DevShell is missing or does not provide it"; $failed.Add('deps: no icx'); continue }
         $libs = @(DependsPrefixes $r)
         Attempt $what {
             if (Test-Path $b) { Remove-Item $b -Recurse -Force }
