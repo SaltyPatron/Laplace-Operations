@@ -320,9 +320,13 @@ function deps {
                 'openssl' {
                     $zlib = $libs | Where-Object { $_ -match '\\zlib\\' } | Select-Object -First 1
                     if (-not $zlib) { throw 'openssl depends on zlib, which the manifest does not name' }
+                    # Strawberry Perl, the manifest's, by name: the first perl on the path may be Git's, whose modules are Unix's
+                    $perlRow = $rows | Where-Object name -eq 'strawberry-perl' | Select-Object -First 1
+                    $perl = if ($perlRow) { Join-Path (Prefix $perlRow) 'perl\bin\perl.exe' } else { 'perl.exe' }
+                    if (-not (Test-Path $perl)) { throw "no Strawberry Perl at $perl (dependencies.tsv)" }
                     Push-Location $b
                     try {
-                        if (-not (Test-Path 'configdata.pm')) { Exec perl.exe @((Join-Path $checkout 'Configure'), 'VC-WIN64A', 'CC=icx', "--prefix=$prefix", "--openssldir=$prefix\ssl", 'no-tests', 'shared', 'zlib', "--with-zlib-include=$zlib\include", "--with-zlib-lib=$zlib\lib\z.lib") }
+                        if (-not (Test-Path 'configdata.pm')) { Exec $perl @((Join-Path $checkout 'Configure'), 'VC-WIN64A', 'CC=icx', "--prefix=$prefix", "--openssldir=$prefix\ssl", 'no-tests', 'shared', 'zlib', "--with-zlib-include=$zlib\include", "--with-zlib-lib=$zlib\lib\z.lib") }
                         Exec nmake.exe @(); Exec nmake.exe @('install_sw')
                     } finally { Pop-Location }
                 }
