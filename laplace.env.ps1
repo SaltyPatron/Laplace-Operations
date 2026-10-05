@@ -61,6 +61,11 @@ Set-Default LAPLACE_EIGEN_DIR   "$env:LAPLACE_DEPSRC\eigen"                 # La
 Set-Default LAPLACE_SPECTRA_DIR "$env:LAPLACE_DEPSRC\spectra"
 Set-Default LAPLACE_MATH       "$env:LAPLACE_BUILD\..\laplace-math\icx-release\laplace-math.lib"   # setup.ps1 deps builds it first (math\CMakeLists.txt)
 
+# What the engine reads is '/'-separated on every platform (Laplace-Engine src/os.h): its paths, whatever a shell wrote
+foreach ($n in 'LAPLACE_DATA', 'LAPLACE_WORK', 'LAPLACE_TIER0', 'LAPLACE_HIGHWAY', 'LAPLACE_RECIPES', 'LAPLACE_FIRMWARE', 'LAPLACE_GRAMMARS', 'LAPLACE_UCD', 'LAPLACE_NATIVE') {
+    $v = [Environment]::GetEnvironmentVariable($n); if ($v) { [Environment]::SetEnvironmentVariable($n, ($v -replace '\\', '/')) }
+}
+
 # The engine's run-time libraries, on the PATH once (Toolchain 2.7: the one environment file sources oneAPI): MKL and
 # OpenMP from oneAPI's redistributable directories, libpq beside the server, ICU, zlib, and the engine itself.
 Set-Default LAPLACE_ONEAPI 'C:\Program Files (x86)\Intel\oneAPI'
