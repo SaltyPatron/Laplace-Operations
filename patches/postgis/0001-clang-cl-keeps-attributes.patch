@@ -1,0 +1,52 @@
+diff --git a/liblwgeom/liblwgeom.h.in b/liblwgeom/liblwgeom.h.in
+index 16bace594..fd3d634db 100644
+--- a/liblwgeom/liblwgeom.h.in
++++ b/liblwgeom/liblwgeom.h.in
+@@ -224,7 +224,7 @@ typedef enum LWORD_T {
+ */
+ #define SRID_DEFAULT 4326
+ 
+-#ifndef __GNUC__
++#if !defined(__GNUC__) && !defined(__clang__)
+ # define __attribute__(x)
+ #endif
+ 
+diff --git a/raster/rt_core/librtcore.h b/raster/rt_core/librtcore.h
+index b4395ba2b..b9969cb01 100644
+--- a/raster/rt_core/librtcore.h
++++ b/raster/rt_core/librtcore.h
+@@ -136,7 +136,7 @@
+ #include "postgis_config.h"
+ #include "raster_config.h"
+ 
+-#ifndef __GNUC__
++#if !defined(__GNUC__) && !defined(__clang__)
+ # define __attribute__ (x)
+ #endif
+ 
+diff --git a/raster/rt_pg/rtpostgis.c b/raster/rt_pg/rtpostgis.c
+index 228717f36..7c27d11d5 100644
+--- a/raster/rt_pg/rtpostgis.c
++++ b/raster/rt_pg/rtpostgis.c
+@@ -150,7 +150,7 @@
+ #include "rtpg_internal.h"
+ 
+ 
+-#ifndef __GNUC__
++#if !defined(__GNUC__) && !defined(__clang__)
+ # define __attribute__ (x)
+ #endif
+ 
+diff --git a/topology/postgis_topology.c b/topology/postgis_topology.c
+index 4a8b82438..475d54d41 100644
+--- a/topology/postgis_topology.c
++++ b/topology/postgis_topology.c
+@@ -35,7 +35,7 @@
+ 
+ #include <stdarg.h>
+ 
+-#ifndef __GNUC__
++#if !defined(__GNUC__) && !defined(__clang__)
+ # define __attribute__ (x)
+ #endif
+ 

@@ -20,17 +20,28 @@ foreach(_kind EXE SHARED MODULE)
 endforeach()
 
 # laplace-math ahead of every libm. On Linux a static library listed after -lm would lose to libm.so, so it goes in
-# whole; on Windows command-line libraries are searched before the compiler's default libraries (libmmd, the UCRT).
+# whole. On Windows link.exe resolves a reference from the libraries after the one that made it before it wraps
+# around, and every icx object names libmmd (Intel's libm) as a default library, searched last: a static library listed
+# after laplace-math took sin from libmmd. So libmmd is no default library, and every link ends with laplace-math, then
+# libmmd for the exact operations laplace-math leaves to it (determinism.tsv).
 set(LAPLACE_MATH "$ENV{LAPLACE_MATH}" CACHE FILEPATH "laplace-math static library (core-math under the libm names)")
 if(LAPLACE_MATH)
   if(NOT EXISTS "${LAPLACE_MATH}")
     message(FATAL_ERROR "LAPLACE_MATH: ${LAPLACE_MATH} does not exist")
   endif()
-  foreach(_kind EXE SHARED MODULE)
-    if(CMAKE_HOST_WIN32)
-      string(APPEND CMAKE_${_kind}_LINKER_FLAGS_INIT " \"${LAPLACE_MATH}\"")
-    else()
+  if(CMAKE_HOST_WIN32)
+    foreach(_kind EXE SHARED MODULE)
+      string(APPEND CMAKE_${_kind}_LINKER_FLAGS_INIT " /NODEFAULTLIB:libmmd.lib")
+    endforeach()
+    foreach(_lang C CXX)
+      # The standard libraries close every link line. The cache entry is the one CMake's MSVC platform would create,
+      # with laplace-math and libmmd appended.
+      set(CMAKE_${_lang}_STANDARD_LIBRARIES "kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib \"${LAPLACE_MATH}\" libmmd.lib"
+        CACHE STRING "Libraries linked by default with all ${_lang} applications.")
+    endforeach()
+  else()
+    foreach(_kind EXE SHARED MODULE)
       string(APPEND CMAKE_${_kind}_LINKER_FLAGS_INIT " -Wl,--whole-archive ${LAPLACE_MATH} -Wl,--no-whole-archive")
-    endif()
-  endforeach()
+    endforeach()
+  endif()
 endif()

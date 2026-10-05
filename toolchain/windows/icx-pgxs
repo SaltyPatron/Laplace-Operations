@@ -1,0 +1,22 @@
+#!/bin/sh
+# icx-cc for PostgreSQL's PGXS rules on Windows. Those rules are written for MinGW (GNU ld) and carry PostgreSQL's
+# own MSVC-style CFLAGS; icx-cc targets the MSVC linker. This passes the GNU-style arguments through and translates
+# or drops the rest:
+#   -static-libgcc, -Wl,--export-all-symbols   dropped: there is no libgcc, and exports are PGDLLEXPORT
+#   -Wl,--out-implib=X                         becomes -Wl,/IMPLIB:X
+#   /NODEFAULTLIB:X, /STACK:X                  linker options libtool unwrapped from -Wl,: rewrapped
+#   /DNAME (PostgreSQL's MSVC-style defines)   becomes -DNAME; -fPIC (PGXS's) dropped: Windows code is always PIC
+#   /wd..., /fp:..., /clang:..., /utf-8, /MD   PostgreSQL's MSVC-style compile flags: dropped (the contract's GNU
+#                                              spelling comes with the build's own CFLAGS)
+for a in "$@"; do
+  case "$a" in
+    -static-libgcc|-Wl,--export-all-symbols|-fpch-deps|-lstdc++|-fPIC) ;;
+    /D[A-Z_]*) set -- "$@" "-${a#/}" ;;
+    -Wl,--out-implib=*) set -- "$@" "-Wl,/IMPLIB:${a#-Wl,--out-implib=}" ;;
+    /NODEFAULTLIB:*|/STACK:*) set -- "$@" "-Wl,$a" ;;
+    /wd[0-9]*|/fp:*|/clang:*|/utf-8|/MD|/MT|/nologo|/Zc:*) ;;
+    *) set -- "$@" "$a" ;;
+  esac
+  shift
+done
+exec icx-cc "$@"

@@ -1,127 +1,125 @@
 #Requires -Version 7
 <#
-  The Windows machine Laplace is developed on (HART-DESKTOP), declared once and converged: the counterpart of
-  setup.sh (Operations: Setup). Each part compares its declaration with the machine and acts only on what differs,
-  so running it again on a finished machine changes nothing and reports. What it did is logged under
-  $LAPLACE_WORK\logs\root.
+  The Windows machine Laplace is developed on, declared once and converged: the counterpart of setup.sh (Operations:
+  Setup, Database). The same parts, in the same order; each compares its declaration with the machine and makes only
+  what is missing, so running it again on a finished machine changes nothing and reports. What it did is kept under
+  $LAPLACE_WORK\logs\root. Every name of this machine's is a variable of laplace.env.ps1, so another Windows machine
+  declares its own.
 
-    pwsh -File setup.ps1 report            what of the declarations is still on the machine; changes nothing
-    pwsh -File setup.ps1 retire report     as administrator: remove what nothing uses, then report
+    pwsh -File setup.ps1                   everything below, in order (the parts that change the service, its rights,
+                                           its settings and its access need an elevated PowerShell and say so)
+    pwsh -File setup.ps1 deps report       one part, or several: volumes | packages | rights | deps | cluster | settings | access | report
+    $env:LAPLACE_DROP = 'D:\Data\Laplace\pgdata'; pwsh -File setup.ps1 drop all
+                                           the cluster dropped and made again, empty: never part of all, and named to be dropped
 
-  Policy (Laplace-Operations#2): a service never reads a person's environment; the machine environment holds only
-  stable roots; no toolchain on the global PATH (oneAPI is the developer shell D:\Libraries\load-env.ps1);
-  privileged steps happen here and only here.
+  What differs from Linux is only what Windows forces: a drive is not made here (no volumes to create, so volumes
+  reports the drives and makes the directories); the toolchain is installed by hand or by the manifest (packages says
+  what is missing and installs MSYS2's packages); there is no kernel part (huge pages: tune-pg.ps1); the service is a
+  Windows service under NT AUTHORITY\NetworkService; there is no socket, so every local connection is scram on
+  loopback. This machine is one leg of the cross-OS check: a database Linux clients reach over the LAN with TLS, and a
+  client of hart-server's database (LAPLACE_CONNINFO), and report tries both.
+
+  Policy (Laplace-Operations#2): a service never reads a person's environment; no toolchain on the global PATH (the
+  developer shell is LAPLACE_DEVSHELL); privileged steps happen here and only here. HART-DESKTOP's one-time cleanup
+  of what earlier set-ups left is toolchain\windows\retire.ps1, not this.
 #>
-param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('report'))
+param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('all'))
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\laplace.env.ps1"
+. "$PSScriptRoot\tune-pg.ps1"
 
-# ------------------------------------------------------------------------------------------------------ the sets
-# What nothing on this machine uses any more (Laplace-Operations#7). Each row says how it is recognised and how it
-# goes; a row whose thing is already gone is passed over.
+$Src = $env:LAPLACE_SRC; $Build = $env:LAPLACE_BUILD; $Work = $env:LAPLACE_WORK; $DepSrc = $env:LAPLACE_DEPSRC; $Deps = $env:LAPLACE_DEPS; $Data = $env:LAPLACE_DATA
+$PgDir = $env:LAPLACE_PG_DIR; $PgBin = Join-Path $PgDir 'bin'; $PgData = $env:LAPLACE_PGDATA; $PgWal = $env:LAPLACE_PGWAL; $PgTemp = $env:LAPLACE_PGTEMP
+$PgService = $env:LAPLACE_PGSERVICE; $PgAccount = $env:LAPLACE_PGUSER; $PgRole = $env:LAPLACE_ROLE; $PgLan = $env:LAPLACE_LAN; $Locks = $env:LAPLACE_LOCKS
+$PgLogs = Join-Path $Work 'logs\postgres'
+$PgCanon = 'C:\ProgramData\Laplace\pgpass.conf'   # the role's password: one canonical copy, administrators only (setup.sh: /etc/laplace/pgpass)
+$Math = $env:LAPLACE_MATH; $Msys2 = $env:LAPLACE_MSYS2; $DevShell = $env:LAPLACE_DEVSHELL
+$Toolchain = Join-Path $PSScriptRoot 'toolchain\laplace.cmake'
 
-# Intel oneAPI products, by the installer's own product ID and version (installer.exe --list-products).
-$RetireIntel = @(
-    @{ Id = 'intel.oneapi.win.basekit.product';          Ver = '2025.3.0+360'; Why = 'replaced by the oneAPI Toolkit 2026.1' }
-    @{ Id = 'intel.oneapi.lin.fortran-compiler.product'; Ver = '2025.3.1+14';  Why = 'replaced by the oneAPI Toolkit 2026.1' }
-)
-# NVIDIA packages, by NVI2 package name (the uninstall key is {B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}_<package>).
-$RetireNvidia = @(
-    @{ Package = 'CUDAToolkit_12.9';                 Why = 'CUDA 13.4 is installed; llama.cpp dist carries its own runtime' }
-    @{ Package = 'CUDADevelopment_12.9';             Why = 'part of CUDA 12.9' }
-    @{ Package = 'CUDARuntimes_12.9';                Why = 'part of CUDA 12.9' }
-    @{ Package = 'CUDADocument_12.9';                Why = 'part of CUDA 12.9' }
-    @{ Package = 'visual_studio_integration_12.9';   Why = 'part of CUDA 12.9' }
-)
-# Windows Installer products, by product code.
-$RetireMsi = @(
-    @{ Code = '{99EEABF5-7586-4562-B2D1-008620242D09}'; Name = 'NVIDIA Nsight Systems 2025.1.3';  Why = 'Nsight Systems 2026.3.2 is installed' }
-    @{ Code = '{953EDCD3-B447-415F-9C29-AA912D38C977}'; Name = 'NVIDIA Nsight Systems 2025.6.1';  Why = 'Nsight Systems 2026.3.2 is installed' }
-    @{ Code = '{8C73E5D6-6FE9-4B0A-BE67-0B7E17E7C869}'; Name = 'NVIDIA Nsight Graphics 2025.5.0'; Why = 'graphics frame debugging; not used' }
-    @{ Code = '{DA08718E-972A-58E7-AE7E-C45114C82E13}'; Name = 'Java SE Development Kit 17';      Why = 'JDK 21 and 25 stay' }
-    @{ Code = '{90462BD2-DF5B-449C-A401-FCC1DC264E4E}'; Name = 'Microsoft Azure Authoring Tools v2.9.7';  Why = 'classic Cloud Services, 2018' }
-    @{ Code = '{04CA054C-2F40-44B0-8610-8D51EC9444FE}'; Name = 'Microsoft Azure Compute Emulator v2.9.7'; Why = 'classic Cloud Services, 2018' }
-    @{ Code = '{7D1D9444-B5EA-4587-A81D-47377003124F}'; Name = 'Microsoft Azure Libraries for .NET v2.9'; Why = 'classic Cloud Services, 2018' }
-    @{ Code = '{3BA7CAA9-97BA-4528-B7E1-B640910BB149}'; Name = 'Microsoft Azure PowerShell April 2018';   Why = 'superseded by Az' }
-)
-# Windows SDKs no longer targeted (10.0.26100.8249 stays), by their bundle's uninstall key.
-$RetireSdk = @(
-    @{ Key = '{5f4dc51d-f151-4325-8ba1-8b26169529a9}'; Name = 'Windows SDK 10.0.19041.5609' }
-    @{ Key = '{b72d4013-dd88-405a-9f9d-e88c278dcefe}'; Name = 'Windows SDK 10.0.22621.5040' }
-    @{ Key = '{b5ab6bbd-62a1-45bd-af43-2ea6ac4c3486}'; Name = 'Windows SDK 10.0.26100.7175' }
-    @{ Key = '{c0b93b80-d0a4-47fc-a4d1-21a4008a63ca}'; Name = 'Windows SDK 10.0.26100.7705' }
-)
-# Programs with their own uninstaller, by uninstall key, in this order (PostgreSQL's add-ons before the server).
-$RetireExe = @(
-    @{ Key = 'PostGIS Bundle 3 for PostgreSQL x64 18'; Exe = 'C:\Program Files\PostgreSQL\18\uninstall-postgis-bundle-pg18x64-3.6.1-1.exe'; Args = @('/S');                  Why = 'PostgreSQL starts fresh (Laplace-Operations#4)' }
-    @{ Key = 'pgAgent_PG18 4.2.3-1';                   Exe = 'C:\Program Files\PostgreSQL\18\uninstall-pgagent.exe';                         Args = @('--mode', 'unattended'); Why = 'PostgreSQL starts fresh' }
-    @{ Key = 'PgBouncer 1.25.1-1';                     Exe = 'C:\Program Files\PgBouncer\uninstall-pgbouncer.exe';                           Args = @('--mode', 'unattended'); Why = 'PostgreSQL starts fresh' }
-    @{ Key = 'psqlODBC 13.02.0000-1';                  Exe = 'C:\Program Files\PostgreSQL\psqlODBC\uninstall-psqlodbc.exe';                  Args = @('--mode', 'unattended'); Why = 'PostgreSQL starts fresh' }
-    @{ Key = 'Npgsql 3.2.6-3';                         Exe = 'C:\Program Files (x86)\PostgreSQL\Npgsql\uninstall-npgsql.exe';                Args = @('--mode', 'unattended'); Why = '2017 driver' }
-    @{ Key = 'PostgreSQL 18';                          Exe = 'C:\Program Files\PostgreSQL\18\uninstall-postgresql.exe';                      Args = @('--mode', 'unattended'); Why = 'PostgreSQL starts fresh' }
-    @{ Key = 'Docker Desktop';                         Exe = 'C:\Program Files\Docker\Docker\Docker Desktop Installer.exe';                  Args = @('uninstall', '--quiet'); Why = 'no containers are used; its images were old oneAPI and MCP images' }
-)
-# Visual Studio instances, by installation path (VS 2026 and VS 2022 Community stay).
-$RetireVs = @(
-    @{ Path = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools'; Why = 'duplicate of VS 2022 Community, installed through chocolatey' }
-)
-$RetireServices = @('actions.runner.AHartTN-Hartonomous.HART-DESKTOP', 'pgagent-pg18', 'postgresql-x64-18')
-$RetireTasks    = @('\Hartonomous Router Log Upload')
-$RetireWsl      = @('Ubuntu', 'docker-desktop')
-$RetireFeatures = @('Microsoft-Windows-Subsystem-Linux', 'VirtualMachinePlatform')
-# Folders, after the programs that used them are gone.
-$RetireDirs = @(
-    'C:\ProgramData\chocolatey', 'D:\GitHub', 'D:\LlamaCPP', 'D:\Docker', 'D:\WSL',
-    'D:\Data\Postgres', 'D:\Data\Laplace\deploy', 'D:\Data\Laplace\deps', 'D:\Data\Laplace\tools',
-    'C:\Program Files\PostgreSQL', 'C:\Program Files\PgBouncer', 'C:\Program Files (x86)\PostgreSQL',
-    'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\PostgreSQL 18', 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\PgBouncer',
-    'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\psqlODBC',
-    'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Postgres Enterprise Manager',
-    'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Postgres Plus Add-ons'
-)
-# Machine environment values that go: blank leftovers, and values of programs that are gone.
-$RetireMachineVars = @(
-    'OPENSSL_CONF', 'CURL_CA_BUNDLE', 'GDAL_DATA', 'PROJ_LIB', 'POSTGIS_ENABLE_OUTDB_RASTERS', 'POSTGIS_GDAL_ENABLED_DRIVERS',
-    'VS140COMNTOOLS', 'VS2022INSTALLDIR', 'IFORT_COMPILER25', 'IFORT_COMPILER26', 'ADVISOR_2025_DIR', 'VTUNE_PROFILER_2026_DIR',
-    'CUDA_VISIBLE_DEVICES', 'CUDA_PATH_V12_9', 'ChocolateyInstall', 'ChocolateyLastPathUpdate', 'OLLAMA_MODELS'
-)
-
-# The machine environment Laplace's builds read: stable roots only (Laplace-Operations#2). CUDA_PATH names the newest
-# CUDA toolkit installed (CUDA_PATH_V<major>_<minor>); its uninstallers remove it even when it pointed at another one.
-function DeclaredMachineVars {
-    $cuda = (Get-Item $MachineEnv).Property | Where-Object { $_ -match '^CUDA_PATH_V(\d+)_(\d+)$' } |
-        Sort-Object { [version]($_ -replace '^CUDA_PATH_V(\d+)_(\d+)$', '$1.$2') } | Select-Object -Last 1
-    $vars = [ordered]@{}
-    if ($cuda) { $vars['CUDA_PATH'] = (Get-ItemProperty $MachineEnv -Name $cuda).$cuda }
-    $vars
-}
-
-# ------------------------------------------------------------------------------------------------------ helpers
-$UninstallKeys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
-$MachineEnv = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
-$work = if ($env:LAPLACE_WORK) { $env:LAPLACE_WORK } else { 'D:\Data\Laplace\work' }
-$logDir = Join-Path $work 'logs\root'
+$logDir = Join-Path $Work 'logs\root'
 New-Item -ItemType Directory -Force $logDir | Out-Null
 $log = Join-Path $logDir ("setup-{0:yyyyMMddTHHmmssZ}.log" -f (Get-Date).ToUniversalTime())
 Start-Transcript -Path $log | Out-Null
 $failed = [System.Collections.Generic.List[string]]::new()
 
+# ------------------------------------------------------------------------------------------------------ the sets
+# The toolchain the builds need, each known by its program: installed by hand (Visual Studio, oneAPI: the developer
+# shell), by the manifest (perl, win_bison, win_flex, nasm: deps), or as a uv tool (meson).
+$Tools = [ordered]@{
+    icx = 'oneAPI, in the developer shell'; cmake = 'CMake 3.25 or newer (Kitware, standalone)'; ninja = 'Ninja'; git = 'Git for Windows'
+    uv = 'uv (Python Install Manager)'; meson = 'uv tool install meson (dependencies.tsv)'; perl = 'Strawberry Perl (dependencies.tsv, in the developer shell)'
+    win_bison = 'winflexbison (dependencies.tsv, in the developer shell)'; nasm = 'NASM (dependencies.tsv, in the developer shell)'
+}
+# MSYS2's packages: what toolchain\windows\postgis.sh runs under (autotools, make, pkgconf; MinGW's cpp for the SQL).
+$Msys2Packages = 'autoconf', 'automake', 'libtool', 'make', 'pkgconf', 'mingw-w64-ucrt-x86_64-gcc'
+# How each dependency the manifest says to build is configured on Windows: the options beyond the toolchain file,
+# the contract and the prefix, as the installs on HART-DESKTOP were made (their build trees' caches, 2026-10-04).
+$DepSourceDir = @{ lz4 = 'build\cmake'; zstd = 'build\cmake' }
+$DepOptions = @{
+    lz4       = @('-DLZ4_BUILD_CLI=OFF', '-DBUILD_STATIC_LIBS=OFF')
+    zstd      = @('-DZSTD_BUILD_PROGRAMS=OFF', '-DZSTD_BUILD_TESTS=OFF', '-DZSTD_BUILD_CONTRIB=OFF')
+    libxml2   = @('-DLIBXML2_WITH_PROGRAMS=OFF', '-DLIBXML2_WITH_PYTHON=OFF', '-DLIBXML2_WITH_TESTS=OFF', '-DLIBXML2_WITH_ICONV=OFF', '-DLIBXML2_WITH_HTTP=OFF')
+    'json-c'  = @('-DBUILD_APPS=OFF')
+    curl      = @('-DBUILD_CURL_EXE=OFF', '-DCURL_USE_SCHANNEL=ON', '-DCURL_USE_LIBPSL=OFF')   # TLS from Windows, not OpenSSL: PROJ fetches grids
+    'win-iconv' = @('-DWIN_ICONV_BUILD_TEST=OFF')
+}
+# Header-only rows: what is copied from the checkout into the prefix.
+$DepHeaders = @{ eigen = @(@{ From = 'Eigen'; To = 'include\eigen3\Eigen' }, @{ From = 'unsupported'; To = 'include\eigen3\unsupported' }); spectra = @(@{ From = 'include\Spectra'; To = 'include\Spectra' }) }
+# SQLite's amalgamation: one C file, compiled as a DLL with what PROJ needs (dependencies.tsv).
+$SqliteDefines = '/DSQLITE_ENABLE_RTREE', '/DSQLITE_ENABLE_COLUMN_METADATA', '/DSQLITE_ENABLE_FTS5', '/DSQLITE_ENABLE_MATH_FUNCTIONS', '/DSQLITE_ENABLE_JSON1'
+# PostgreSQL's Meson options (the libraries from the manifest's depends; the contract from the native file).
+$PgMesonOptions = '-Dbuildtype=release', '-Dicu=enabled', '-Dssl=openssl', '-Dzlib=enabled', '-Dlz4=enabled', '-Dzstd=enabled', '-Dlibxml=enabled',
+                  '-Dnls=disabled', '-Dplperl=disabled', '-Dplpython=disabled', '-Dtap_tests=disabled', '-Dllvm=disabled'
+
+# ------------------------------------------------------------------------------------------------------ helpers
 function Say([string]$what, [string]$state) { '  {0,-58} {1}' -f $what, $state }
 function Part([string]$name) { ''; "=== $name   {0:HH:mm:ss}" -f (Get-Date).ToUniversalTime() }
 function Admin { ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
-function Installed([string]$key) { foreach ($k in $UninstallKeys) { if (Test-Path "$k\$key") { return $true } }; $false }
-function Run([string]$exe, [string[]]$arguments, [int[]]$ok = @(0, 1605, 3010)) {
-    $p = Start-Process -FilePath $exe -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
-    if ($ok -notcontains $p.ExitCode) { throw "$exe exited $($p.ExitCode)" }
-    if ($p.ExitCode -eq 3010) { $script:restart = $true }
-}
+function Elevated([string]$part) { if (Admin) { return $true }; Say $part 'REFUSED: run from an elevated PowerShell'; $failed.Add("${part}: not elevated"); $false }
 function Attempt([string]$what, [scriptblock]$body) {
     try { & $body } catch { Say $what "FAILED: $($_.Exception.Message)"; $failed.Add("$what : $($_.Exception.Message)") }
 }
-function IntelInstalled { & 'C:\Program Files (x86)\Intel\oneAPI\Installer\installer.exe' --list-products 2>$null | Where-Object { $_ -match '\btrue\b' } | ForEach-Object { ($_ -split '\s+')[0..1] -join ' ' } }
-
-# The dependency manifest (dependencies.tsv), this platform's rows, in file order.
-$DepSrc = if ($env:LAPLACE_DEPSRC) { $env:LAPLACE_DEPSRC } else { 'D:\Libraries\src' }
-$Deps   = if ($env:LAPLACE_DEPS) { $env:LAPLACE_DEPS } else { 'D:\Libraries' }
+function Exec([string]$exe, [string[]]$arguments) {   # a build step: its output into the log, a failure thrown
+    & $exe @arguments 2>&1 | ForEach-Object { "    $_" }
+    if ($LASTEXITCODE) { throw "$([IO.Path]::GetFileName($exe)) $($arguments[0]) exited $LASTEXITCODE" }
+}
+function DriveOf([string]$path) { ([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($path))).Substring(0, 1).ToUpperInvariant() }
+function MsysPath([string]$path) { '/' + ($path.Substring(0, 1).ToLowerInvariant()) + ($path.Substring(2) -replace '\\', '/') }
+function GitIn([string]$dir) { & git.exe -C $dir @args 2>&1 }   # not named Git: a function would shadow git.exe
+# the developer shell, once, when icx is not already on the PATH: Visual Studio's vcvars64, oneAPI, CMake, the tools
+function DevShell {
+    if (Get-Command icx.exe -ErrorAction SilentlyContinue) { return $true }
+    if (-not (Test-Path $DevShell)) { return $false }
+    . $DevShell *> $null
+    [bool](Get-Command icx.exe -ErrorAction SilentlyContinue)
+}
+function PgReady { & "$PgBin\pg_isready.exe" -h 127.0.0.1 -p 5432 2>$null | Out-Null; $LASTEXITCODE -eq 0 }
+# one statement to the server, as a superuser: postgres (trust on a cluster initdb made; its declared password after
+# access), else the role with the canonical password
+function PgSql([string]$sql) {
+    try {
+        $env:PGPASSWORD = 'postgres'
+        $out = & "$PgBin\psql.exe" -X -h 127.0.0.1 -p 5432 -U postgres -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
+        if (-not $LASTEXITCODE) { return $out }
+        Remove-Item Env:PGPASSWORD; $env:PGPASSFILE = $PgCanon
+        $out = & "$PgBin\psql.exe" -X -h 127.0.0.1 -p 5432 -U $PgRole -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
+        if ($LASTEXITCODE) { throw "psql: $($out -join ' ')" }
+        $out
+    } finally { Remove-Item Env:PGPASSWORD, Env:PGPASSFILE -ErrorAction SilentlyContinue }
+}
+function PgWaitReady([int]$minutes) {
+    $deadline = (Get-Date).AddMinutes($minutes)
+    while (-not (PgReady) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+    PgReady
+}
+# the service's account: modify the data and the logs, read the install (setup.sh: chown postgres)
+function GrantPg {
+    foreach ($d in @($PgData, $PgWal, $PgTemp, $PgLogs)) { if ($d -and (Test-Path $d)) { & icacls.exe $d /grant '*S-1-5-20:(OI)(CI)M' /T /Q | Out-Null; if ($LASTEXITCODE) { throw "icacls $d exited $LASTEXITCODE" } } }
+    & icacls.exe $PgDir /grant '*S-1-5-20:(OI)(CI)RX' /T /Q | Out-Null; if ($LASTEXITCODE) { throw "icacls $PgDir exited $LASTEXITCODE" }
+}
+# The dependency manifest (dependencies.tsv), this platform's rows, in file order; the row's prefix, and the file that
+# proves it installed (proof, relative to the prefix: the checkout for a row built into Laplace, PostgreSQL's prefix
+# for PostGIS, <deps>\<name>\<version> for everything else).
 function Manifest {
     $cols = $null
     foreach ($line in Get-Content (Join-Path $PSScriptRoot 'dependencies.tsv')) {
@@ -132,16 +130,75 @@ function Manifest {
         if (($row.platforms -split ',') -contains 'windows') { [pscustomobject]$row }
     }
 }
-function GitIn([string]$dir) { & git.exe -C $dir @args 2>&1 }   # not named Git: a function would shadow git.exe
+function Prefix($r) {
+    if ($r.build -eq 'none' -and $r.kind -eq 'source') { return Join-Path $DepSrc $r.name }
+    if ($r.name -eq 'postgis') { return $PgDir }
+    Join-Path (Join-Path $Deps $r.name) $r.version
+}
+function Proof($r) { if ($r.proof) { Join-Path (Prefix $r) $r.proof } }
+function Checkout($r) { if ($r.kind -eq 'release' -and $r.build -eq 'amalgamation') { Join-Path (Join-Path (Join-Path $DepSrc $r.name) $r.version) 'source' } else { Join-Path $DepSrc $r.name } }
+function DependsPrefixes($r) { foreach ($d in ($r.depends -split ',')) { if ($d) { $row = Manifest | Where-Object name -eq $d | Select-Object -First 1; if ($row -and $row.kind -ne 'tool') { Prefix $row } } } }
 
 # ------------------------------------------------------------------------------------------------------ the parts
-# Every manifest row present at its pin. A source is a checkout at its exact commit: cloned when missing, moved to the
-# pin only when its working tree is clean (local changes are reported, never reset). A release or tool is an archive,
-# verified by SHA-256 before it is unpacked into its own prefix; a row without a pin is downloaded, its hash printed,
-# and not used until that hash is written into the manifest.
-function sources {
-    Part 'sources'
-    foreach ($r in Manifest) {
+# Drives are not made here: Windows has no volume to create or mount, so each root is reported on its drive, with the
+# room there, and its directory made. The cluster's own directories are cluster's (initdb wants them absent).
+function volumes {
+    Part 'volumes'
+    $roots = [ordered]@{ 'sources (LAPLACE_SRC)' = $Src; 'builds (LAPLACE_BUILD)' = $Build; 'work (LAPLACE_WORK)' = $Work; 'dependency sources (LAPLACE_DEPSRC)' = $DepSrc
+                         'dependencies (LAPLACE_DEPS)' = $Deps; 'data (LAPLACE_DATA)' = $Data; 'cluster (LAPLACE_PGDATA)' = $PgData; 'write-ahead log (LAPLACE_PGWAL)' = $PgWal; 'locks (LAPLACE_LOCKS)' = $Locks }
+    if ($PgTemp) { $roots['temporary files (LAPLACE_PGTEMP)'] = $PgTemp }
+    foreach ($k in $roots.Keys) {
+        $p = $roots[$k]; $d = DriveOf $p
+        $drive = Get-PSDrive -Name $d -ErrorAction SilentlyContinue
+        if (-not $drive) { Say $k "$p   DRIVE ${d}: IS NOT ON THIS MACHINE"; $failed.Add("volumes: no drive ${d}: for $p"); continue }
+        $made = ''
+        if ($p -notin @($PgData, $PgWal, $PgTemp) -and -not (Test-Path $p)) { New-Item -ItemType Directory -Force $p | Out-Null; $made = '   made' }
+        Say $k ('{0}   {1}: {2} GB, {3} GB free{4}' -f $p, $d, [int](($drive.Used + $drive.Free) / 1GB), [int]($drive.Free / 1GB), $made)
+    }
+    New-Item -ItemType Directory -Force $PgLogs | Out-Null
+    Say 'shared trees' 'the operator owns them; the service reads the install and owns its data and logs (rights)'
+}
+# The toolchain is installed by hand (Visual Studio, oneAPI, CMake, Git, uv) or by the manifest (deps); nothing is
+# downloaded here but MSYS2's packages. What is missing is said, with where it comes from.
+function packages {
+    Part 'packages'
+    if (Test-Path $DevShell) { Say 'developer shell' "$DevShell$(if (DevShell) { '' } else { '   icx NOT FOUND after loading it' })" }
+    else { Say 'developer shell' "MISSING: $DevShell (LAPLACE_DEVSHELL): Visual Studio's vcvars64 and oneAPI's oneapi-vars, by hand" }
+    foreach ($t in $Tools.Keys) {
+        $c = Get-Command "$t.exe" -ErrorAction SilentlyContinue
+        if (-not $c) { Say $t "MISSING: $($Tools[$t])"; continue }
+        $v = switch ($t) { 'icx' { (& icx.exe --version 2>$null | Select-Object -First 1) -replace '^.*?(\d+\.\d+\.\d+).*$', '$1' } 'cmake' { (& cmake.exe --version | Select-Object -First 1) -replace '^.* ', '' }
+                           'ninja' { & ninja.exe --version } 'git' { (& git.exe --version) -replace '^git version ', '' } 'uv' { (& uv.exe --version) -replace '^uv ', '' } 'meson' { & meson.exe --version }
+                           'perl' { (& perl.exe -e 'print $^V') -replace '^v', '' } 'win_bison' { (& win_bison.exe --version | Select-Object -First 1) -replace '^.* ', '' } 'nasm' { (& nasm.exe -v) -replace '^NASM version (\S+).*$', '$1' } }
+        if ($t -eq 'cmake' -and [version]($v -replace '-.*$') -lt [version]'3.25') { Say $t "$v at $($c.Source): TOO OLD, 3.25 or newer (4.x for icx 2026)" } else { Say $t "$v   $($c.Source)" }
+    }
+    $pacman = Join-Path $Msys2 'usr\bin\pacman.exe'
+    if (-not (Test-Path $pacman)) { Say 'MSYS2' "MISSING: no pacman at $Msys2 (LAPLACE_MSYS2): the manifest's msys2 archive, unpacked, then pacman -Syu"; return }
+    $missing = @(foreach ($p in $Msys2Packages) { & $pacman -Q $p 2>$null | Out-Null; if ($LASTEXITCODE) { $p } })
+    if ($missing.Count) { Attempt 'MSYS2 packages' { Exec $pacman (@('-S', '--needed', '--noconfirm') + $missing); Say 'MSYS2 packages' "installed $($missing -join ' ')" } }
+    else { Say 'MSYS2 packages' "all $($Msys2Packages.Count) present at $Msys2" }
+}
+# Rights: the service's account over the data and the logs and into the install, nothing more; the canonical
+# password administrators' only. There is no sudo to remove: no agent runs on this machine (the runner is the Linux
+# machine's), and an elevated step is a person's, here.
+function rights {
+    Part 'rights'
+    if (-not (Elevated 'rights')) { return }
+    Attempt 'rights' { GrantPg; Say $PgAccount "modify $PgData$(if ($PgWal -ne "$PgData\pg_wal") { ", $PgWal" })$(if ($PgTemp) { ", $PgTemp" }), $PgLogs; read $PgDir" }
+    if (Test-Path $PgCanon) { & icacls.exe $PgCanon /inheritance:r /grant '*S-1-5-32-544:F' /Q | Out-Null; Say $PgCanon 'administrators only' }
+    Say 'agents' 'none on this machine; nothing runs elevated but this'
+}
+# Dependencies: every manifest row present at its pin, then every row the manifest says to build, built and installed
+# into its own prefix, each known by the file it installs. A source is a checkout at its exact commit: cloned when
+# missing, moved to the pin only when its working tree is clean (local changes are reported, never reset). A release
+# or tool is an archive, verified by SHA-256 before it is unpacked into its own prefix; a row without a pin is
+# downloaded, its hash printed, and not used until that hash is written into the manifest. The builds run in the
+# developer shell under the floating-point contract (toolchain\laplace.cmake; toolchain\meson-native.py), laplace-math
+# first, and PostGIS last under MSYS2 (toolchain\windows\postgis.sh).
+function deps {
+    Part 'dependencies'
+    $rows = @(Manifest)
+    foreach ($r in $rows) {
         $what = "$($r.name) $($r.version)"
         if ($r.kind -eq 'source') {
             Attempt $what {
@@ -162,14 +219,18 @@ function sources {
                 Say $what "checked out $($r.pin.Substring(0,12))"
             }
         } elseif ($r.kind -in 'release', 'tool') {
-            if (-not $r.origin.StartsWith('https://') -or $r.build -ne 'unpack') { continue }   # installed another way (uv tool)
+            # unpack: an archive whose contents are the install. sfx: a self-extracting archive (MSYS2), likewise, and
+            # passed over when the machine's MSYS2 (LAPLACE_MSYS2) is already there. amalgamation: a source archive,
+            # unpacked in the source store for the build below. Anything else is installed another way (uv tool).
+            if (-not $r.origin.StartsWith('https://') -or $r.build -notin 'unpack', 'sfx', 'amalgamation') { continue }
+            if ($r.build -eq 'sfx' -and (Test-Path (Join-Path $Msys2 'usr$checkoutin$checkoutash.exe'))) { Say $what "MSYS2 is at $Msys2"; continue }
             Attempt $what {
-                $prefix = Join-Path (Join-Path $Deps $r.name) $r.version
+                $store = Join-Path (Join-Path $DepSrc $r.name) $r.version
+                $prefix = if ($r.build -eq 'amalgamation') { Join-Path $store 'source' } else { Prefix $r }
                 if (Test-Path (Join-Path $prefix '.pin')) {
-                    if ((Get-Content (Join-Path $prefix '.pin') -Raw).Trim() -eq $r.pin) { Say $what "installed at $prefix"; return }
+                    if ((Get-Content (Join-Path $prefix '.pin') -Raw).Trim() -eq $r.pin) { Say $what "at $prefix"; return }
                     throw "$prefix holds another archive than the pin; remove it to reinstall"
                 }
-                $store = Join-Path (Join-Path $DepSrc $r.name) $r.version
                 New-Item -ItemType Directory -Force $store | Out-Null
                 $file = Join-Path $store ([IO.Path]::GetFileName(([uri]$r.origin).AbsolutePath))
                 if (-not (Test-Path $file)) { & curl.exe -fsSL --retry 3 -o $file $r.origin; if ($LASTEXITCODE) { Remove-Item $file -ErrorAction SilentlyContinue; throw "download failed: $($r.origin)" } }
@@ -177,153 +238,307 @@ function sources {
                 if (-not $r.pin) { throw "no pin in dependencies.tsv; downloaded $file with SHA-256 ${sha}: review it, write the hash into the manifest, run again" }
                 if ($sha -ne $r.pin) { throw "SHA-256 $sha differs from the pin $($r.pin)" }
                 $stage = "$prefix.part"; Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-                Expand-Archive -LiteralPath $file -DestinationPath $stage
+                if ($r.build -eq 'sfx') { $p = Start-Process -FilePath $file -ArgumentList @('-y', "-o$stage") -Wait -PassThru -WindowStyle Hidden; if ($p.ExitCode) { throw "$file exited $($p.ExitCode)" } }
+                elseif ($file -match '\.tar\.(xz|gz|bz2)$') { New-Item -ItemType Directory -Force $stage | Out-Null; & tar.exe -xf $file -C $stage; if ($LASTEXITCODE) { throw "tar could not unpack $file" } }   # Windows' bsdtar
+                else { Expand-Archive -LiteralPath $file -DestinationPath $stage }
                 $inner = @(Get-ChildItem $stage); if ($inner.Count -eq 1 -and $inner[0].PSIsContainer) { $stage = $inner[0].FullName }   # one top folder: its contents are the prefix
                 New-Item -ItemType Directory -Force (Split-Path $prefix) | Out-Null
                 Move-Item -LiteralPath $stage -Destination $prefix
                 Remove-Item "$prefix.part" -Recurse -Force -ErrorAction SilentlyContinue
                 Set-Content (Join-Path $prefix '.pin') $r.pin
-                Say $what "installed at $prefix"
+                Say $what "at $prefix"
             }
         }
     }
+
+    # the builds
+    $toBuild = @($rows | Where-Object { $_.build -in 'cmake', 'openssl', 'amalgamation', 'meson', 'configure', 'headers' })
+    $missing = @($toBuild | Where-Object { -not (Test-Path (Proof $_)) })
+    if (-not (Test-Path $Math) -or $missing.Count) {
+        if (-not (DevShell)) { Say 'builds' "NOT BUILT: no icx; the developer shell $DevShell is missing or does not provide it"; $failed.Add('deps: no icx'); return }
+    }
+    if (Test-Path $Math) { Say 'laplace-math' $Math }
+    else {
+        Attempt 'laplace-math' {
+            $b = Split-Path $Math
+            Exec cmake.exe @('-S', (Join-Path $PSScriptRoot 'math'), '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DCORE_MATH=$env:LAPLACE_COREMATH")
+            Exec cmake.exe @('--build', $b)
+            if (-not (Test-Path $Math)) { throw "no library at $Math" }
+            Say 'laplace-math' "built: $Math"
+        }
+    }
+    foreach ($r in $toBuild) {
+        $what = "$($r.name) $($r.version)"
+        $proof = Proof $r; $prefix = Prefix $r; $checkout = Checkout $r; $b = Join-Path (Join-Path $Build 'deps') $r.name
+        if (-not $proof) { Say $what 'NO PROOF in dependencies.tsv: not built'; continue }
+        if (Test-Path $proof) { Say $what "installed at $prefix"; continue }
+        if (-not (Test-Path $checkout)) { Say $what "NOT BUILT: no source at $checkout"; continue }
+        $libs = @(DependsPrefixes $r)
+        Attempt $what {
+            New-Item -ItemType Directory -Force $b | Out-Null
+            switch ($r.build) {
+                'cmake' {
+                    if ($DepSourceDir[$r.name]) { $checkout = Join-Path $checkout $DepSourceDir[$r.name] }
+                    $opts = @('-S', $checkout, '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DLAPLACE_MATH=$Math",
+                              "-DCMAKE_INSTALL_PREFIX=$prefix", '-DBUILD_TESTING=OFF', '-DBUILD_SHARED_LIBS=ON')
+                    if ($libs.Count) { $opts += "-DCMAKE_PREFIX_PATH=$(($libs -replace '\\', '/') -join ';')" }
+                    if ($DepOptions[$r.name]) { $opts += $DepOptions[$r.name] }
+                    Exec cmake.exe $opts; Exec cmake.exe @('--build', $b); Exec cmake.exe @('--install', $b)
+                }
+                'openssl' {
+                    $zlib = $libs | Where-Object { $_ -match '\\zlib\\' } | Select-Object -First 1
+                    if (-not $zlib) { throw 'openssl depends on zlib, which the manifest does not name' }
+                    Push-Location $b
+                    try {
+                        if (-not (Test-Path 'configdata.pm')) { Exec perl.exe @((Join-Path $checkout 'Configure'), 'VC-WIN64A', 'CC=icx', "--prefix=$prefix", "--openssldir=$prefix\ssl", 'no-tests', 'shared', 'zlib', "--with-zlib-include=$zlib\include", "--with-zlib-lib=$zlib\lib\z.lib") }
+                        Exec nmake.exe @(); Exec nmake.exe @('install_sw')
+                    } finally { Pop-Location }
+                }
+                'amalgamation' {
+                    # the contract's compile flags for the MSVC driver, and the link that ends with laplace-math (toolchain\laplace.cmake)
+                    $fp = @(Get-Content (Join-Path $PSScriptRoot 'toolchain\determinism.tsv') | Where-Object { $_ -match '^compile\t(msvc|any)\t' } | ForEach-Object { ($_ -split "`t")[2] })
+                    $link = @('/link', '/NODEFAULTLIB:libmmd.lib', $Math, 'libmmd.lib')
+                    Push-Location $b
+                    try {
+                        Exec icx.exe (@('/nologo', '/O2', '/MD') + $fp + $SqliteDefines + @('/DSQLITE_API=__declspec(dllexport)', '/LD', (Join-Path $checkout 'sqlite3.c'), '/Fe:sqlite3.dll') + $link)
+                        Exec icx.exe (@('/nologo', '/O2', '/MD') + $fp + $SqliteDefines + @((Join-Path $checkout 'shell.c'), (Join-Path $checkout 'sqlite3.c'), '/Fe:sqlite3.exe') + $link)
+                    } finally { Pop-Location }
+                    foreach ($d in 'bin', 'lib', 'include') { New-Item -ItemType Directory -Force (Join-Path $prefix $d) | Out-Null }
+                    Copy-Item (Join-Path $b 'sqlite3.dll'), (Join-Path $b 'sqlite3.exe') (Join-Path $prefix 'bin'); Copy-Item (Join-Path $b 'sqlite3.lib') (Join-Path $prefix 'lib')
+                    Copy-Item (Join-Path $checkout 'sqlite3.h'), (Join-Path $checkout 'sqlite3ext.h') (Join-Path $prefix 'include')
+                }
+                'meson' {
+                    # the patches, each applied once; the contract as a native file; the libraries from the manifest's depends
+                    Push-Location $checkout
+                    try { foreach ($p in Get-ChildItem (Join-Path $PSScriptRoot 'patches\postgresql') -Filter '*.patch') { & git.exe apply --reverse --check $p.FullName 2>$null; if ($LASTEXITCODE) { Exec git.exe @('apply', $p.FullName) } } }
+                    finally { Pop-Location }
+                    $native = Join-Path (Join-Path $Build 'deps') 'pg-native.ini'
+                    & python.exe (Join-Path $PSScriptRoot 'toolchain\meson-native.py') msvc $Math | Set-Content $native
+                    if ($LASTEXITCODE) { throw 'meson-native.py failed' }
+                    $inc = ($libs | ForEach-Object { "$_\include" -replace '\\', '/' }) -join ','
+                    $lib = ($libs | ForEach-Object { foreach ($l in 'lib', 'lib64') { if (Test-Path "$_\$l") { "$_\$l" -replace '\\', '/' } } }) -join ','
+                    if (-not (Test-Path (Join-Path $b 'build.ninja'))) { Exec meson.exe (@('setup', $b, $checkout, "--native-file=$native", "-Dprefix=$prefix", "-Dextra_include_dirs=$inc", "-Dextra_lib_dirs=$lib") + $PgMesonOptions) }
+                    Exec ninja.exe @('-C', $b); Exec ninja.exe @('-C', $b, 'install')
+                }
+                'configure' {
+                    # PostGIS: toolchain\windows\postgis.sh in MSYS2's shell, started from the developer shell
+                    $bash = Join-Path $Msys2 'usr$checkoutin$checkoutash.exe'
+                    if (-not (Test-Path $bash)) { throw "no MSYS2 at $Msys2 (LAPLACE_MSYS2)" }
+                    $env:MSYSTEM = 'MSYS'; $env:MSYS2_PATH_TYPE = 'inherit'; $env:CHERE_INVOKING = '1'
+                    try { Exec $bash @('-l', '-c', (MsysPath (Join-Path $PSScriptRoot 'toolchain\windows\postgis.sh'))) }
+                    finally { Remove-Item Env:MSYSTEM, Env:MSYS2_PATH_TYPE, Env:CHERE_INVOKING -ErrorAction SilentlyContinue }
+                }
+                'headers' {
+                    foreach ($h in $DepHeaders[$r.name]) {
+                        $to = Join-Path $prefix $h.To; New-Item -ItemType Directory -Force (Split-Path $to) | Out-Null
+                        Remove-Item $to -Recurse -Force -ErrorAction SilentlyContinue; Copy-Item (Join-Path $checkout $h.From) $to -Recurse
+                    }
+                }
+            }
+            if (Test-Path $proof) { Say $what "built and installed at $prefix" } else { throw "DID NOT INSTALL: no $proof; the build is $b" }
+        }
+    }
 }
-
-function retire {
-    Part 'retire'
-    if (-not (Admin)) { Say 'retire' 'REFUSED: run from an elevated PowerShell'; $failed.Add('retire: not elevated'); return }
-
-    foreach ($t in $RetireTasks) {
-        $task = Get-ScheduledTask | Where-Object { "$($_.TaskPath)$($_.TaskName)" -eq $t }
-        if ($task) { Attempt "task $t" { $task | Unregister-ScheduledTask -Confirm:$false; Say "task $t" 'removed' } }
-    }
-
-    $intel = @(IntelInstalled)
-    foreach ($r in $RetireIntel) {
-        if ($intel -notcontains "$($r.Id) $($r.Ver)") { continue }
-        Attempt "$($r.Id) $($r.Ver)" {
-            Run 'C:\Program Files (x86)\Intel\oneAPI\Installer\installer.exe' @('-s', '--action', 'remove', '--product-id', $r.Id, '--product-ver', $r.Ver)
-            Say "$($r.Id) $($r.Ver)" "removed ($($r.Why))"
+# The cluster: made once (Sequence 8: UTF-8, the C.UTF-8 locale, data checksums, the log where LAPLACE_PGWAL says),
+# run as the Windows service, its account over its directories; then the certificate, before ssl = on is declared (a
+# server told to use TLS without one does not start), and the temporary tablespace when LAPLACE_PGTEMP names one.
+function cluster {
+    Part 'cluster'
+    if (-not (Elevated 'cluster')) { return }
+    if (-not (Test-Path "$PgBin\pg_ctl.exe")) { Say 'cluster' "FAILED: no server at $PgBin (deps)"; $failed.Add("cluster: no server at $PgBin"); return }
+    foreach ($d in @((Split-Path $PgData), (Split-Path $PgWal), $PgTemp, $PgLogs)) { if ($d) { New-Item -ItemType Directory -Force $d | Out-Null } }
+    if (-not (Test-Path (Join-Path $PgData 'PG_VERSION'))) {
+        Attempt 'cluster' {
+            $opts = @('-D', $PgData, '-U', 'postgres', '--encoding=UTF8', '--locale-provider=builtin', '--locale=C.UTF-8', '--data-checksums')
+            if ($PgWal -ne (Join-Path $PgData 'pg_wal')) { $opts += "--waldir=$PgWal" }
+            Exec "$PgBin\initdb.exe" $opts
+            Say 'cluster' "initialised in $PgData, WAL in $PgWal"
         }
+        if (-not (Test-Path (Join-Path $PgData 'PG_VERSION'))) { return }
+    } else {
+        $checksums = (& "$PgBin\pg_controldata.exe" $PgData 2>$null | Where-Object { $_ -match 'checksum version:\s+(\d+)' } | ForEach-Object { $Matches[1] })
+        Say 'cluster' "$(Get-Content (Join-Path $PgData 'PG_VERSION')) in $PgData$(if ($checksums -eq '0') { '   NO DATA CHECKSUMS: Sequence 8 wants --data-checksums; drop makes the cluster again' })"
     }
-    foreach ($r in $RetireNvidia) {
-        if (-not (Installed "{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}_$($r.Package)")) { continue }
-        Attempt "NVIDIA $($r.Package)" {
-            Run "$env:SystemRoot\SysWOW64\RunDll32.EXE" @('"C:\Program Files\NVIDIA Corporation\Installer2\InstallerCore\NVI2.DLL",UninstallPackage', $r.Package, '-silent', '-n')
-            Say "NVIDIA $($r.Package)" "removed ($($r.Why))"
-        }
-    }
-    foreach ($r in $RetireMsi) {
-        if (-not (Installed $r.Code)) { continue }
-        Attempt $r.Name { Run 'msiexec.exe' @('/x', $r.Code, '/qn', '/norestart'); Say $r.Name "removed ($($r.Why))" }
-    }
-    foreach ($r in $RetireSdk) {
-        if (-not (Installed $r.Key)) { continue }
-        Attempt $r.Name {
-            $setup = "C:\ProgramData\Package Cache\$($r.Key)\winsdksetup.exe"
-            if (-not (Test-Path $setup)) { throw "its cached setup is missing: $setup" }
-            Run $setup @('/uninstall', '/quiet', '/norestart'); Say $r.Name 'removed'
-        }
-    }
-    foreach ($r in $RetireExe) {
-        if (-not (Installed $r.Key)) { continue }
-        Attempt $r.Key {
-            if ((Test-Path $r.Exe) -and (Get-Item $r.Exe).Length -gt 0) { Run $r.Exe $r.Args; Say $r.Key "removed ($($r.Why))"; return }
-            # A missing or empty uninstaller cannot run (HART-DESKTOP's EDB uninstallers were 0 bytes). The product's
-            # services and folders are in the sets below; what remains is its registration, which goes here.
-            foreach ($k in $UninstallKeys) { if (Test-Path "$k\$($r.Key)") { Remove-Item -LiteralPath "$k\$($r.Key)" -Recurse -Force } }
-            Say $r.Key "uninstaller broken: registration removed; services and folders below ($($r.Why))"
-        }
-    }
-    foreach ($r in $RetireVs) {
-        if (-not (Test-Path $r.Path)) { continue }
-        Attempt "Visual Studio $($r.Path)" {
-            Run 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\setup.exe' @('uninstall', '--installPath', "`"$($r.Path)`"", '--quiet', '--norestart')
-            Say "Visual Studio $($r.Path)" "removed ($($r.Why))"
-        }
-    }
+    Attempt 'rights' { GrantPg }
 
-    # services the uninstallers above did not take with them
-    foreach ($s in $RetireServices) {
-        $svc = Get-Service -Name $s -ErrorAction SilentlyContinue
-        if (-not $svc) { continue }
-        Attempt "service $s" { if ($svc.Status -ne 'Stopped') { Stop-Service -Name $s -Force }; & sc.exe delete $s | Out-Null; Say "service $s" 'deleted' }
-    }
-    $distros = @(& wsl.exe --list --quiet 2>$null | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ })
-    foreach ($d in $RetireWsl) { if ($distros -contains $d) { Attempt "WSL $d" { & wsl.exe --unregister $d | Out-Null; Say "WSL $d" 'unregistered' } } }
-    foreach ($f in $RetireFeatures) {
-        $feature = Get-WindowsOptionalFeature -Online -FeatureName $f -ErrorAction SilentlyContinue
-        if ($feature -and $feature.State -eq 'Enabled') {
-            Attempt "feature $f" { $r = Disable-WindowsOptionalFeature -Online -FeatureName $f -NoRestart; if ($r.RestartNeeded) { $script:restart = $true }; Say "feature $f" 'disabled' }
+    # the service: registered once; a postmaster someone started by hand holds the data directory and is stopped first
+    $svc = Get-Service -Name $PgService -ErrorAction SilentlyContinue
+    if (-not $svc) {
+        Attempt "service $PgService" {
+            if (Test-Path (Join-Path $PgData 'postmaster.pid')) {
+                & "$PgBin\pg_ctl.exe" -D $PgData -m fast -w -t 300 stop 2>&1 | Out-Null
+                if (Test-Path (Join-Path $PgData 'postmaster.pid')) { & "$PgBin\pg_ctl.exe" -D $PgData -m immediate -w -t 120 stop 2>&1 | Out-Null }
+                Get-Process postgres -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                Remove-Item (Join-Path $PgData 'postmaster.pid') -ErrorAction SilentlyContinue
+                Say 'hand-started server' 'stopped'
+            }
+            # pg_ctl registers the service as LocalSystem unless -U names the account (pg_ctl.c: register_username NULL);
+            # a built-in account takes no password
+            $out = & "$PgBin\pg_ctl.exe" register -N $PgService -U $PgAccount -D $PgData -S auto -w 2>&1
+            if ($LASTEXITCODE) { throw "pg_ctl register: $($out -join ' ')" }
+            Say "service $PgService" "registered: automatic start, as $PgAccount"
         }
-    }
-
-    foreach ($d in $RetireDirs) { if (Test-Path -LiteralPath $d) { Attempt $d { Remove-Item -LiteralPath $d -Recurse -Force; Say $d 'removed' } } }
-
-    $envKey = Get-Item $MachineEnv
-    foreach ($v in $RetireMachineVars) { if ($envKey.Property -contains $v) { Attempt "machine variable $v" { Remove-ItemProperty -Path $MachineEnv -Name $v; Say "machine variable $v" 'removed' } } }
-
-    # The machine PATH keeps only entries that exist (uninstalled programs leave theirs behind), each once.
-    Attempt 'machine PATH' {
-        $key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment', $true)
-        $old = $key.GetValue('Path', '', 'DoNotExpandEnvironmentNames') -split ';' | Where-Object { $_.Trim() }
-        $seen = @{}; $new = foreach ($p in $old) {
-            $n = $p.Trim().TrimEnd('\').ToLowerInvariant()
-            if ($seen[$n] -or -not (Test-Path ([Environment]::ExpandEnvironmentVariables($p)))) { Say "  PATH entry $p" 'dropped'; continue }
-            $seen[$n] = 1; $p
+        $svc = Get-Service -Name $PgService -ErrorAction SilentlyContinue
+    } else { Say "service $PgService" "$($svc.Status), start $($svc.StartType)" }
+    if (-not $svc) { return }
+    if ($svc.Status -ne 'Running') { Attempt "service $PgService start" { Start-Service -Name $PgService; Say "service $PgService" 'started' } }
+    # after an unclean stop the server replays its log before it listens
+    if (-not (PgWaitReady 120)) { Say 'cluster' 'FAILED: not accepting connections after two hours; see the log'; $failed.Add('cluster: not ready'); return }
+    Say 'cluster' "accepting connections on 127.0.0.1:5432 ($(PgSql 'SELECT version()'))"
+    if ($PgTemp) { Attempt 'tablespace pgtemp' { if ((PgSql "SELECT count(*) FROM pg_tablespace WHERE spcname = 'pgtemp'") -ne '1') { PgSql "CREATE TABLESPACE pgtemp LOCATION '$($PgTemp -replace '\\', '/')'" | Out-Null }; Say 'tablespace pgtemp' $PgTemp } }
+    if (-not (Test-Path (Join-Path $PgData 'server.crt'))) {
+        Attempt 'certificate' {
+            # Git's openssl is self-contained; the manifest's needs zlib's DLL from zlib's own prefix on the PATH (a missing
+            # DLL is a dialog, not an exit code)
+            $openssl = 'C:\Program Files\Git\usr\bin\openssl.exe'; $path = $env:PATH
+            if (-not (Test-Path $openssl)) {
+                $openssl = Get-ChildItem (Join-Path $Deps 'openssl') -Recurse -Filter openssl.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+                if (-not $openssl) { throw "no openssl (Git's, or the manifest's)" }
+                $env:PATH = (@(Get-ChildItem (Join-Path $Deps 'zlib') -Directory | ForEach-Object { Join-Path $_.FullName 'bin' }) + $env:PATH) -join ';'
+            }
+            try { $out = & $openssl req -new -x509 -days 3650 -nodes -subj "/CN=$env:COMPUTERNAME" -keyout (Join-Path $PgData 'server.key') -out (Join-Path $PgData 'server.crt') 2>&1 }
+            finally { $env:PATH = $path }
+            if ($LASTEXITCODE -or -not (Test-Path (Join-Path $PgData 'server.crt'))) { throw "openssl: $($out -join ' ')" }
+            foreach ($f in 'server.key', 'server.crt') { & icacls.exe (Join-Path $PgData $f) /inheritance:r /grant '*S-1-5-20:R' /grant '*S-1-5-32-544:F' /Q | Out-Null }
+            Say 'certificate' "self-signed, CN=$env:COMPUTERNAME, 3650 days, readable by $PgAccount"
         }
-        if (@($new).Count -ne @($old).Count) { $key.SetValue('Path', ($new -join ';'), [Microsoft.Win32.RegistryValueKind]::ExpandString) }
-        $key.Close(); Say 'machine PATH' "$(@($new).Count) entries"
-    }
-    Add-Type -Namespace LaplaceSetup -Name Native -MemberDefinition '[DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);' -ErrorAction SilentlyContinue
-    $r = [UIntPtr]::Zero; [void][LaplaceSetup.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$r)
+    } else { Say 'certificate' 'present' }
 }
-
-function environment {
-    Part 'environment'
-    if (-not (Admin)) { Say 'environment' 'REFUSED: run from an elevated PowerShell'; $failed.Add('environment: not elevated'); return }
-    $declared = DeclaredMachineVars
-    foreach ($name in $declared.Keys) {
-        $have = (Get-ItemProperty $MachineEnv -Name $name -ErrorAction SilentlyContinue).$name
-        if ($have -eq $declared[$name]) { Say "machine variable $name" $have; continue }
-        Attempt "machine variable $name" { Set-ItemProperty -Path $MachineEnv -Name $name -Value $declared[$name]; Say "machine variable $name" "set: $($declared[$name])" }
-    }
-    $r = [UIntPtr]::Zero
-    Add-Type -Namespace LaplaceSetup -Name Native -MemberDefinition '[DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);' -ErrorAction SilentlyContinue
-    [void][LaplaceSetup.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$r)
+# The cluster dropped, for cluster to make again: the service stopped and deleted, and everything in its data
+# directory, its log directory and its temporary directory removed. Every database on the server is lost, so it is
+# never part of all, it asks for the data directory by name, and it does not run under an ingest.
+function drop {
+    Part 'drop'
+    if (-not (Elevated 'drop')) { return }
+    if ($env:LAPLACE_DROP -ne $PgData) { Say 'drop' "REFUSED: name the cluster to drop: `$env:LAPLACE_DROP = '$PgData'"; $failed.Add('drop: not named'); return }
+    if (TuneIngesting) { Say 'drop' 'REFUSED: an ingest is running'; $failed.Add('drop: ingesting'); return }
+    $svc = Get-Service -Name $PgService -ErrorAction SilentlyContinue
+    if ($svc) { if ($svc.Status -ne 'Stopped') { Stop-Service -Name $PgService -Force }; & sc.exe delete $PgService | Out-Null; Say "service $PgService" 'stopped and deleted' }
+    if (Test-Path (Join-Path $PgData 'postmaster.pid')) { & "$PgBin\pg_ctl.exe" -D $PgData -m fast -w -t 300 stop 2>&1 | Out-Null }
+    foreach ($d in @($PgData, $PgWal, $PgTemp)) { if ($d -and (Test-Path $d)) { Remove-Item $d -Recurse -Force } }
+    Say 'drop' "$PgData$(if ($PgWal -ne "$PgData\pg_wal") { ", $PgWal" })$(if ($PgTemp) { ", $PgTemp" }) removed: cluster makes the cluster again"
 }
-
+# Settings: every setting stated (tune-pg.ps1); the server itself says which changed and which need a restart. A
+# restart is never made under a running ingest.
+function settings {
+    Part 'settings'
+    if (-not (PgReady)) { Say 'settings' 'FAILED: the server is not accepting connections (cluster first)'; $failed.Add('settings: server not ready'); return }
+    if ((Test-Path $PgCanon) -and (Admin)) { $env:PGPASSFILE = $PgCanon }   # elevated: the canonical password, whatever the operator's pgpass holds
+    try {
+        Attempt 'settings' {
+            TuneApply | ForEach-Object { Say '  ' $_ }
+            if (-not (TuneRestart)) { if (-not (Admin)) { Say 'restart' 'a setting read at start is pending: elevated, setup.ps1 settings' } }
+            if (-not (TuneCheck)) { throw 'the live server does not match the declaration (the warnings above)' }
+            Say 'settings' "$((TuneDeclared).Count) declared, none pending"
+        }
+        foreach ($line in (TunePsql "SELECT '  '||rpad(name, 46)||current_setting(name) FROM pg_settings WHERE name IN ('shared_buffers','effective_cache_size','work_mem','maintenance_work_mem','io_method','max_wal_size','wal_buffers','listen_addresses','ssl') ORDER BY name")) { $line }
+    } finally { Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue }
+}
+# Who may connect, and how (setup.sh: access). The whole pg_hba.conf, not a line added to whatever is there: laplace
+# and postgres by scram on loopback, by scram over TLS from $PgLan, nothing else (no socket on Windows: no peer). The
+# role's password is one canonical copy, administrators only, adopted from the operator's pgpass when it is the one
+# the server accepts, made when none is, and written into the operator's %APPDATA%\postgresql\pgpass.conf, which libpq
+# reads for psql and the laplace program. Only this host's line for the role is replaced there: the operator's lines
+# for other hosts (hart-server's database) are theirs and stay. Never printed. The firewall admits 5432/tcp from $PgLan.
+function PgWorks([string]$pw) { $env:PGPASSWORD = $pw; $r = & "$PgBin\psql.exe" -X -h 127.0.0.1 -p 5432 -U $PgRole -d postgres -Atq -c 'SELECT 1' 2>$null; Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue; "$r" -eq '1' }
+function PgPassOf([string]$file) { if (Test-Path $file) { foreach ($l in Get-Content $file) { $f = $l -split ':'; if ($f.Count -ge 5 -and $f[3] -eq $PgRole -and $f[0] -in '*', 'localhost', '127.0.0.1', '::1', $env:COMPUTERNAME) { return ($f[4..($f.Count - 1)] -join ':') } } }; $null }
+function access {
+    Part 'access'
+    if (-not (Elevated 'access')) { return }
+    if (-not (PgReady)) { Say 'access' 'FAILED: the server is not accepting connections (cluster first)'; $failed.Add('access: server not ready'); return }
+    $operator = Join-Path $env:APPDATA 'postgresql\pgpass.conf'
+    Attempt "role $PgRole" {
+        if ((PgSql "SELECT count(*) FROM pg_roles WHERE rolname = '$PgRole'") -ne '1') { PgSql "CREATE ROLE $PgRole LOGIN SUPERUSER" | Out-Null }
+        $pw = PgPassOf $PgCanon; $how = "password in $PgCanon"
+        # the installation's password is the deployment target's (LAPLACE_PEER): read from its operator's pgpass over SSH,
+        # given to the role here when the role does not already accept it. Never printed.
+        if ($env:LAPLACE_PEER) {
+            $sshOpts = @('-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'); if ($env:LAPLACE_PEER_KEY -and (Test-Path $env:LAPLACE_PEER_KEY)) { $sshOpts += '-i', $env:LAPLACE_PEER_KEY }
+            $peer = (& ssh.exe @sshOpts $env:LAPLACE_PEER "grep ':${PgRole}:' ~/.pgpass | head -1 | cut -d: -f5-" 2>$null | Select-Object -First 1)
+            if ($peer) {
+                $peer = $peer.Trim()
+                if (-not (PgWorks $peer)) { PgSql "ALTER ROLE $PgRole PASSWORD '$($peer -replace "'", "''")'" | Out-Null }
+                $pw = $peer; $how = "password the installation's, from $($env:LAPLACE_PEER)"
+                New-Item -ItemType Directory -Force (Split-Path $PgCanon) | Out-Null
+                Set-Content -Path $PgCanon -Value "*:5432:*:${PgRole}:$pw" -Encoding ascii -NoNewline
+                & icacls.exe $PgCanon /inheritance:r /grant '*S-1-5-32-544:F' /Q | Out-Null
+            } else { Say "role $PgRole" "$($env:LAPLACE_PEER) did not answer with a password for ${PgRole}: this machine's own is kept" }
+        }
+        if (-not $pw -or -not (PgWorks $pw)) {
+            $keep = $pw; $pw = $null
+            $c = PgPassOf $operator; if ($c -and (PgWorks $c)) { $pw = $c; $how = "password adopted from $operator" }
+            # a cluster made again has the role without a password: it is given the canonical one, so no client's copy breaks
+            if (-not $pw -and $keep) { $pw = $keep; PgSql "ALTER ROLE $PgRole PASSWORD '$($pw -replace "'", "''")'" | Out-Null; $how = "password from $PgCanon" }
+            if (-not $pw) { $pw = [Convert]::ToBase64String((1..24 | ForEach-Object { Get-Random -Maximum 256 })) -replace '[/+=]', ''; $pw = $pw.Substring(0, [math]::Min(32, $pw.Length)); PgSql "ALTER ROLE $PgRole PASSWORD '$pw'" | Out-Null; $how = 'password made' }
+            New-Item -ItemType Directory -Force (Split-Path $PgCanon) | Out-Null
+            Set-Content -Path $PgCanon -Value "*:5432:*:${PgRole}:$pw" -Encoding ascii -NoNewline
+            & icacls.exe $PgCanon /inheritance:r /grant '*S-1-5-32-544:F' /Q | Out-Null
+        }
+        # the operator's pgpass: this host's line for the role replaced, every other line kept
+        New-Item -ItemType Directory -Force (Split-Path $operator) | Out-Null
+        $rest = @(); if (Test-Path $operator) { $rest = @(Get-Content $operator | Where-Object { $f = $_ -split ':'; $f.Count -lt 5 -or $f[3] -ne $PgRole -or $f[0] -notin '*', 'localhost', '127.0.0.1', '::1', $env:COMPUTERNAME }) }
+        Set-Content -Path $operator -Value (@($rest) + "*:5432:*:${PgRole}:$pw") -Encoding ascii
+        $pw = $null
+        Say "role $PgRole" "$how; written to $operator"
+    }
+    Attempt 'role postgres' { if ((PgSql "SELECT count(*) FROM pg_roles WHERE rolname = 'postgres'") -ne '1') { PgSql 'CREATE ROLE postgres LOGIN SUPERUSER' | Out-Null }; PgSql "ALTER ROLE postgres PASSWORD 'postgres'" | Out-Null; Say 'role postgres' "password postgres: locally and from $PgLan over TLS (setup.sh declares the same)" }
+    Attempt 'pg_hba.conf' {
+        $hba = @(
+            "# Laplace (setup.ps1). Loopback: laplace and postgres by scram. The network: scram over TLS from $PgLan. Nothing else.",
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', $PgRole,    '127.0.0.1/32', 'scram-sha-256'),
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', $PgRole,    '::1/128',      'scram-sha-256'),
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'hostssl',   'all', $PgRole,    $PgLan,         'scram-sha-256'),
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', 'postgres', '127.0.0.1/32', 'scram-sha-256'),
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', 'postgres', '::1/128',      'scram-sha-256'),
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'hostssl',   'all', 'postgres', $PgLan,         'scram-sha-256'),
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'hostnossl', 'all', 'all',      '0.0.0.0/0',    'reject')
+        ) -join "`n"
+        $file = Join-Path $PgData 'pg_hba.conf'
+        if ((Test-Path $file) -and ((Get-Content $file -Raw) -replace "`r`n", "`n").TrimEnd() -eq $hba) { Say 'pg_hba.conf' 'as declared'; return }
+        if (Test-Path $file) { Copy-Item $file "$file.before" -Force }
+        Set-Content -Path $file -Value ($hba + "`n") -Encoding ascii -NoNewline
+        PgSql 'SELECT pg_reload_conf()' | Out-Null
+        Say 'pg_hba.conf' 'written'
+    }
+    Attempt 'firewall' {
+        # any enabled inbound allow rule for 5432/tcp admits the port already (an earlier install's rule counts); one is made only when none exists
+        $have = @(Get-NetFirewallRule -Direction Inbound -Action Allow -Enabled True -ErrorAction SilentlyContinue | Where-Object { ($_ | Get-NetFirewallPortFilter).LocalPort -contains '5432' })
+        if ($have.Count) { Say 'firewall' "5432/tcp admitted by: $(($have | ForEach-Object DisplayName) -join ', ')" }
+        else { New-NetFirewallRule -DisplayName 'Laplace PostgreSQL' -Direction Inbound -Protocol TCP -LocalPort 5432 -RemoteAddress $PgLan -Action Allow -Profile Any | Out-Null; Say 'firewall' "5432/tcp from $PgLan allowed" }
+    }
+    PgSql "SELECT '  '||rpad(type, 10)||rpad(array_to_string(user_name, ','), 10)||rpad(coalesce(address, '-'), 18)||auth_method||coalesce('   '||error, '') FROM pg_hba_file_rules ORDER BY rule_number"
+}
+# What the machine is now: the server, where it listens, and both legs of the cross-OS check, each as the operator
+# with the operator's pgpass: this database from the network, and the database LAPLACE_CONNINFO names (hart-server's,
+# when it is set to it).
 function report {
     Part 'report'
-    $declared = DeclaredMachineVars
-    foreach ($name in $declared.Keys) { $have = (Get-ItemProperty $MachineEnv -Name $name -ErrorAction SilentlyContinue).$name; Say "machine variable $name" $(if ($have -eq $declared[$name]) { $have } else { "WRONG: '$have', declared '$($declared[$name])'" }) }
-    $left = [System.Collections.Generic.List[string]]::new()
-    $intel = @(IntelInstalled)
-    foreach ($r in $RetireIntel) { if ($intel -contains "$($r.Id) $($r.Ver)") { $left.Add("$($r.Id) $($r.Ver)") } }
-    foreach ($r in $RetireNvidia) { if (Installed "{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}_$($r.Package)") { $left.Add("NVIDIA $($r.Package)") } }
-    foreach ($r in $RetireMsi) { if (Installed $r.Code) { $left.Add($r.Name) } }
-    foreach ($r in $RetireSdk) { if (Installed $r.Key) { $left.Add($r.Name) } }
-    foreach ($r in $RetireExe) { if (Installed $r.Key) { $left.Add($r.Key) } }
-    foreach ($r in $RetireVs) { if (Test-Path $r.Path) { $left.Add("Visual Studio $($r.Path)") } }
-    foreach ($s in $RetireServices) { if (Get-Service -Name $s -ErrorAction SilentlyContinue) { $left.Add("service $s") } }
-    foreach ($t in $RetireTasks) { if (Get-ScheduledTask | Where-Object { "$($_.TaskPath)$($_.TaskName)" -eq $t }) { $left.Add("task $t") } }
-    $distros = @(& wsl.exe --list --quiet 2>$null | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ })
-    foreach ($d in $RetireWsl) { if ($distros -contains $d) { $left.Add("WSL $d") } }
-    foreach ($d in $RetireDirs) { if (Test-Path -LiteralPath $d) { $left.Add($d) } }
-    $envKey = Get-Item $MachineEnv
-    foreach ($v in $RetireMachineVars) { if ($envKey.Property -contains $v) { $left.Add("machine variable $v") } }
-    if ($left.Count) { Say 'still present from the retire list' "$($left.Count)"; $left | ForEach-Object { "    $_" } } else { Say 'retire list' 'nothing left' }
-    if (Admin) {
-        foreach ($f in $RetireFeatures) { $feature = Get-WindowsOptionalFeature -Online -FeatureName $f -ErrorAction SilentlyContinue; if ($feature) { Say "feature $f" $feature.State } }
-    }
+    $svc = Get-Service -Name $PgService -ErrorAction SilentlyContinue
+    Say "service $PgService" $(if ($svc) { "$($svc.Status), start $($svc.StartType)" } else { 'MISSING (cluster)' })
+    if (-not (Test-Path "$PgBin\postgres.exe")) { Say 'server' "MISSING: no server at $PgBin (deps)"; return }
+    Say 'server' "$(& "$PgBin\postgres.exe" --version)   $(if (PgReady) { 'accepting connections' } else { 'NOT ACCEPTING CONNECTIONS' })"
+    if (-not (PgReady)) { return }
+    $conn = "host=127.0.0.1 port=5432 user=$PgRole dbname=postgres"
+    Say 'PostGIS' "$(& "$PgBin\psql.exe" -X $conn -Atq -c "SELECT coalesce(default_version, 'NOT INSTALLED') FROM pg_available_extensions WHERE name = 'postgis'" 2>&1 | Select-Object -Last 1)"
+    Say 'listening' ((Get-NetTCPConnection -LocalPort 5432 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { "$($_.LocalAddress):5432" } | Sort-Object -Unique) -join ' ')
+    $net = ($PgLan -split '/')[0] -replace '\.\d+$', ''
+    $addr = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -like "$net.*" } | Select-Object -First 1).IPAddress
+    if ($addr) {
+        $r = & "$PgBin\psql.exe" -X "host=$addr port=5432 user=$PgRole dbname=postgres sslmode=require" -Atq -c "SELECT 'connected, TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')" 2>&1 | Select-Object -Last 1
+        Say "this database from $PgLan, as $PgRole" "$r"
+    } else { Say "this database from $PgLan" 'this machine has no address on it' }
+    $r = & "$PgBin\psql.exe" -X ($env:LAPLACE_CONNINFO -replace 'dbname=\S+', 'dbname=postgres') -Atq -c "SELECT 'connected to '||coalesce(host(inet_server_addr()), 'local')||' ('||split_part(version(), ',', 1)||') as '||current_user||', TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')" 2>&1 | Select-Object -Last 1
+    Say "LAPLACE_CONNINFO ($(($env:LAPLACE_CONNINFO -split ' ' | Where-Object { $_ -like 'host=*' }) -replace '^host='))" "$r"
+    foreach ($line in (& "$PgBin\psql.exe" -X $conn -Atq -c "SELECT '  '||rpad(name, 46)||current_setting(name) FROM pg_settings WHERE name IN ('shared_buffers','effective_cache_size','max_wal_size','listen_addresses','ssl','data_checksums') ORDER BY name" 2>$null)) { $line }
+    ''; 'next: the Laplace builds (README: Windows); the Linux machine: sudo ./setup.sh, ./deploy.sh'
 }
 
-$known = 'sources', 'retire', 'environment', 'report'
-foreach ($p in $Parts) { if ($known -notcontains $p) { "setup.ps1 [$($known -join '|') ...]"; Stop-Transcript | Out-Null; exit 2 } }
-foreach ($p in $Parts) { & $p }
+$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'cluster', 'settings', 'access', 'report'
+foreach ($p in $Parts) { if ($known -notcontains $p) { "setup.ps1 [drop] [$(($known | Select-Object -Skip 1) -join '|') ...]"; Stop-Transcript | Out-Null; exit 2 } }
+try { foreach ($p in $Parts) { if ($p -eq 'all') { volumes; packages; rights; deps; cluster; settings; access; report } else { & $p } } }
+catch { "=== $($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"; $failed.Add("setup.ps1 stopped: $($_.Exception.Message)") }
 ''
 if ($failed.Count) { '=== failed'; $failed | ForEach-Object { "  $_" } }
-if ($script:restart) { '=== a restart finishes what was removed (Windows features, installers)' }
 "=== done   {0:HH:mm:ss}   $log" -f (Get-Date).ToUniversalTime()
 Stop-Transcript | Out-Null
 if ($failed.Count) { exit 1 }

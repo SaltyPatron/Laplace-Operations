@@ -66,6 +66,44 @@ The three code repositories sit side by side under one source root, `$LAPLACE_SR
 `$LAPLACE_DEPSRC` (the same root, unless an agent's); build trees under `$LAPLACE_BUILD`; generated data, logs and
 tier 0 under `$LAPLACE_WORK`; installed dependencies under `$LAPLACE_DEPS`; the data sets under `$LAPLACE_DATA`.
 
+## Windows (the development machine)
+
+```powershell
+pwsh -File setup.ps1                  # the machine: volumes, packages, rights, dependencies, cluster, settings, access, report
+pwsh -File setup.ps1 deps report      # one part, or several
+pwsh -File tune-pg.ps1 -Check         # the server's settings against their declaration; without -Check: apply, restart when allowed, check
+```
+
+`setup.ps1` is `setup.sh`'s counterpart: the same parts, each a declaration compared with the machine, logged under
+`$LAPLACE_WORK\logs\root`; the parts that touch the service, its rights, its settings and its access need an elevated
+PowerShell and refuse otherwise, so the rest runs as the developer. `laplace.env.ps1` is `laplace.env`'s: every name of
+the machine's (the roots, the cluster and its log, the service and its account, the role, the network, the locks) and
+what the settings' rules cannot read from the machine (what its other residents keep, the shared memory this Windows
+build maps, the log's room on a shared drive), each with the measurement that set it. `tune-pg.ps1` is `tune-pg.sh`'s:
+the settings derived from the machine the same way and checked by the same statement, so the Linux server and the
+Windows one each get their own numbers from one set of rules.
+
+What differs is only what Windows forces. No volume is made: `volumes` reports each root's drive and makes its
+directory. The toolchain is installed by hand (Visual Studio, oneAPI, CMake, Git, uv) or by the manifest: `packages`
+says what is missing and installs MSYS2's packages. There is no kernel part (huge pages stay off until the backends'
+shared-memory mapping is measured to bear them). The server is a Windows service under `NT AUTHORITY\NetworkService`;
+there is no socket, so every local connection is scram on loopback. `deps` reads the same `dependencies.tsv`: every row
+for `windows` checked out at its commit, or downloaded, verified by SHA-256 and unpacked; then every row with a `build`
+whose `proof` is missing, built and installed into its own prefix. The builds use icx under the floating-point contract
+in `toolchain/determinism.tsv`: laplace-math first (`math/`), CMake builds through `-DCMAKE_TOOLCHAIN_FILE=toolchain/laplace.cmake
+-DLAPLACE_MATH=<laplace-math.lib>`, PostgreSQL's Meson build through the native file `toolchain/meson-native.py msvc
+<laplace-math.lib>` writes, with `patches/postgresql`, and PostGIS by `toolchain/windows/postgis.sh` in MSYS2's shell
+(from the oneAPI dev shell, `MSYSTEM=MSYS MSYS2_PATH_TYPE=inherit`, `LAPLACE_MATH` set), which applies `patches/postgis`,
+configures, builds and installs into that PostgreSQL. On Windows every link ends with laplace-math and then libmmd,
+Intel's libm, kept for the exact operations only; no transcendental function in any installed binary comes from it.
+
+The Windows machine is one leg of the cross-OS check: a database the Linux machine's clients reach over `$LAPLACE_LAN`
+with TLS, and a client of the Linux machine's database (`LAPLACE_CONNINFO`); `report` tries both. The role has one
+password across the installation, the deployment target's: `access` reads it from `LAPLACE_PEER`'s operator pgpass over
+the operator's SSH key and gives it to the role here, so one pgpass line reaches both databases; the operator's pgpass
+lines for other hosts are kept. HART-DESKTOP's one-time cleanup of what earlier set-ups left is
+`toolchain/windows/retire.ps1`, not part of setup.
+
 ## Repair
 
 Every script here is a declaration compared with the machine, so repair is running it again: `sudo ./setup.sh` after a

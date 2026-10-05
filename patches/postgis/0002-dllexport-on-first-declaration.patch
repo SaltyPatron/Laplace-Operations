@@ -1,0 +1,30 @@
+diff --git a/postgis/gserialized_estimate.c b/postgis/gserialized_estimate.c
+index 54adae679..9be863e13 100644
+--- a/postgis/gserialized_estimate.c
++++ b/postgis/gserialized_estimate.c
+@@ -130,10 +130,10 @@ dimensionality cases. (2D geometry) &&& (3D column), etc.
+ 
+ 
+ /* Prototypes */
+-Datum gserialized_gist_joinsel(PG_FUNCTION_ARGS);
++PGDLLEXPORT Datum gserialized_gist_joinsel(PG_FUNCTION_ARGS);
+ Datum gserialized_gist_joinsel_2d(PG_FUNCTION_ARGS);
+ Datum gserialized_gist_joinsel_nd(PG_FUNCTION_ARGS);
+-Datum gserialized_gist_sel(PG_FUNCTION_ARGS);
++PGDLLEXPORT Datum gserialized_gist_sel(PG_FUNCTION_ARGS);
+ Datum gserialized_gist_sel_2d(PG_FUNCTION_ARGS);
+ Datum gserialized_gist_sel_nd(PG_FUNCTION_ARGS);
+ Datum gserialized_analyze_nd(PG_FUNCTION_ARGS);
+diff --git a/postgis/lwgeom_geos.c b/postgis/lwgeom_geos.c
+index 339214f0d..88f2f4ee6 100644
+--- a/postgis/lwgeom_geos.c
++++ b/postgis/lwgeom_geos.c
+@@ -59,7 +59,7 @@ Datum convexhull(PG_FUNCTION_ARGS);
+ Datum topologypreservesimplify(PG_FUNCTION_ARGS);
+ Datum ST_Difference(PG_FUNCTION_ARGS);
+ Datum boundary(PG_FUNCTION_ARGS);
+-Datum ST_SymDifference(PG_FUNCTION_ARGS);
++PGDLLEXPORT Datum ST_SymDifference(PG_FUNCTION_ARGS);
+ Datum ST_Union(PG_FUNCTION_ARGS);
+ Datum issimple(PG_FUNCTION_ARGS);
+ Datum isring(PG_FUNCTION_ARGS);
