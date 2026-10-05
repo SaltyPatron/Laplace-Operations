@@ -103,6 +103,9 @@ ssl                              on
 port                             5432
 max_connections                  100
 max_prepared_transactions        32
+# the lock table (max_locks_per_transaction x (max_connections + max_prepared_transactions)) holds every leaf and index one
+# bulk apply locks at once (2,452 relations in the partitioned schema, 2026-10-05) twice over; at 64 it held 8,448 and ran out
+max_locks_per_transaction        512
 SET
 }
 

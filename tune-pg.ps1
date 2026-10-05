@@ -103,6 +103,12 @@ function TuneDeclared {
         port                             = '5432'
         max_connections                  = '100'
         max_prepared_transactions        = '32'
+        # The lock table holds max_locks_per_transaction x (max_connections + max_prepared_transactions) locks, shared by
+        # every backend. One bulk apply (the ingest's merge, prepared as one transaction) locks every leaf and index of the
+        # partitioned schema at once: 2,452 relations in the Engine's database (2026-10-05); the monorepo's substrate is
+        # partitioned the same way. At PostgreSQL's 64 the table holds 8,448 and two applies on one server ran out of shared
+        # memory. 512 holds 67,584: two such applies, their indexes, and everything else, in 11 MB of shared memory.
+        max_locks_per_transaction        = '512'
     }
     if ($env:LAPLACE_PGTEMP) { $s['temp_tablespaces'] = 'pgtemp' }
     $s
