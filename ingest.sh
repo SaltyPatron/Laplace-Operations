@@ -33,9 +33,13 @@ command -v laplace >/dev/null || { echo "no laplace program on the path: deploy.
 # the ingest ends. Full-page images and their bytes, and the bytes of the records' own data ($log/wal.tsv: time, the
 # relation, its resource manager, blocks, full-page images, their bytes, data bytes). XLOG rows are hint-bit images.
 sql(){ psql -X "$LAPLACE_CONNINFO" -Atq -F '	' -c "$1" 9>&-; }                  # 9>&-: no query outlives the ingest holding its lock
+# Where pg_wal begins now: a minute of a heavy load can write more than max_wal_size, and a checkpoint recycles what is
+# older, so a read starts no earlier than the oldest segment still there (its name is timeline, log, segment).
+wal_oldest="SELECT (substr(n, 9, 8) || '/' || to_hex(('x' || substr(n, 17, 8))::bit(32)::bigint * pg_size_bytes(current_setting('wal_segment_size'))))::pg_lsn
+              FROM (SELECT min(name) AS n FROM pg_ls_waldir() WHERE name ~ '^[0-9A-F]{24}\$') w"
 wal_read(){ sql "WITH b AS (SELECT relfilenode, reldatabase, resource_manager, count(*) AS n, count(*) FILTER (WHERE block_fpi_length > 0) AS fpi,
                    coalesce(sum(block_fpi_length), 0) AS fb, coalesce(sum(block_data_length), 0) AS db
-                 FROM pg_get_wal_block_info('$1', '$2', false) GROUP BY 1, 2, 3)           -- grouped first: millions of blocks, a few hundred groups
+                 FROM pg_get_wal_block_info(GREATEST('$1'::pg_lsn, ($wal_oldest)), '$2', false) GROUP BY 1, 2, 3)   -- grouped first: millions of blocks, a few hundred groups
                SELECT now()::timestamp(0), coalesce(pg_partition_root(c.oid)::regclass::text, c.relname, 'relfilenode ' || b.relfilenode), b.resource_manager,
                  sum(b.n), sum(b.fpi), sum(b.fb), sum(b.db)
                FROM b LEFT JOIN pg_class c ON c.relfilenode = b.relfilenode AND b.reldatabase IN (0, (SELECT oid FROM pg_database WHERE datname = current_database()))
