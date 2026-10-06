@@ -1,15 +1,25 @@
 # The ingest, on the Operations runner: an operation someone starts, on the machine as the last Laplace-Operations
 # run left it. It builds nothing and checks out no code: the program, the recipes, the perf-caches and the database are
 # the ones that run built and deployed, so what is ingested is read by exactly what was built. One ingest per database
-# at a time; a run that was cut off is taken up by running it again.
+# at a time; a run that was cut off is taken up by running it again. With reseed, the one-click drop and full reseed:
+# the database dropped and deployed again empty (deploy.sh drop, with the code the last deployment checked out), every
+# source of LAPLACE_SOURCES ingested, the database stamped with what it was seeded from (seed-stamp.sh), and read.
+# It shares the deployment's concurrency group (laplace.yml): an ingest and a deployment queue, never collide.
 name: Laplace-Ingest
 on:
   workflow_dispatch:
     inputs:
       sources:
-        description: "sources to ingest, by name, in this order; empty for every source in recipes/order"
+        description: "sources to ingest, by name, in this order; empty for every source in recipes/order (LAPLACE_SOURCES)"
         default: ""
         required: false
+      reseed:
+        description: "drop the database first and seed it again from empty (sources are then every source of LAPLACE_SOURCES)"
+        type: boolean
+        default: false
+concurrency:
+  group: hart-server-laplace
+  cancel-in-progress: false
 env:
   LAPLACE_SRC: ${{ github.workspace }}
   LAPLACE_CONNINFO: ""   # the database is laplace.env's, never a copy a runner kept from when it was registered
@@ -20,5 +30,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations, clean: false }
+      - name: the database dropped and deployed again, empty
+        if: inputs.reseed
+        run: ./Laplace-Operations/deploy.sh drop && ./Laplace-Operations/seed-stamp.sh pending
       - name: the ingest, its status, and its measurements
-        run: ./Laplace-Operations/ingest.sh ${{ inputs.sources }}
+        env:
+          RESEED: ${{ inputs.reseed }}
+        run: if [ "$RESEED" = true ]; then ./Laplace-Operations/ingest.sh; else ./Laplace-Operations/ingest.sh ${{ inputs.sources }}; fi
+      - name: the database holds the stamp it was seeded from
+        if: inputs.reseed
+        run: ./Laplace-Operations/seed-stamp.sh seeded
+      - name: the database, read
+        if: always()
+        run: ./Laplace-Operations/verify.sh reads

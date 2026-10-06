@@ -5,7 +5,9 @@
 #
 #   sudo ./agents.sh                    every repository of $LAPLACE_REPOS: directory, environment, runner, registration, service, rights
 #   sudo ./agents.sh Laplace-postgres   one of them
-#   sudo ./agents.sh status             each runner as this machine and as GitHub see it
+#   sudo ./agents.sh status             each runner as this machine and as GitHub see it; and every repository of
+#                                       $LAPLACE_GITHUB with a self-hosted workflow, so one without a runner here, or not
+#                                       in LAPLACE_REPOS at all, is said loudly and the status fails
 #   sudo ./agents.sh remove [REPO]      unregister and remove one, or all
 #
 # Each runner: $LAPLACE_AGENT_HOME/<repo>/{runner,work,build}. Its checkouts are its workflow's workspace under work/;
@@ -80,20 +82,40 @@ EOF
   rm -f /etc/sudoers.d/laplace-agent
   say "rights" "none: root is setup.sh's, run by a person; unit root's, 644"
   # the secret that reads the private repositories it checks out beside itself
-  case $repo in Laplace-postgres|Laplace-Engine|Laplace-Operations)
+  # (Laplace-Native too: it checks out Laplace-Operations, and every code repository's main sends Laplace-Operations the
+  # repository_dispatch that deploys this machine with it)
+  case $repo in Laplace-Native|Laplace-postgres|Laplace-Engine|Laplace-Operations)
     if gh_op "secret list -R $owner/$repo" 2>/dev/null | grep -q "^LAPLACE_CHECKOUT"; then say "secret LAPLACE_CHECKOUT" "set"
     else tok=${LAPLACE_CHECKOUT_TOKEN:-$(gh_op "auth token" 2>/dev/null || true)}              # the operator's own gh credential reads them
       if [ -n "$tok" ]; then as_op "gh secret set LAPLACE_CHECKOUT -R $owner/$repo -b '$tok'" >/dev/null && say "secret LAPLACE_CHECKOUT" "set from the operator's gh login"
       else say "secret LAPLACE_CHECKOUT" "NOT SET: gh auth login, and run again"; fi; unset tok; fi ;;
   esac
 }
-status(){ part status
+status(){ part status; local missing=0 r repo local_state remote wf
   for repo in $LAPLACE_REPOS; do r=$home/$repo/runner
     local_state=$( [ -f "$r/.runner" ] && (cd "$r" && ./svc.sh status 2>/dev/null | grep -o 'active ([a-z]*)' | head -1) || echo "not registered")
     remote=$(gh_op "api repos/$owner/$repo/actions/runners --jq '.runners[] | select(.name == \"$(hostname)-$repo\") | .status + \", busy \" + (.busy|tostring)'" 2>/dev/null || echo "not seen")
     say "$repo" "here: ${local_state:-stopped}   GitHub: ${remote:-not registered}"
+    case "$local_state $remote" in *"active (running)"*online*) ;; *) [ -z "$(selfhosted "$repo")" ] || { missing=1; say "  MISSING" "$repo has self-hosted workflows ($(selfhosted "$repo" | tr '
+' ' ')) and no runner online here: sudo ./agents.sh $repo"; } ;; esac
   done
+  # every repository of the owner with a self-hosted workflow must be declared: one that is not has no runner anywhere
+  for repo in $(gh_op "repo list $owner --limit 200 --no-archived --json name --jq '.[].name'" 2>/dev/null); do
+    echo " $LAPLACE_REPOS " | grep -q " $repo " && continue
+    wf=$(selfhosted "$repo"); [ -n "$wf" ] || continue
+    if echo " ${LAPLACE_REPOS_RETIRED:-} " | grep -q " $repo "; then say "  retired" "$owner/$repo has self-hosted workflows ($(echo "$wf" | tr '
+' ' ')); LAPLACE_REPOS_RETIRED: no runner"; continue; fi
+    missing=1; say "  NOT DECLARED" "$owner/$repo has self-hosted workflows ($(echo "$wf" | tr '
+' ' ')): add it to LAPLACE_REPOS (laplace.env), then sudo ./agents.sh $repo"
+  done
+  [ "$missing" = 0 ] && say "every repository" "with a self-hosted workflow has its runner" || say "RUNNERS MISSING" "see above"
+  return $missing
 }
+# the workflows of a repository whose jobs run on a self-hosted runner (their file names), from GitHub
+selfhosted(){ local f c
+  for f in $(gh_op "api repos/$owner/$1/contents/.github/workflows --jq '.[].path'" 2>/dev/null); do
+    c=$(gh_op "api repos/$owner/$1/contents/$f --jq .content" 2>/dev/null | base64 -d 2>/dev/null) || true
+    if grep -q 'runs-on:.*self-hosted' <<<"$c"; then basename "$f"; fi; done; }
 remove(){ repo=$1; part "remove $repo"; r=$home/$repo/runner
   [ -d "$r" ] || { say "$repo" "nothing here"; return; }
   ( cd "$r"; [ -f .service ] && { ./svc.sh stop >/dev/null 2>&1 || true; ./svc.sh uninstall >/dev/null 2>&1 || true; } )
@@ -105,9 +127,10 @@ remove(){ repo=$1; part "remove $repo"; r=$home/$repo/runner
 }
 
 case ${1:-all} in
-  all)     for repo in $LAPLACE_REPOS; do agent "$repo"; done; status ;;
-  status)  status ;;
+  all)     for repo in $LAPLACE_REPOS; do agent "$repo"; done; rc=0; status || rc=$? ;;
+  status)  rc=0; status || rc=$? ;;
   remove)  shift; for repo in ${*:-$LAPLACE_REPOS}; do remove "$repo"; done ;;
-  *)       for repo in "$@"; do echo " $LAPLACE_REPOS " | grep -q " $repo " || { echo "$repo is not in LAPLACE_REPOS"; exit 2; }; agent "$repo"; done; status ;;
+  *)       for repo in "$@"; do echo " $LAPLACE_REPOS " | grep -q " $repo " || { echo "$repo is not in LAPLACE_REPOS"; exit 2; }; agent "$repo"; done; rc=0; status || rc=$? ;;
 esac
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
+exit ${rc:-0}

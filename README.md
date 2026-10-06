@@ -55,6 +55,48 @@ sudo ./agents.sh remove Laplace-Wiki               # unregister and remove one (
 
 `agents.sh` gives every repository its own runner on this machine, all as `$LAPLACE_AGENT_USER` (default `laplace-runner`) under `$LAPLACE_AGENT_HOME/<repo>`: its own directory, environment (`runner/.env`: its builds and work under its directory; the machine's dependencies, data and database), registration (named `<host>-<repo>`, labelled `laplace,<repo>`), and service. No runner has root or any sudo rule: `agents.sh` grants none and `setup.sh rights` removes any that names one; each has the shared group and nothing more. Registration takes a token per repository: `gh` logged in as an administrator, or `LAPLACE_AGENT_TOKEN_<REPO>`. Laplace-postgres, Laplace-Engine and Laplace-Operations check out the repositories they build beside themselves; they are private and a workflow's own token reads only its repository, so `agents.sh` puts the operator's `gh` credential (or `LAPLACE_CHECKOUT_TOKEN`) in those as the secret `LAPLACE_CHECKOUT`. Each repository's `.github/workflows/laplace.yml` is its job on its runner: Native builds with icx and gcc and runs its tests under both; postgres builds, installs into the extension directories by rename (no root: the group's right) and updates the extension in the database; Engine builds and runs its checks; Wiki builds the site; Operations runs `deploy.sh` on a push, or `deploy.sh drop` when dispatched with `drop`. `ingest.yml` runs `ingest.sh` when dispatched, with the sources to ingest as its input. The operator and the agent share `$LAPLACE_GROUP`: every shared tree is that group's, set-group-id and group-writable, so neither meets a permission.
 
+### The deployment target: every merge to main
+
+hart-server is the target every merge deploys to: the developer's gate for "does it work on another machine". A push to
+this repository's main, and a `repository_dispatch` (`main-merged`) that Laplace-Native, Laplace-postgres and
+Laplace-Engine send from their own `laplace.yml` once their CI passes on main, run `laplace.yml` here with every
+repository at its main, one deployment at a time (the concurrency group `hart-server-laplace`, which `ingest.yml` shares):
+
+| job | what |
+|---|---|
+| deploy | `seed-stamp.sh decide`, then `deploy.sh`, or `deploy.sh drop` when the database is reseeded |
+| checks | `verify.sh build`: the build's record (`fingerprint.sh`), determinism, HART-DESKTOP's record for the same commits |
+| ingest | when the policy says so: `ingest.sh` (every source of `LAPLACE_SOURCES`), then `seed-stamp.sh seeded` |
+| reads | `verify.sh reads`: `laplace status`, and `text`, `hop`, `translate`, `fills` through the indexes |
+
+Each job writes what it found to the run's summary.
+
+**The reseed policy** (`seed-stamp.sh`). A database carries, as its comment, the stamp of the code it was seeded from: a
+hash of the trees of Laplace-Native, Laplace-Engine (its source and recipes), Laplace-postgres and Operations'
+floating-point contract (`toolchain/`, `math/`, `patches/`, `dependencies.tsv`). Documentation, workflows, tests and the
+firmware do not count, since none of them changes what is recorded. When the stamp the code makes differs from the
+database's, or the database has none, the deployment drops the database and seeds it again from empty. The data on the
+target is expendable; the repository variable `LAPLACE_RESEED=never` stops automatic reseeds. A reseed that was cut
+off leaves the stamp `pending`, and the next deployment with the same stamp picks the ingest up again without a drop.
+By hand, in one click: `laplace.yml` with `drop` (empty, no ingest) or `reseed` (drop, then every source), or
+`ingest.yml` with `reseed`.
+
+**Does it work on another machine** (`verify.sh`, `fingerprint.sh`, `fingerprint.ps1`). Every deployment writes the
+record of its build: the commits, tier 0 and its flags made afresh, the highway, and, for each source of
+`LAPLACE_DETERMINISM`, the claims its recipes make, counted and hashed as a sorted set. Each source is decomposed twice,
+and the two runs must agree. The record is published on the branch `fingerprints` of this repository, at
+`<native>-<engine>/<machine>.txt`, and compared with every other machine's record for the same commits. On
+HART-DESKTOP, `pwsh -File fingerprint.ps1`, run after `build.ps1` at the commits a deployment names, writes the
+Windows record beside it, and either side reports any field that differs.
+
+`laplace.sh`, installed as the operator's `~/.local/bin/laplace`, runs the program the last deployment built, with its
+code, recipes and environment.
+
+The root steps are `sudo ./setup.sh`. Its part `site` runs the monorepo's `deploy/linux/site-host.sh` (the API and SPA
+over `laplace-mono` behind nginx). Its part `agents` runs `agents.sh`, which gives every repository of `LAPLACE_REPOS` its
+runner. `agents.sh status` fails when any repository of the owner with a self-hosted workflow has no runner here, or is
+missing from `LAPLACE_REPOS` (except `LAPLACE_REPOS_RETIRED`).
+
 ## Build
 
 ```sh
