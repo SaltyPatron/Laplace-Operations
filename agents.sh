@@ -70,8 +70,9 @@ EOF
     var=LAPLACE_AGENT_TOKEN_$(echo "$repo" | tr - _); token=${!var:-}
     [ -n "$token" ] || token=$(gh_op "api -X POST repos/$owner/$repo/actions/runners/registration-token --jq .token" 2>/dev/null || true)
     if [ -z "$token" ]; then say "registration" "NO TOKEN: gh auth login as an administrator of $owner/$repo, or $var=..., and run again"; return; fi
-    as_agent "cd $r && ./config.sh --unattended --url https://github.com/$owner/$repo --token $token --name $name --labels $LAPLACE_AGENT_LABELS,$repo --work $d/work --replace" >/dev/null
-    say "registration" "$name on $owner/$repo, labels $LAPLACE_AGENT_LABELS,$repo"
+    lv=LAPLACE_AGENT_LABELS_$(echo "$repo" | tr - _); labels=$LAPLACE_AGENT_LABELS,$repo${!lv:+,${!lv}}
+    as_agent "cd $r && ./config.sh --unattended --url https://github.com/$owner/$repo --token $token --name $name --labels $labels --work $d/work --replace" >/dev/null
+    say "registration" "$name on $owner/$repo, labels $labels"
   else say "registration" "$(sed -n 's/.*"agentName": *"\([^"]*\)".*/\1/p' "$r/.runner") on $owner/$repo"; fi
   # its service
   ( cd "$r"; [ -f .service ] || ./svc.sh install "$user" >/dev/null; ./svc.sh status 2>/dev/null | grep -q "active (running)" || ./svc.sh start >/dev/null )
@@ -103,8 +104,6 @@ status(){ part status; local missing=0 r repo local_state remote wf
   for repo in $(gh_op "repo list $owner --limit 200 --no-archived --json name --jq '.[].name'" 2>/dev/null); do
     echo " $LAPLACE_REPOS " | grep -q " $repo " && continue
     wf=$(selfhosted "$repo"); [ -n "$wf" ] || continue
-    if echo " ${LAPLACE_REPOS_RETIRED:-} " | grep -q " $repo "; then say "  retired" "$owner/$repo has self-hosted workflows ($(echo "$wf" | tr '
-' ' ')); LAPLACE_REPOS_RETIRED: no runner"; continue; fi
     missing=1; say "  NOT DECLARED" "$owner/$repo has self-hosted workflows ($(echo "$wf" | tr '
 ' ' ')): add it to LAPLACE_REPOS (laplace.env), then sudo ./agents.sh $repo"
   done
