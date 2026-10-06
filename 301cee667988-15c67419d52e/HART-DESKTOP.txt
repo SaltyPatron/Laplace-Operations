@@ -1,0 +1,16 @@
+machine     HART-DESKTOP
+os          Windows 10.0.26200.0
+cpu         Intel(R) Core(TM) i9-14900KS
+compiler    Intel(R) oneAPI DPC++/C++ Compiler 2026.1.0 (2026.1.0.20260617)
+made        2026-10-06T20:11:08Z
+native      301cee667988
+engine      15c67419d52e
+postgres    ec2178b1a88f
+operations  abe57c557978
+tier0       f8b0882f3483f0db7f5191c230ae74ed42231ff1194a59f908658e234746b047
+flags       0cac44d487ef1edd538ae432a76d1bf5105e29a8e6c33df4a039c195d01bf2e1
+highway     
+claims      iso-639 141947 9110dab8194c6123
+determinism iso-639 same: twice 141947 claims, 9110dab8194c6123
+claims      open-english-wordnet 388534 1f086c46311eef93
+determinism open-english-wordnet DIFFERS: 388534 claims 1f086c46311eef93, then 388496 claims a1bbd0d885bd4307
