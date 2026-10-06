@@ -1,37 +1,111 @@
-# Laplace-Operations on its runner: the deployment (deploy.sh: the server's settings, the build, the perf-caches,
-# the database's schema and extension, and its status). Settings are tune-pg.sh, as the role: the runner has no root.
-# Volumes, packages, kernel and access stay setup.sh, run by a person. On a push, or when
-# someone runs it; run by hand with drop, the database is dropped and made again, empty, by the role before it is
-# deployed. No data is loaded: the ingest is a workflow of its own (ingest.yml). The three code repositories are
-# checked out beside this one (private: the secret LAPLACE_CHECKOUT); builds and work are the runner's own
-# (runner/.env); the database is the machine's. A deployment never runs under an ingest: deploy.sh leaves.
+# Laplace-Operations on its runner: hart-server, the deployment target every merge to main deploys to — the developer's
+# gate for "does it work on another machine". Run on a push to this repository's main, and on a repository_dispatch
+# (main-merged) that Laplace-Native, Laplace-postgres and Laplace-Engine send when their own CI passes on main, so the
+# machine is deployed with every repository at its main. The jobs, on the one runner, one deployment at a time:
+#   deploy   the reseed policy (seed-stamp.sh decide), then deploy.sh, or deploy.sh drop when the database is reseeded:
+#            the build, the perf-caches, the database with its schema and extension, its status (no data)
+#   checks   verify.sh build: the build's record (tier 0 and flags made afresh, the highway, the claims of
+#            $LAPLACE_DETERMINISM decomposed twice), against HART-DESKTOP's record for the same commits; no database
+#   ingest   when the policy says so: ingest.sh, every source of $LAPLACE_SOURCES (laplace.env), and the stamp written
+#   reads    verify.sh reads: laplace status and reads through the indexes
+# The reseed policy: a database carries the stamp of the code it was seeded from (seed-stamp.sh); when Laplace-Native,
+# Laplace-Engine's source or recipes, Laplace-postgres or Operations' floating-point contract change, the stamp
+# changes, and the database is dropped and seeded again from empty (the data on this machine is expendable; the
+# repository variable LAPLACE_RESEED=never stops it). By hand: drop (empty, no ingest) or reseed (drop and every source).
+# The three code repositories are checked out beside this one (private: the secret LAPLACE_CHECKOUT); builds and work are
+# the runner's own (runner/.env); the database is laplace.env's. A deployment never runs under an ingest (deploy.sh
+# leaves): ingest.yml shares this workflow's concurrency group, so the two queue rather than collide.
 name: Laplace-Operations
 on:
   push:
     branches: [main]
+  repository_dispatch:
+    types: [main-merged]
   workflow_dispatch:
     inputs:
       drop:
         description: "drop the database and make it again, empty, before deploying (deploy.sh drop): everything in it is lost"
         type: boolean
         default: false
+      reseed:
+        description: "drop the database and seed it again: every source of LAPLACE_SOURCES (laplace.env; empty: every source in recipes/order)"
+        type: boolean
+        default: false
+concurrency:
+  group: hart-server-laplace
+  cancel-in-progress: false
 env:
   LAPLACE_SRC: ${{ github.workspace }}
   LAPLACE_CONNINFO: ""   # the database is laplace.env's, never a copy a runner kept from when it was registered
+  LAPLACE_RESEED: ${{ vars.LAPLACE_RESEED || 'auto' }}
 jobs:
   deploy:
     runs-on: [self-hosted, laplace, Laplace-Operations]
+    timeout-minutes: 240
+    outputs:
+      ingest: ${{ steps.policy.outputs.ingest }}
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations }
       - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-Native", path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+        with: { repository: "${{ github.repository_owner }}/Laplace-Native", ref: main, path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-postgres", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+        with: { repository: "${{ github.repository_owner }}/Laplace-postgres", ref: main, path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-Engine", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
-      - name: the build, the perf-caches, the database with its schema and extension, and its status
+        with: { repository: "${{ github.repository_owner }}/Laplace-Engine", ref: main, path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - name: the reseed policy
+        id: policy
         env:
           DROP: ${{ inputs.drop }}
+          RESEED: ${{ inputs.reseed }}
+        run: |
+          GITHUB_OUTPUT= ./Laplace-Operations/seed-stamp.sh decide > policy.txt; cat policy.txt
+          drop=$(sed -n 's/^drop=//p' policy.txt); ingest=$(sed -n 's/^ingest=//p' policy.txt); why=$(sed -n 's/^why=//p' policy.txt)
+          if [ "$RESEED" = true ]; then drop=true ingest=true why="dispatched with reseed: dropped, and every source seeded again"
+          elif [ "$DROP" = true ]; then drop=true ingest=false why="dispatched with drop: made again empty, no ingest"; fi
+          echo "drop=$drop" >> "$GITHUB_OUTPUT"; echo "ingest=$ingest" >> "$GITHUB_OUTPUT"
+          { echo "## hart-server: the deployment"; echo
+            echo "- triggered by: ${{ github.event_name }} ${{ github.event.client_payload.repository }} ${{ github.event.client_payload.sha }}"
+            echo "- reseed policy (LAPLACE_RESEED=$LAPLACE_RESEED): drop $drop, ingest $ingest: $why"; echo
+            echo '```'; ./Laplace-Operations/seed-stamp.sh show; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: the build, the perf-caches, the database with its schema and extension, and its status
+        env:
+          DROP: ${{ steps.policy.outputs.drop }}
         run: |
           if [ "$DROP" = true ]; then ./Laplace-Operations/deploy.sh drop; else ./Laplace-Operations/deploy.sh; fi
+      - name: a database dropped for a reseed carries the stamp it is being seeded to
+        if: steps.policy.outputs.drop == 'true' && steps.policy.outputs.ingest == 'true'
+        run: ./Laplace-Operations/seed-stamp.sh pending
+  checks:
+    needs: deploy
+    runs-on: [self-hosted, laplace, Laplace-Operations]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: Laplace-Operations, clean: false }
+      - name: does it work on another machine (the build, determinism, HART-DESKTOP's record)
+        env:
+          LAPLACE_FINGERPRINT_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
+        run: ./Laplace-Operations/verify.sh build
+  ingest:
+    needs: [deploy, checks]
+    if: always() && needs.deploy.result == 'success' && needs.deploy.outputs.ingest == 'true'
+    runs-on: [self-hosted, laplace, Laplace-Operations]
+    timeout-minutes: 7200
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: Laplace-Operations, clean: false }
+      - name: the ingest, its status, and its measurements
+        run: ./Laplace-Operations/ingest.sh
+      - name: the database holds the stamp it was seeded from
+        run: ./Laplace-Operations/seed-stamp.sh seeded
+  reads:
+    needs: [deploy, ingest]
+    if: always() && needs.deploy.result == 'success' && needs.ingest.result != 'failure' && needs.ingest.result != 'cancelled'
+    runs-on: [self-hosted, laplace, Laplace-Operations]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: Laplace-Operations, clean: false }
+      - name: the database, read
+        run: ./Laplace-Operations/verify.sh reads

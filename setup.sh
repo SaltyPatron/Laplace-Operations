@@ -2,7 +2,8 @@
 # The machine Laplace runs on, declared once and converged: the one step that needs root (Operations: Setup, Database).
 #
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
-#   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access | report
+#   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
+#                              site | agents | report
 #   sudo LAPLACE_DROP=/data/pgdata ./setup.sh drop all
 #                              the cluster dropped and made again, empty: never part of all, and named to be dropped
 #
@@ -214,9 +215,9 @@ EOF
 # are root's and read-only; the shared group holds people, root and the agent, never another service's account (it
 # would get the role's password in its ~/.pgpass). What earlier set-ups left (LEGACY) is removed: units of clusters
 # and services that are gone, the sudo rules and helpers that pointed at them, and the directories those rules would
-# let the group create and run as root.
+# let the group create and run as root. /opt/laplace and the nginx site laplace are the monorepo's site again (site).
 LEGACY_UNITS="laplace-postgresql.service laplace-refactor-postgresql.service laplace-lichess.service laplace-stripe.service laplace-pg-log-prune.service laplace-pg-log-prune.timer"
-LEGACY_PATHS="/opt/laplace /usr/local/libexec/laplace-managed-deploy /usr/local/libexec/laplace-service-control /var/lib/laplace-managed /var/lib/laplace-mcp /var/log/laplace-mcp /etc/nginx/sites-enabled/laplace-managed /etc/nginx/sites-available/laplace-managed /etc/nginx/sites-available/laplace /build"
+LEGACY_PATHS="/usr/local/libexec/laplace-managed-deploy /usr/local/libexec/laplace-service-control /var/lib/laplace-managed /var/lib/laplace-mcp /var/log/laplace-mcp /etc/nginx/sites-enabled/laplace-managed /etc/nginx/sites-available/laplace-managed /build"
 LEGACY_USERS="laplace-mcp laplace-lichess"
 rights(){ part rights
   for f in /etc/sudoers.d/*; do [ -f "$f" ] || continue
@@ -299,6 +300,15 @@ access(){ part access
   if command -v ufw >/dev/null && ufw status | grep -q "^Status: active"; then ufw status | grep -q "5432/tcp.*$LAPLACE_LAN" || { ufw allow from "$LAPLACE_LAN" to any port 5432 proto tcp >/dev/null; say "ufw" "5432/tcp from $LAPLACE_LAN"; }; fi
   q "SELECT '  '||rpad(type, 10)||rpad(array_to_string(user_name, ','), 10)||rpad(coalesce(address, 'socket'), 18)||auth_method||coalesce('   '||error, '') FROM pg_hba_file_rules ORDER BY rule_number"
 }
+# The monorepo's site (SaltyPatron/Laplace: the API and the SPA over the database laplace-mono, behind nginx): its
+# directories, unit, restart path and nginx site are declared by the monorepo's own host script, run here as root.
+site(){ part site
+  m=${LAPLACE_MONOREPO:-$LAPLACE_SRC/Laplace}; s=$m/deploy/linux/site-host.sh
+  [ -f "$s" ] || { say "site" "no $s: git clone https://github.com/$LAPLACE_GITHUB/Laplace $m"; return 0; }
+  bash "$s"; }
+# The repositories' agents: one runner for every repository with a self-hosted workflow (agents.sh, which fails its
+# status when one has none).
+agents(){ part agents; SUDO_USER=$op bash "$here/agents.sh" all; }
 report(){ part report
   say "server" "$($PGBIN/postgres --version)   $(systemctl is-active "$SERVICE.service")"
   say "PostGIS" "$(q "SELECT default_version FROM pg_available_extensions WHERE name = 'postgis'")"
@@ -306,14 +316,14 @@ report(){ part report
   addr=$(ip -4 -o addr | awk -v lan="$LAPLACE_LAN" '{split(lan, a, "."); if ($4 ~ "^"a[1]"\\."a[2]"\\."a[3]"\\.") {print $4; exit}}' | cut -d/ -f1)
   say "from the network, as $op" "$(as_op "$PGBIN/psql -X 'host=$addr port=5432 user=$LAPLACE_ROLE dbname=postgres sslmode=require' -Atc \"SELECT 'connected, TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')\"" 2>&1 | tail -1)"
   say "over the socket, as $op" "$(as_op "$PGBIN/psql -X 'host=/tmp port=5432 user=$LAPLACE_ROLE dbname=postgres' -Atc \"SELECT 'connected as '||current_user\"" 2>&1 | tail -1)"
-  echo; echo "next, as $op: ./deploy.sh;   the repositories' agents: sudo ./agents.sh"
+  echo; echo "next, as $op: ./deploy.sh (or a push to main: every repository's main deploys this machine)"
 }
 
 parts=${*:-all}
-for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|report) ;;
-  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|report ...]"; exit 2 ;; esac; done
+for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report) ;;
+  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
-  all) volumes; packages; rights; kernel; deps; cluster; settings; access; report ;;
+  all) volumes; packages; rights; kernel; deps; cluster; settings; access; site; agents; report ;;
   *) "$p" ;;
 esac; done
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
