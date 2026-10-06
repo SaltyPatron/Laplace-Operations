@@ -1,0 +1,53 @@
+#Requires -Version 7
+<#
+  Laplace on Windows, from an empty server to a Laplace database ready to be loaded: deploy.sh's counterpart. The build,
+  the perf-caches (tier 0 and its flags once, the highway every time), the grammars, the database with its extension and
+  schema, and its status. No data is loaded here. Everything it does can be done again.
+    pwsh -File deploy.ps1                                        the database laplace.env.ps1 names
+    $env:LAPLACE_CONNINFO = '... dbname=NAME'; pwsh -File deploy.ps1   another database; made if the server does not have it
+    pwsh -File deploy.ps1 drop                                   the database dropped first and made again, empty
+  What it needs first: setup.ps1 run (the server, its settings, its access), and the data under LAPLACE_DATA. What each
+  step said is kept in $LAPLACE_WORK\logs\deploy.
+#>
+param([string]$Drop = '')
+$ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\laplace.env.ps1"
+$db = if ($env:LAPLACE_CONNINFO -match 'dbname=(\S+)') { $Matches[1] } else { 'default' }
+New-Item -ItemType Directory -Force $env:LAPLACE_LOCKS | Out-Null
+# one deployment per database at a time, whoever runs it: the lock is held open, no sharing, while this runs; the
+# second says so and leaves. Never under an ingest: it rebuilds the program the ingest runs and changes the schema.
+try { $deployLock = [IO.File]::Open((Join-Path $env:LAPLACE_LOCKS "deploy-$db.lock"), 'OpenOrCreate', 'ReadWrite', 'None') }
+catch { "a deployment of $db is already running: this one leaves"; exit 3 }
+$ingest = Join-Path $env:LAPLACE_LOCKS "ingest-$db.lock"
+if (Test-Path $ingest) { try { ([IO.File]::Open($ingest, 'Open', 'ReadWrite', 'None')).Close() } catch { "an ingest of $db is running: this deployment leaves; run it again when the ingest is done"; exit 3 } }
+
+$env:PATH = "$env:LAPLACE_BUILD\Laplace-Engine\icx-release;$env:LAPLACE_PG_DIR\bin;$env:LAPLACE_ICU_DIR\bin64;$env:PATH"
+$psql = Join-Path $env:LAPLACE_PG_DIR 'bin\psql.exe'
+# deploy.ps1 drop: the database dropped and made again, empty, by the role, which may drop databases (the cluster
+# itself is setup.ps1 drop's, run by a person)
+if ($Drop -eq 'drop') {
+    if (-not $db -or $db -eq 'postgres' -or $db -eq 'default') { "deploy.ps1 drop: LAPLACE_CONNINFO names no database of Laplace's"; exit 2 }
+    & $psql -X ($env:LAPLACE_CONNINFO -replace 'dbname=\S+', 'dbname=postgres') -v ON_ERROR_STOP=1 -qc "DROP DATABASE IF EXISTS `"$db`" WITH (FORCE)"
+    if ($LASTEXITCODE) { exit 1 }
+    "=== $db dropped: it is made again below"
+}
+$log = Join-Path $env:LAPLACE_WORK ("logs\deploy\{0:yyyyMMddTHHmmssZ}" -f (Get-Date).ToUniversalTime()); New-Item -ItemType Directory -Force $log | Out-Null
+function Step([string]$name, [scriptblock]$body) {
+    ''; "=== $name   {0:HH:mm:ss}" -f (Get-Date).ToUniversalTime()
+    $global:LASTEXITCODE = 0
+    & $body 2>&1 | Where-Object { "$_" -notmatch '^OMP: ' } | Tee-Object -FilePath (Join-Path $log "$name.log")
+    if ($LASTEXITCODE) { "=== $name did not finish; what it said is in $log\$name.log"; exit 1 }
+}
+
+Step tune-pg  { & pwsh.exe -NoProfile -File (Join-Path $PSScriptRoot 'tune-pg.ps1') }       # the server's settings: apply, reload, check. a drift fails the deploy
+Step build    { & pwsh.exe -NoProfile -File (Join-Path $PSScriptRoot 'build.ps1') install }
+if (-not (Test-Path $env:LAPLACE_TIER0)) { Step tier0 { & laplace.exe tier0 } }
+if (-not (Test-Path ($env:LAPLACE_TIER0 -replace '\.bin$', '.flags'))) { Step flags { & laplace.exe flags } }
+Step highway  { & laplace.exe highway }                                                     # seconds; always current with the generator and the resources
+if (-not (Get-ChildItem $env:LAPLACE_GRAMMARS -ErrorAction SilentlyContinue)) {
+    Step grammars { & 'C:\Program Files\Git\bin\bash.exe' (Join-Path $env:LAPLACE_SRC 'Laplace-Engine\tools\build_grammars.sh') $env:LAPLACE_GRAMMAR_SRC $env:LAPLACE_GRAMMARS }
+}
+Step deploy   { & laplace.exe deploy }
+Step status   { & laplace.exe status }
+$deployLock.Close()
+''; "=== done   {0:HH:mm:ss}   $log" -f (Get-Date).ToUniversalTime()
