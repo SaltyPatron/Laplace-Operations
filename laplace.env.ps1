@@ -43,6 +43,10 @@ Set-Default LAPLACE_PG_BUFFERS_MAX '1GB'    # the largest shared memory this Win
 Set-Default LAPLACE_PGWAL_ROOM     '32GB'   # the log's bound when it shares its drive (D: holds the heap, the sources and the models); a dedicated drive gets half of itself
 Set-Default LAPLACE_PG_PRELOAD     'pg_stat_statements,auto_explain,laplace_substrate'   # the libraries the server loads at start: observability (tune-pg.sh), and the monorepo's substrate, which this server also serves (database laplace-mono)
 Set-Default LAPLACE_PG_LIBDIRS     'D:\Data\Laplace\deploy\lib'   # where the monorepo installs its extension DLLs (scripts\win\install-extensions.cmd); a preload library is declared only once its DLL is there
+# What an ingest decomposes at once (laplace ingest: LAPLACE_BATCH_MB, 1024 unless set): the batch's node table lives in
+# memory, and an XML source spends far more memory than its bytes. This machine has 13 GB left after the llama
+# services' 34 GB; FrameNet's 849 MB as one batch ran out of it (realloc: Not enough space, 2026-10-05). 256 MB fits.
+Set-Default LAPLACE_BATCH_MB       '256'
 
 # The toolchain: the developer shell (Visual Studio's vcvars64, oneAPI, CMake, the manifest's build tools) and the
 # MSYS2 that builds PostGIS (toolchain\windows\postgis.sh).
