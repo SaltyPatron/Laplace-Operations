@@ -146,6 +146,36 @@ the operator's SSH key and gives it to the role here, so one pgpass line reaches
 lines for other hosts are kept. HART-DESKTOP's one-time cleanup of what earlier set-ups left is
 `toolchain/windows/retire.ps1`, not part of setup.
 
+## The chess lab's conventional reference
+
+Stockfish, fastchess, Ordo, Lc0, Lc0's networks and the opening suites are rows of `dependencies.tsv`, each pinned by
+commit or by SHA-256 (a `data` row is a file the lab reads, fetched into `$LAPLACE_DATA`). fastchess conducts matches,
+SPRT and the ladder; cutechess stays for the GUI (Laplace-Wiki, Sequence/Conflicts.md K1). Syzygy tables are not
+provisioned here: an engine probes them as a provider, and they are not content Laplace depends on.
+
+```sh
+sudo ./setup.sh chess                 # Linux: chess/provision.sh as the operator (2 cores, niced), then the links in /usr/local/bin
+chess/provision.sh report             # what is installed: each program by SHA-256, Stockfish's bench, the data rows
+```
+
+On Linux Stockfish is built with `make profile-build ARCH=$LAPLACE_STOCKFISH_ARCH` (default `x86-64-bmi2`) and
+`$LAPLACE_STOCKFISH_CXX` (default `g++-12`), and is installed only when its bench prints the generation's node count
+(2497913 for sf_19); Lc0 is built from its tag with the plain CUDA backend (fp32 on hart-server's GTX 1080 Ti) when
+the machine has an NVIDIA GPU. On Windows `setup.ps1 deps` unpacks fastchess, Ordo and Lc0's CUDA 12 package and
+fetches the data rows; Stockfish there is the monorepo's `install-stockfish.py`.
+
+The RTX 4060 Ti on HART-DESKTOP is shared with the llama.cpp embedders code search depends on, so it has two modes,
+switched explicitly and without elevation (the operator holds start, stop and query on the three services):
+
+```powershell
+pwsh -File chess\chess-gpu.ps1 status     # the services, their /health, the card's free memory, any Lc0
+pwsh -File chess\chess-gpu.ps1 on         # chess-GPU mode: the embedders stopped, the card free for Lc0
+pwsh -File chess\chess-gpu.ps1 off        # index mode, the default and what a reboot returns to
+```
+
+Each switch is journaled in `$LAPLACE_WORK\logs\chess-gpu.tsv` for the match generation's receipt. Lc0 is never a
+service: the conductor starts it per match, only in chess-GPU mode.
+
 ## Repair
 
 Every script here is a declaration compared with the machine, so repair is running it again: `sudo ./setup.sh` after a

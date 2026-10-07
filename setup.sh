@@ -4,6 +4,7 @@
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
 #                              site | agents | report
+#   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
 #   sudo LAPLACE_DROP=/data/pgdata ./setup.sh drop all
 #                              the cluster dropped and made again, empty: never part of all, and named to be dropped
 #
@@ -309,6 +310,17 @@ site(){ part site
 # The repositories' agents: one runner for every repository with a self-hosted workflow (agents.sh, which fails its
 # status when one has none).
 agents(){ part agents; SUDO_USER=$op bash "$here/agents.sh" all; }
+# The chess lab's conventional reference (dependencies.tsv's chess rows): Stockfish built with profile-guided
+# optimization, fastchess, Ordo, Lc0 with CUDA where there is an NVIDIA GPU, Lc0's networks and the opening suites,
+# built and fetched as the operator by chess/provision.sh at $LAPLACE_CHESS_JOBS cores. Not part of all: a database
+# host needs none of it, and it is named to be run.
+chess(){ part chess
+  as_op "LAPLACE_CHESS_JOBS=${LAPLACE_CHESS_JOBS:-2} $here/chess/provision.sh" || say "chess" "INCOMPLETE: $LAPLACE_WORK/chess-build"
+  # the programs on everyone's PATH, which only root may link
+  pending=$LAPLACE_WORK/chess-build/links.pending
+  if [ -s "$pending" ]; then while IFS=$'\t' read -r target name; do ln -sfn "$target" "$PREFIX/bin/$name"; say "$PREFIX/bin/$name" "-> $target"; done < "$pending"; rm -f "$pending"; fi
+  as_op "$here/chess/provision.sh report"
+}
 report(){ part report
   say "server" "$($PGBIN/postgres --version)   $(systemctl is-active "$SERVICE.service")"
   say "PostGIS" "$(q "SELECT default_version FROM pg_available_extensions WHERE name = 'postgis'")"
@@ -320,8 +332,8 @@ report(){ part report
 }
 
 parts=${*:-all}
-for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report) ;;
-  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report ...]"; exit 2 ;; esac; done
+for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report|chess) ;;
+  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report|chess ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
   all) volumes; packages; rights; kernel; deps; cluster; settings; access; site; agents; report ;;
   *) "$p" ;;
