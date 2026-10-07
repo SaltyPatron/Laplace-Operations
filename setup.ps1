@@ -622,6 +622,35 @@ function services {
         }
     }
 }
+# The inbound rules this machine's endpoints need, each one named rule, TCP, from the one client that calls it
+# (LAPLACE_FIREWALL: name=port@client;...): the engine endpoint (laplace-uci behind LaplaceEngines) for the deployment
+# target. Created when missing, corrected when its port, client or profile differs, otherwise left alone.
+function firewall {
+    Part 'firewall'
+    if (-not $Status -and -not (Elevated 'firewall')) { return }
+    foreach ($spec in ($env:LAPLACE_FIREWALL -split ';' | ForEach-Object Trim | Where-Object { $_ })) {
+        if ($spec -notmatch '^(?<name>[^=]+)=(?<port>\d+)@(?<client>[^@]+)$') { Say $spec 'UNREADABLE: name=port@client'; $failed.Add("firewall: $spec"); continue }
+        $name = "Laplace-$($Matches.name)"; $port = $Matches.port; $client = $Matches.client
+        Attempt "rule $name" {
+            $r = Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue
+            if (-not $r) {
+                if ($Status) { Say $name "MISSING: TCP $port from $client (elevated, setup.ps1 firewall)"; return }
+                New-NetFirewallRule -Name $name -DisplayName "Laplace $($Matches.name) $port from $client" -Direction Inbound -Protocol TCP `
+                    -LocalPort $port -RemoteAddress $client -Action Allow -Profile Private | Out-Null
+                Say $name "made: TCP $port from $client, private networks"; return
+            }
+            $p = $r | Get-NetFirewallPortFilter; $a = $r | Get-NetFirewallAddressFilter
+            $ok = $r.Enabled -eq 'True' -and $r.Direction -eq 'Inbound' -and $r.Action -eq 'Allow' -and $p.Protocol -eq 'TCP' -and "$($p.LocalPort)" -eq $port `
+                -and "$($a.RemoteAddress)" -eq $client -and "$($r.Profile)" -eq 'Private'
+            if ($ok) { Say $name "as declared: TCP $port from $client"; return }
+            if ($Status) { Say $name "DIFFERS (port $($p.LocalPort), from $($a.RemoteAddress), $($r.Profile)): elevated, setup.ps1 firewall"; return }
+            Set-NetFirewallRule -Name $name -Enabled True -Direction Inbound -Action Allow -Profile Private
+            $r | Get-NetFirewallPortFilter | Set-NetFirewallPortFilter -Protocol TCP -LocalPort $port
+            $r | Get-NetFirewallAddressFilter | Set-NetFirewallAddressFilter -RemoteAddress $client
+            Say $name "corrected: TCP $port from $client, private networks"
+        }
+    }
+}
 # The copy-off of this machine's drives to the deployment target (backup\: jobs.psd1 says what goes where; copyoff.ps1
 # hashes and copies a set; run.ps1 runs every set), run by the scheduled task LAPLACE_BACKUP_TASK as the operator:
 # interactive, not elevated, with no time limit, one instance at a time, no trigger (Start-ScheduledTask runs it), in a
@@ -680,14 +709,14 @@ function backup {
     }
 }
 
-$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'cluster', 'settings', 'access', 'report', 'shares', 'services', 'backup', 'status'
+$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'cluster', 'settings', 'access', 'report', 'shares', 'services', 'firewall', 'backup', 'status'
 foreach ($p in $Parts) { if ($known -notcontains $p) { "setup.ps1 [drop] [$(($known | Select-Object -Skip 1) -join '|') ...]"; Stop-Transcript | Out-Null; exit 2 } }
 # status: the desktop's own parts named with it (all three, when none is) report and change nothing
 $Status = $Parts -contains 'status'
 if ($Status) {
-    $Parts = @($Parts | Where-Object { $_ -ne 'status' }); if (-not $Parts.Count) { $Parts = 'shares', 'services', 'backup' }
-    $other = @($Parts | Where-Object { $_ -notin 'shares', 'services', 'backup' })
-    if ($other.Count) { "setup.ps1 status reports shares, services and backup; $($other -join ', ') has none (report)"; Stop-Transcript | Out-Null; exit 2 }
+    $Parts = @($Parts | Where-Object { $_ -ne 'status' }); if (-not $Parts.Count) { $Parts = 'shares', 'services', 'firewall', 'backup' }
+    $other = @($Parts | Where-Object { $_ -notin 'shares', 'services', 'firewall', 'backup' })
+    if ($other.Count) { "setup.ps1 status reports shares, services, firewall and backup; $($other -join ', ') has none (report)"; Stop-Transcript | Out-Null; exit 2 }
 }
 try { foreach ($p in $Parts) { if ($p -eq 'all') { volumes; packages; rights; deps; cluster; settings; access; report } else { & $p } } }
 catch { "=== $($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"; $failed.Add("setup.ps1 stopped: $($_.Exception.Message)") }

@@ -44,6 +44,7 @@ Set-Default LAPLACE_SHARE_HOST   'hart-server'                              # se
 Set-Default LAPLACE_SHARE_USER   'ahart'                                    # its SMB user: the Credential Manager entry's
 Set-Default LAPLACE_SHARES       'vault,archive,backup,inbox'               # \\<host>\<share>, each checked
 Set-Default LAPLACE_GPU_SERVICES 'llama-embedding,llama-embedding-text,llama-reranker,llama-generative'
+Set-Default LAPLACE_FIREWALL     'engines=5190@192.168.1.2'                 # inbound rules, name=port@client;...: the engine endpoint for hart-server
 Set-Default LAPLACE_BACKUP_TASK  'copyoff'                                  # the scheduled task that runs backup\run.ps1
 Set-Default LAPLACE_BACKUP_LOGS  'D:\Logs\copyoff'                          # its logs, manifests, robocopy logs and patches
 Set-Default LAPLACE_BACKUP_JOBS  "$PSScriptRoot\backup\jobs.psd1"           # what it copies, where to
