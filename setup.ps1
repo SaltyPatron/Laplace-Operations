@@ -13,8 +13,9 @@
                                            the cluster dropped and made again, empty: never part of all, and named to be dropped
     pwsh -File setup.ps1 shares            the desktop's own parts, never part of all: shares (the deployment target's
     pwsh -File setup.ps1 services          shares answer by UNC path, with a credential), services (the operator starts and
-    pwsh -File setup.ps1 backup            stops the GPU services; elevated), backup (the copy-off task, backup\)
-    pwsh -File setup.ps1 backup status     status with any of them (alone: all three) reports and changes nothing
+    pwsh -File setup.ps1 firewall          stops the GPU services; elevated), firewall (the inbound rules of
+    pwsh -File setup.ps1 backup            LAPLACE_FIREWALL; elevated), backup (the copy-off task, backup\)
+    pwsh -File setup.ps1 backup status     status with any of them (alone: all four) reports and changes nothing
 
   What differs from Linux is only what Windows forces: a drive is not made here (no volumes to create, so volumes
   reports the drives and makes the directories); the toolchain is installed by hand or by the manifest (packages says

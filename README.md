@@ -169,8 +169,9 @@ be run, says what it changed, changes nothing on a second run, and with `status`
 ```powershell
 pwsh -File setup.ps1 shares           # hart-server's shares answer by UNC path, with a credential
 pwsh -File setup.ps1 services         # elevated: the operator may start, stop and query the GPU services
+pwsh -File setup.ps1 firewall         # elevated: the inbound rules this machine's endpoints need
 pwsh -File setup.ps1 backup           # the copy-off task, registered or updated; then its state
-pwsh -File setup.ps1 status           # all three, reporting only
+pwsh -File setup.ps1 status           # all four, reporting only
 ```
 
 **shares** checks, and makes nothing: the Credential Manager entry for `LAPLACE_SHARE_HOST` (never printed), that
@@ -182,6 +183,10 @@ operator's Explorer locations are left alone. A failed check says what to do: `c
 service of `LAPLACE_GPU_SERVICES`, so `chess\chess-gpu.ps1` switches the card without elevation. Already granted is
 known by the SID, never by the ACE's text (Windows reorders the rights). A change prints the SDDL before and after;
 `sc.exe sdset <service> "<before>"` undoes it.
+
+**firewall** makes the inbound rules of `LAPLACE_FIREWALL` (`name=port@client;…`; today `engines=5190@192.168.1.2`, the
+engine endpoint for hart-server): one named rule each, TCP, from that one client, on private networks. A missing rule
+is created and one whose port, client or profile differs is corrected; a second run changes nothing.
 
 **backup** is the copy-off of HART-DESKTOP's drives to hart-server, in `backup\`. `jobs.psd1` is the job list: each
 set (D:, then C:'s `source`) with its inbox, and each job's source, destination, robocopy exclusions, manifest
