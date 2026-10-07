@@ -311,7 +311,7 @@ site(){ part site
 # status when one has none).
 agents(){ part agents; SUDO_USER=$op bash "$here/agents.sh" all; }
 # The chess lab's conventional reference (dependencies.tsv's chess rows): Stockfish built with profile-guided
-# optimization, fastchess, Ordo, Lc0 with CUDA where there is an NVIDIA GPU, Lc0's networks and the opening suites,
+# optimization, fastchess, Ordo and the opening suites (no Lc0: the GTX 1080 Ti is off limits),
 # built and fetched as the operator by chess/provision.sh at $LAPLACE_CHESS_JOBS cores. Not part of all: a database
 # host needs none of it, and it is named to be run.
 chess(){ part chess

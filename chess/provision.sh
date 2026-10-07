@@ -1,7 +1,7 @@
 #!/bin/bash
 # The chess lab's conventional reference on Linux, from dependencies.tsv's rows for this platform: Stockfish built with
-# profile-guided optimization, fastchess, Ordo, Lc0 with CUDA when the machine has an NVIDIA GPU, Lc0's networks and the
-# opening suites. Run as the operator (sudo ./setup.sh chess runs it so); nothing here needs root.
+# profile-guided optimization, fastchess, Ordo and the
+# opening suites. Lc0 is HART-DESKTOP's only: hart-server's GTX 1080 Ti is off limits (a cooling fault). Run as the operator (sudo ./setup.sh chess runs it so); nothing here needs root.
 #
 #   chess/provision.sh            every chess row; each is made only when its proof is missing or wrong
 #   chess/provision.sh stockfish  the named rows
@@ -13,7 +13,7 @@
 # $LAPLACE_CHESS_JOBS cores (default 2), so a running reseed keeps the machine. Stockfish's bench must print the
 # generation's node count (deploy/stockfish-profiles.json in the monorepo: 2497913 for sf_19) or it is not installed.
 #
-# Lc0 and Syzygy: tablebases stay what the machine has (LAPLACE_SYZYGY); they are a provider an engine probes, not
+# Syzygy: the tablebases stay what the machine has (LAPLACE_SYZYGY); they are a provider an engine probes, not
 # content Laplace depends on, and are not provisioned here.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/.." && pwd); . "$here/laplace.env"
@@ -23,7 +23,6 @@ JOBS=${LAPLACE_CHESS_JOBS:-2}
 SF_ARCH=${LAPLACE_STOCKFISH_ARCH:-x86-64-bmi2}           # hart-server's Broadwell-E: BMI2, AVX2, no VNNI, no AVX-512
 SF_CXX=${LAPLACE_STOCKFISH_CXX:-g++-12}                  # newer than Ubuntu 22.04's default g++ 11.4
 SF_BENCH=${LAPLACE_STOCKFISH_BENCH:-2497913}
-NVCC=${LAPLACE_NVCC:-$(ls -d /usr/local/cuda/bin/nvcc 2>/dev/null || command -v nvcc || true)}
 say(){ printf '  %-34s %s\n' "$1" "$2"; }
 rows(){ awk -F'\t' '!/^#/ && NF >= 12 && $1 != "name" && $9 ~ /linux/' "$here/dependencies.tsv" | tr -d '\r'; }
 want(){ [ $# -eq 0 ] || [[ " $* " == *" $1 "* ]]; }
@@ -73,22 +72,6 @@ release(){ local name=$1 version=$2 origin=$4 pin=$6 build=$7 proof=${12}; local
   [ -x "$prefix/$proof" ] || { say "$name" "NO $proof in $prefix"; return 1; }
   link "$prefix/$proof" "$name"; say "$name $version" "at $prefix"
 }
-lc0(){ local name=$1 version=$2 origin=$3 pin=$6 proof=${12}; local prefix=$DEPS/$name/$version src=$WORK/$name
-  command -v nvidia-smi >/dev/null && nvidia-smi -L >/dev/null 2>&1 || { say "$name" "skipped: no NVIDIA GPU"; return; }
-  if [ -x "$prefix/$proof" ] && [ "$(cat "$prefix/.pin" 2>/dev/null)" = "$pin" ]; then say "$name $version" "at $prefix"; link "$prefix/$proof" lc0; return; fi
-  [ -x "$NVCC" ] || { say "$name" "NOT BUILT: no nvcc (LAPLACE_NVCC)"; return 1; }
-  checkout "$origin" "$pin" "$src"
-  # plain CUDA backend only (no cuDNN on this machine): Backend=cuda; nvcc's host compiler must be one it accepts
-  local cuda; cuda=$(dirname "$(dirname "$(readlink -f "$NVCC")")")
-  ( cd "$src" && rm -rf build && PATH=$cuda/bin:$PATH CC=gcc-11 CXX=g++-11 nice meson setup build --buildtype=release \
-      -Dplain_cuda=true -Dcudnn=false -Dblas=false -Donnx=false -Dgtest=false -Dnative_cuda=false \
-      -Dcc_cuda="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d .)" -Dnvcc_ccbin=g++-11 \
-      -Dcudnn_libdirs="$cuda/lib64" -Dcudnn_include="$cuda/include" >"$WORK/$name.log" 2>&1 && \
-    PATH=$cuda/bin:$PATH nice ninja -C build -j"$JOBS" >>"$WORK/$name.log" 2>&1 ) || { say "$name" "BUILD FAILED: $WORK/$name.log"; return 1; }
-  install -d "$prefix/bin"; install -m 0755 "$src/build/lc0" "$prefix/$proof"; echo "$pin" > "$prefix/.pin"
-  sha "$prefix/$proof" > "$prefix/$proof.sha256"; link "$prefix/$proof" lc0
-  say "$name $version" "built (CUDA $(basename "$cuda"), plain cuda backend), at $prefix"
-}
 data(){ local name=$1 origin=$4 pin=$6 build=$7 proof=${12}; local target=$DATA/$proof
   if [ -e "$target" ] && [ -e "$target.sha256" ] && [ "$(cat "$target.sha256")" = "$(sha "$target")" ]; then say "$name" "at $target"; return; fi
   local file=$WORK/download/$name/$(basename "$origin"); fetch "$origin" "$pin" "$file"; mkdir -p "$(dirname "$target")"
@@ -99,7 +82,7 @@ data(){ local name=$1 origin=$4 pin=$6 build=$7 proof=${12}; local target=$DATA/
   sha "$target" > "$target.sha256"; say "$name" "at $target"
 }
 report(){
-  for p in stockfish fastchess ordo lc0; do
+  for p in stockfish fastchess ordo; do
     if command -v "$PREFIX/bin/$p" >/dev/null 2>&1; then say "$p" "$(readlink -f "$PREFIX/bin/$p")  sha256 $(sha "$(readlink -f "$PREFIX/bin/$p")" | cut -c1-16)"; else say "$p" "not installed"; fi
   done
   [ -x "$PREFIX/bin/stockfish" ] && say "stockfish bench" "$("$PREFIX/bin/stockfish" bench 2>&1 | awk '/Nodes searched|Nodes\/second/{printf "%s ", $NF}')"
@@ -115,7 +98,6 @@ while IFS=$'\t' read -r name version kind origin ref pin build profile platforms
   want "$name" "$@" || continue
   case $kind/$build in
     source/stockfish) stockfish "$name" "$version" "$origin" "$ref" "$kind" "$pin" "$build" "$profile" "$platforms" "$depends" "$use" "$proof" || failed=1 ;;
-    source/lc0)       lc0 "$name" "$version" "$origin" "$ref" "$kind" "$pin" "$build" "$profile" "$platforms" "$depends" "$use" "$proof" || failed=1 ;;
     release/unpack|release/make)
                       case $name in fastchess|ordo) release "$name" "$version" "$kind" "$origin" "$ref" "$pin" "$build" "$profile" "$platforms" "$depends" "$use" "$proof" || failed=1 ;; esac ;;
     data/file|data/zip) data "$name" "$version" "$kind" "$origin" "$ref" "$pin" "$build" "$profile" "$platforms" "$depends" "$use" "$proof" || failed=1 ;;

@@ -160,8 +160,8 @@ chess/provision.sh report             # what is installed: each program by SHA-2
 
 On Linux Stockfish is built with `make profile-build ARCH=$LAPLACE_STOCKFISH_ARCH` (default `x86-64-bmi2`) and
 `$LAPLACE_STOCKFISH_CXX` (default `g++-12`), and is installed only when its bench prints the generation's node count
-(2497913 for sf_19); Lc0 is built from its tag with the plain CUDA backend (fp32 on hart-server's GTX 1080 Ti) when
-the machine has an NVIDIA GPU. On Windows `setup.ps1 deps` unpacks fastchess, Ordo and Lc0's CUDA 12 package and
+(2497913 for sf_19). Lc0 is HART-DESKTOP's alone: hart-server's GTX 1080 Ti is off limits (a cooling fault), so no
+Linux row builds Lc0 or fetches its networks. On Windows `setup.ps1 deps` unpacks fastchess, Ordo and Lc0's CUDA 12 package and
 fetches the data rows; Stockfish there is the monorepo's `install-stockfish.py`.
 
 The RTX 4060 Ti on HART-DESKTOP is shared with the llama.cpp embedders code search depends on, so it has two modes,
