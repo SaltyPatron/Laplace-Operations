@@ -37,6 +37,17 @@ Set-Default LAPLACE_PG_RESERVED    '34GB'   # memory the machine's other residen
 Set-Default LAPLACE_PG_BUFFERS_MAX '1GB'    # the largest shared memory this Windows build maps in every backend: at 4GB 826 backends in three hours could not (error 487); 1GB maps (2026-10-05)
 Set-Default LAPLACE_PGWAL_ROOM     '32GB'   # the log's bound when it shares its drive (D: holds the heap, the sources and the models); a dedicated drive gets half of itself
 
+# The desktop's own parts (setup.ps1 shares, services, backup; none is part of all): the deployment target's shares
+# this machine reaches by UNC path with a Credential Manager entry, the GPU services the operator starts and stops
+# without elevation (chess\chess-gpu.ps1), and the copy-off of the drives to the deployment target (backup\).
+Set-Default LAPLACE_SHARE_HOST   'hart-server'                              # setup.sh shares there serves them
+Set-Default LAPLACE_SHARE_USER   'ahart'                                    # its SMB user: the Credential Manager entry's
+Set-Default LAPLACE_SHARES       'vault,archive,backup,inbox'               # \\<host>\<share>, each checked
+Set-Default LAPLACE_GPU_SERVICES 'llama-embedding,llama-embedding-text,llama-reranker,llama-generative'
+Set-Default LAPLACE_BACKUP_TASK  'copyoff'                                  # the scheduled task that runs backup\run.ps1
+Set-Default LAPLACE_BACKUP_LOGS  'D:\Logs\copyoff'                          # its logs, manifests, robocopy logs and patches
+Set-Default LAPLACE_BACKUP_JOBS  "$PSScriptRoot\backup\jobs.psd1"           # what it copies, where to
+
 # The toolchain: the developer shell (Visual Studio's vcvars64, oneAPI, CMake, the manifest's build tools) and the
 # MSYS2 that builds PostGIS (toolchain\windows\postgis.sh).
 Set-Default LAPLACE_DEVSHELL 'D:\Libraries\load-env.ps1'
