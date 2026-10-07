@@ -248,6 +248,31 @@ function deps {
                 Set-Content (Join-Path $prefix '.pin') $r.pin
                 Say $what "at $prefix"
             }
+        } elseif ($r.kind -eq 'data') {
+            # a file the chess lab reads, at $LAPLACE_DATA\<proof>: the download verified by its pin, then the file
+            # itself (build file) or the one file its zip holds (build zip), kept beside a .sha256 of what it is
+            Attempt $what {
+                $target = Join-Path $Data ($r.proof -replace '/', '\')
+                $mark = "$target.sha256"
+                if ((Test-Path $target) -and (Test-Path $mark) -and (Get-Content $mark -Raw).Trim() -eq (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()) { Say $what "at $target"; return }
+                if ($r.build -eq 'file' -and (Test-Path $target) -and (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant() -eq $r.pin) {
+                    Set-Content $mark $r.pin; Say $what "at $target (verified)"; return
+                }
+                $store = Join-Path (Join-Path $DepSrc $r.name) $r.version
+                New-Item -ItemType Directory -Force $store, (Split-Path $target) | Out-Null
+                $file = Join-Path $store ([IO.Path]::GetFileName(([uri]$r.origin).AbsolutePath))
+                if (-not (Test-Path $file)) { & curl.exe -fsSL --retry 3 -o $file $r.origin; if ($LASTEXITCODE) { Remove-Item $file -ErrorAction SilentlyContinue; throw "download failed: $($r.origin)" } }
+                $sha = (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($sha -ne $r.pin) { throw "SHA-256 $sha differs from the pin $($r.pin)" }
+                if ($r.build -eq 'zip') {
+                    $stage = "$target.part"; Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+                    Expand-Archive -LiteralPath $file -DestinationPath $stage
+                    $inner = @(Get-ChildItem $stage -File -Recurse); if ($inner.Count -ne 1) { throw "$file holds $($inner.Count) files, not one" }
+                    Move-Item -Force $inner[0].FullName $target; Remove-Item $stage -Recurse -Force
+                } else { Copy-Item -Force $file $target }
+                Set-Content $mark (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
+                Say $what "at $target"
+            }
         }
     }
 
