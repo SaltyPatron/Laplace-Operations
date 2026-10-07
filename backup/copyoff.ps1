@@ -10,7 +10,7 @@
   -Models: the Models-* jobs, which are on hold without it ("don't touch the models", 2026-10-07). Exit 3: a job does
   not fit on hart-server and nothing more is copied; exit 4: a manifest failed.
 #>
-param([Parameter(Mandatory)][string]$Set, [string[]]$Only, [switch]$ManifestOnly, [switch]$SkipManifest, [switch]$Models)
+param([Parameter(Mandatory)][string]$Set, [string[]]$Only, [switch]$ManifestOnly, [switch]$SkipManifest, [switch]$Fresh, [switch]$Models)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\laplace.env.ps1"
 $conf = Import-PowerShellDataFile $env:LAPLACE_BACKUP_JOBS
@@ -37,6 +37,22 @@ function Write-Manifest($job) {
 }
 # Room on hart-server for what the job still has to copy, plus 5 GiB; the run stops if it won't fit (XFS full is never
 # acceptable). Each share is the mount jobs.psd1 names for it.
+# ssh with stdin closed (-n) and bounded: under a headless task Windows' ssh.exe can finish the remote command and never
+# exit. Each try gets 90 s and is killed past it (its output still counts if it printed); three tries.
+function Probe([string]$key, [string]$peer, [string]$cmd) {
+  for ($try = 1; $try -le 3; $try++) {
+    $psi = [Diagnostics.ProcessStartInfo]::new('ssh.exe')
+    foreach ($a in '-n', '-i', $key, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4', $peer, $cmd) { $psi.ArgumentList.Add($a) }
+    $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
+    $p = [Diagnostics.Process]::Start($psi); $out = $p.StandardOutput.ReadToEndAsync()
+    if (-not $p.WaitForExit(90000)) { try { $p.Kill($true) } catch {} }
+    [void]$out.Wait(5000)
+    $lines = @("$($out.Result)" -split "`n" | ForEach-Object Trim | Where-Object { $_ })
+    if ($lines.Count) { return $lines }
+    Write-Host "  room probe try $try gave nothing"; Start-Sleep -Seconds 10
+  }
+  @()
+}
 function Assert-Room($job) {
   $u = $job.d -replace '^\\\\[^\\]+\\', ''; $share, $rest = $u -split '\\', 2
   $mount = $conf.Mounts[$share]
@@ -44,8 +60,8 @@ function Assert-Room($job) {
   $path = ($mount + '/' + ($rest -replace '\\', '/')).TrimEnd('/')
   $tsv = "$logs\manifests\$($job.n).tsv"
   $total = if (Test-Path $tsv) { [int64]((Get-Content $tsv -Tail 1) -replace '.*bytes=', '') } else { (Get-ChildItem $job.s -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum }
-  # @() keeps one line of output an array: a bare string's [0] is its first character
-  $q = @(& ssh.exe -i $env:LAPLACE_PEER_KEY -o BatchMode=yes $env:LAPLACE_PEER "df -B1 --output=avail '$mount' | tail -1; du -sb '$path' 2>/dev/null | cut -f1 || echo 0")
+  $q = @(Probe $env:LAPLACE_PEER_KEY $env:LAPLACE_PEER "df -B1 --output=avail '$mount' | tail -1; du -sb '$path' 2>/dev/null | cut -f1 || echo 0")
+  if (-not $q.Count -or $q[0] -notmatch '^\d+$') { Write-Host "STOP: $($job.n): $($env:LAPLACE_PEER) did not answer the room probe; nothing more is copied"; exit 3 }
   $avail = [int64]$q[0]; $have = if ($q.Count -gt 1 -and $q[1]) { [int64]$q[1] } else { 0 }
   $need = [math]::Max([int64]0, [int64]$total - $have) + 5GB
   Write-Host ("{0,-26} room: needs {1:N1} GiB (+5), {2:N1} GiB free on {3}" -f $job.n, (($need - 5GB)/1GB), ($avail/1GB), $mount)
@@ -59,6 +75,8 @@ function Copy-Job($job) {
   $xf = @($job.xf | Where-Object { $_ }); if ($xf) { $ra += '/XF'; $ra += $xf }
   & robocopy.exe @ra | Out-Null; $rc = $LASTEXITCODE
   Write-Host ("{0,-26} robocopy exit {1} ({2})" -f $job.n, $rc, $(if ($rc -lt 8) { 'ok' } else { 'FAILED: see ' + $log }))
+  # a successful copy is remembered, so a restarted run skips it (-Fresh copies everything again)
+  if ($rc -lt 8) { New-Item -ItemType Directory -Force "$logs\done" | Out-Null; Get-Content "$logs\manifests\$($job.n).tsv" -Tail 1 | Set-Content "$logs\done\$($job.n)" }
 }
 
 # the uncommitted edits in the dependency sources (LAPLACE_DEPSRC), kept as patches: the sources themselves are reinstalled
@@ -72,6 +90,7 @@ foreach ($job in $jobs) {
   if ($job.n -like 'Models-*' -and -not $Models) { "{0,-26} on hold: models are not touched without -Models" -f $job.n; continue }
   if (-not (Test-Path $job.s)) { "{0,-26} (no source)" -f $job.n; continue }
   $m = if ($job.man) { $job.man } else { "$inbox\_manifest" }
+  if (-not $Fresh -and (Test-Path "$logs\done\$($job.n)")) { "{0,-26} done earlier ({1}); -Fresh copies it again" -f $job.n, (Get-Content "$logs\done\$($job.n)"); continue }
   if (-not $SkipManifest) { Write-Manifest $job }
   if (-not ($ManifestOnly -or $job.manifestOnly)) { Copy-Job $job }
   if (Test-Path "$logs\manifests\$($job.n).tsv") { New-Item -ItemType Directory -Force $m | Out-Null; Copy-Item "$logs\manifests\$($job.n).tsv" $m -Force }
