@@ -49,7 +49,7 @@ Set-Default LAPLACE_FIRMWARE "$env:LAPLACE_SRC\Laplace-Engine\firmware\program.f
 Set-Default LAPLACE_TIER0    "$env:LAPLACE_WORK\tier0\tier0.bin"            # laplace tier0 writes it; every install with its fingerprint agrees
 Set-Default LAPLACE_HIGHWAY  "$env:LAPLACE_WORK\tier0\tier0.highway"        # laplace highway writes it
 Set-Default LAPLACE_GRAMMARS "$env:LAPLACE_BUILD\grammars"                  # the tree-sitter grammars, built once
-Set-Default LAPLACE_UCD      'D:\Data\UCD'                                  # the Unicode Character Database tier 0 is generated from
+Set-Default LAPLACE_UCD      "$env:LAPLACE_DATA\UCD"                        # the Unicode Character Database tier 0 is generated from
 Set-Default LAPLACE_ICU_DIR  "$env:LAPLACE_DEPS\icu78"                      # ICU 78: Unicode 17, the version tier 0 is built from
 Set-Default LAPLACE_BLAKE3_DIR "$env:LAPLACE_DEPSRC\blake3\c"
 Set-Default LAPLACE_COREMATH   "$env:LAPLACE_DEPSRC\core-math"
