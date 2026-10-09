@@ -11,6 +11,11 @@
     pwsh -File setup.ps1 deps report       one part, or several: volumes | packages | rights | deps | cluster | settings | access | report
     $env:LAPLACE_DROP = 'D:\Data\Laplace\pgdata'; pwsh -File setup.ps1 drop all
                                            the cluster dropped and made again, empty: never part of all, and named to be dropped
+    pwsh -File setup.ps1 shares            the desktop's own parts, never part of all: shares (the deployment target's
+    pwsh -File setup.ps1 services          shares answer by UNC path, with a credential), services (the operator starts and
+    pwsh -File setup.ps1 firewall          stops the GPU services; elevated), firewall (the inbound rules of
+    pwsh -File setup.ps1 backup            LAPLACE_FIREWALL; elevated), backup (the copy-off task, backup\)
+    pwsh -File setup.ps1 backup status     status with any of them (alone: all four) reports and changes nothing
 
   What differs from Linux is only what Windows forces: a drive is not made here (no volumes to create, so volumes
   reports the drives and makes the directories); the toolchain is installed by hand or by the manifest (packages says
@@ -558,8 +563,162 @@ function report {
     ''; 'next: the Laplace builds (README: Windows); the Linux machine: sudo ./setup.sh, ./deploy.sh'
 }
 
-$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'cluster', 'settings', 'access', 'report'
+# ------------------------------------------------------------------------------------------------------ the desktop's own
+# What this machine is besides a Laplace host: none of these is part of all, each is named to be run, and each takes
+# status (setup.ps1 backup status) to report without changing anything.
+
+# The deployment target's shares (setup.sh shares there), as this machine reaches them: by UNC path, with the
+# operator's Credential Manager entry for the host. Checked and reported, never made: no drive letter is mapped and no
+# credential is stored here, and the Explorer locations and mappings the operator made are theirs. A check that fails
+# says what to do. The password is never read, printed or written: cmdkey asks for it.
+function shares {
+    Part 'shares'
+    $server = $env:LAPLACE_SHARE_HOST; $user = $env:LAPLACE_SHARE_USER
+    # cmdkey /list: a Target line, then Type and User; only this host's own entry counts (not hart-server.lan's)
+    $entry = $null; $lines = @(& cmdkey.exe /list 2>$null)
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match "^\s*Target:\s*(Domain:target=)?$([regex]::Escape($server))\s*$") {
+            $u = ($lines[($i + 1)..([math]::Min($i + 3, $lines.Count - 1))] | Where-Object { $_ -match '^\s*User:\s*(.+)$' } | Select-Object -First 1) -replace '^\s*User:\s*', ''
+            $entry = "$($lines[$i].Trim() -replace '^Target:\s*', ''), user $u"; break
+        }
+    }
+    if ($entry) { Say "credential for $server" "present: $entry" }
+    else { Say "credential for $server" "MISSING: cmdkey /add:$server /user:$user /pass   (it asks for the SMB password)"; $failed.Add("shares: no credential for $server") }
+    $tcp = [Net.Sockets.TcpClient]::new()
+    try { $up = $tcp.ConnectAsync($server, 445).Wait(3000) } catch { $up = $false } finally { $tcp.Dispose() }
+    if (-not $up) { Say "${server}:445" "DOES NOT ANSWER: is it up, and are its shares served (on $server, sudo ./setup.sh shares)?"; $failed.Add("shares: ${server}:445 does not answer"); return }
+    Say "${server}:445" 'answers'
+    foreach ($share in ($env:LAPLACE_SHARES -split ',' | ForEach-Object Trim | Where-Object { $_ })) {
+        $unc = "\\$server\$share"
+        if (Test-Path -LiteralPath $unc) { Say $unc 'answers' }
+        else {
+            Say $unc "DOES NOT ANSWER: $(if ($entry) { "the credential may be wrong (cmdkey /delete:$server, then cmdkey /add:$server /user:$user /pass), or the share is not served (on $server, sudo ./setup.sh shares)" } else { 'add the credential (above)' })"
+            $failed.Add("shares: $unc does not answer")
+        }
+    }
+    if (Admin) { Say 'checked from' 'an elevated shell; Explorer uses the same credential from the normal one' }
+}
+# The GPU services (LAPLACE_GPU_SERVICES, llama.cpp under NSSM) are started, stopped and queried by the operator without
+# elevation (chess\chess-gpu.ps1): one allow ACE for the operator's own SID (start RP, stop WP, query status LC,
+# interrogate LO) appended to each service's DACL; nothing else in it changes. Already granted is known by the SID,
+# never by the ACE's text, since Windows writes the rights in its own order. Each change prints the SDDL before and
+# after; sc.exe sdset <service> "<before>" undoes it.
+function services {
+    Part 'services'
+    if (-not $Status -and -not (Elevated 'services')) { return }
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent(); $sid = $me.User.Value
+    foreach ($svc in ($env:LAPLACE_GPU_SERVICES -split ',' | ForEach-Object Trim | Where-Object { $_ })) {
+        Attempt "service $svc" {
+            if (-not (Get-Service -Name $svc -ErrorAction SilentlyContinue)) { Say $svc 'NOT ON THIS MACHINE: nothing to grant'; return }
+            $sd = ((& sc.exe sdshow $svc) -join '').Trim()
+            if ($LASTEXITCODE) { throw "sc sdshow: $sd" }
+            $held = @([regex]::Matches($sd, "\(A;;([A-Z]*);;;$([regex]::Escape($sid))\)") | ForEach-Object { $r = $_.Groups[1].Value; for ($k = 0; $k -lt $r.Length; $k += 2) { $r.Substring($k, 2) } })
+            $lack = @('LC', 'RP', 'WP', 'LO' | Where-Object { $held -notcontains $_ })
+            if (-not $lack.Count) { Say $svc "already granted to $($me.Name)"; return }
+            if ($Status) { Say $svc "NOT GRANTED to $($me.Name) ($($lack -join '')): elevated, setup.ps1 services"; return }
+            $i = $sd.IndexOf('S:'); $ace = "(A;;LCRPWPLO;;;$sid)"
+            $new = if ($i -ge 0) { $sd.Insert($i, $ace) } else { $sd + $ace }
+            $out = & sc.exe sdset $svc $new; if ($LASTEXITCODE) { throw "sc sdset: $($out -join ' ')" }
+            Say $svc "granted to $($me.Name)"; "    before: $sd"; "    after:  $(((& sc.exe sdshow $svc) -join '').Trim())"
+        }
+    }
+}
+# The inbound rules this machine's endpoints need, each one named rule, TCP, from the one client that calls it
+# (LAPLACE_FIREWALL: name=port@client;...): the engine endpoint (laplace-uci behind LaplaceEngines) for the deployment
+# target. Created when missing, corrected when its port, client or profile differs, otherwise left alone.
+function firewall {
+    Part 'firewall'
+    if (-not $Status -and -not (Elevated 'firewall')) { return }
+    foreach ($spec in ($env:LAPLACE_FIREWALL -split ';' | ForEach-Object Trim | Where-Object { $_ })) {
+        if ($spec -notmatch '^(?<name>[^=]+)=(?<port>\d+)@(?<client>[^@]+)$') { Say $spec 'UNREADABLE: name=port@client'; $failed.Add("firewall: $spec"); continue }
+        $name = "Laplace-$($Matches.name)"; $port = $Matches.port; $client = $Matches.client
+        Attempt "rule $name" {
+            $r = Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue
+            if (-not $r) {
+                if ($Status) { Say $name "MISSING: TCP $port from $client (elevated, setup.ps1 firewall)"; return }
+                New-NetFirewallRule -Name $name -DisplayName "Laplace $($Matches.name) $port from $client" -Direction Inbound -Protocol TCP `
+                    -LocalPort $port -RemoteAddress $client -Action Allow -Profile Private | Out-Null
+                Say $name "made: TCP $port from $client, private networks"; return
+            }
+            $p = $r | Get-NetFirewallPortFilter; $a = $r | Get-NetFirewallAddressFilter
+            $ok = $r.Enabled -eq 'True' -and $r.Direction -eq 'Inbound' -and $r.Action -eq 'Allow' -and $p.Protocol -eq 'TCP' -and "$($p.LocalPort)" -eq $port `
+                -and "$($a.RemoteAddress)" -eq $client -and "$($r.Profile)" -eq 'Private'
+            if ($ok) { Say $name "as declared: TCP $port from $client"; return }
+            if ($Status) { Say $name "DIFFERS (port $($p.LocalPort), from $($a.RemoteAddress), $($r.Profile)): elevated, setup.ps1 firewall"; return }
+            Set-NetFirewallRule -Name $name -Enabled True -Direction Inbound -Action Allow -Profile Private
+            $r | Get-NetFirewallPortFilter | Set-NetFirewallPortFilter -Protocol TCP -LocalPort $port
+            $r | Get-NetFirewallAddressFilter | Set-NetFirewallAddressFilter -RemoteAddress $client
+            Say $name "corrected: TCP $port from $client, private networks"
+        }
+    }
+}
+# The copy-off of this machine's drives to the deployment target (backup\: jobs.psd1 says what goes where; copyoff.ps1
+# hashes and copies a set; run.ps1 runs every set), run by the scheduled task LAPLACE_BACKUP_TASK as the operator:
+# interactive, not elevated, with no time limit, one instance at a time, no trigger (Start-ScheduledTask runs it), in a
+# headless console. The task is registered when missing and updated when it differs from the declaration, but never
+# while it runs: a running copy-off is not cut off, and the part says to run again when it is done. Then the state:
+# the task, its run, the last job lines of each set's log and the manifests written.
+function backup {
+    Part 'backup'
+    $task = $env:LAPLACE_BACKUP_TASK; $logs = $env:LAPLACE_BACKUP_LOGS
+    $argv = "--headless pwsh.exe -NoProfile -ExecutionPolicy Bypass -File $(Join-Path $PSScriptRoot 'backup\run.ps1')"
+    $conf = $null
+    try { $conf = Import-PowerShellDataFile $env:LAPLACE_BACKUP_JOBS }
+    catch { Say 'jobs' "FAILED: $($env:LAPLACE_BACKUP_JOBS): $($_.Exception.Message)"; $failed.Add("backup: $($env:LAPLACE_BACKUP_JOBS) does not read") }
+    foreach ($s in @($conf.Sets)) { $held = @($s.Jobs | Where-Object { $_.n -like 'Models-*' }).Count; Say "set $($s.Name)" "$(@($s.Jobs).Count) jobs to $($s.Inbox)$(if ($held) { "; $held Models-* on hold without -Models" })" }
+    $t = Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
+    $drift = @(
+        if (-not $t) { 'missing' } else {
+            $a = @($t.Actions)
+            if ($a.Count -ne 1 -or $a[0].Execute -ne 'conhost.exe' -or $a[0].Arguments -ne $argv) { "runs $($a[0].Execute) $($a[0].Arguments)" }
+            if ((($t.Principal.UserId -split '\\')[-1]) -ne $env:USERNAME) { "as $($t.Principal.UserId)" }
+            if ("$($t.Principal.LogonType)" -ne 'Interactive') { "logon $($t.Principal.LogonType)" }
+            if ("$($t.Principal.RunLevel)" -ne 'Limited') { "run level $($t.Principal.RunLevel)" }
+            if ($t.Settings.ExecutionTimeLimit -ne 'PT0S') { "time limit $($t.Settings.ExecutionTimeLimit)" }
+            if ("$($t.Settings.MultipleInstances)" -ne 'IgnoreNew') { "instances $($t.Settings.MultipleInstances)" }
+            $trig = @($t.Triggers | Where-Object { $_ }); if ($trig.Count) { "$($trig.Count) trigger(s)" }
+        })
+    if (-not $drift.Count) { Say "task $task" 'as declared' }
+    elseif ($Status) { Say "task $task" "DIFFERS: $($drift -join '; '): setup.ps1 backup" }
+    elseif ($t -and "$($t.State)" -eq 'Running') { Say "task $task" "DIFFERS ($($drift -join '; ')), and it is running: not changed; setup.ps1 backup again when it is done" }
+    else {
+        Attempt "task $task" {
+            New-Item -ItemType Directory -Force $logs | Out-Null
+            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+            $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+            Register-ScheduledTask -TaskName $task -Action (New-ScheduledTaskAction -Execute 'conhost.exe' -Argument $argv) -Principal $principal -Settings $settings -Force | Out-Null
+            Say "task $task" $(if ($t) { "updated (was: $($drift -join '; '))" } else { 'registered: Start-ScheduledTask runs it' })
+        }
+    }
+    $t = Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
+    if ($t) {
+        $info = Get-ScheduledTaskInfo -TaskName $task
+        Say "task $task" $(if ($info.LastTaskResult -eq 0x41303) { "$($t.State); never run" } else { "{0}; last run {1:s}, result 0x{2:X}" -f $t.State, $info.LastRunTime, $info.LastTaskResult })
+        Say 'runs' "$(@($t.Actions)[0].Execute) $(@($t.Actions)[0].Arguments)"
+    }
+    $pidFile = Join-Path $logs 'run.pid'
+    if (Test-Path $pidFile) { $p = Get-Process -Id ([int](Get-Content $pidFile)) -ErrorAction SilentlyContinue; Say 'run.pid' "$(Get-Content $pidFile)$(if ($p) { ", running since $('{0:s}' -f $p.StartTime)" } else { ', not running' })" }
+    # the job lines of each set's log: neither progress, nor what could not be read, nor git's warnings
+    foreach ($f in @(Get-ChildItem $logs -Filter 'run*.log' -File -ErrorAction SilentlyContinue)) {
+        Say $f.Name ("{0:s}" -f $f.LastWriteTime)
+        Get-Content $f.FullName | Where-Object { $_ -and $_ -notmatch '^\S+\s+[\d,]+/[\d,]+\s+\d+s$' -and $_ -notmatch 'unreadable|^warning:' } | Select-Object -Last 6 | ForEach-Object { "      $_" }
+    }
+    foreach ($s in @($conf.Sets)) {
+        $dir = Join-Path $(if ($s.Logs) { Join-Path $logs $s.Logs } else { $logs }) 'manifests'
+        foreach ($m in @(Get-ChildItem $dir -Filter '*.tsv' -File -ErrorAction SilentlyContinue)) { Say "manifest $($s.Name) $($m.BaseName)" "$((Get-Content $m.FullName -Tail 1) -replace '^# total ', '')   $('{0:s}' -f $m.LastWriteTime)" }
+        foreach ($m in @(Get-ChildItem $dir -Filter '*.part' -File -ErrorAction SilentlyContinue)) { Say "manifest $($s.Name) $($m.Name)" "being written: $((Get-Content $m.FullName | Measure-Object -Line).Lines) rows" }
+    }
+}
+
+$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'cluster', 'settings', 'access', 'report', 'shares', 'services', 'firewall', 'backup', 'status'
 foreach ($p in $Parts) { if ($known -notcontains $p) { "setup.ps1 [drop] [$(($known | Select-Object -Skip 1) -join '|') ...]"; Stop-Transcript | Out-Null; exit 2 } }
+# status: the desktop's own parts named with it (all three, when none is) report and change nothing
+$Status = $Parts -contains 'status'
+if ($Status) {
+    $Parts = @($Parts | Where-Object { $_ -ne 'status' }); if (-not $Parts.Count) { $Parts = 'shares', 'services', 'firewall', 'backup' }
+    $other = @($Parts | Where-Object { $_ -notin 'shares', 'services', 'firewall', 'backup' })
+    if ($other.Count) { "setup.ps1 status reports shares, services, firewall and backup; $($other -join ', ') has none (report)"; Stop-Transcript | Out-Null; exit 2 }
+}
 try { foreach ($p in $Parts) { if ($p -eq 'all') { volumes; packages; rights; deps; cluster; settings; access; report } else { & $p } } }
 catch { "=== $($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"; $failed.Add("setup.ps1 stopped: $($_.Exception.Message)") }
 ''

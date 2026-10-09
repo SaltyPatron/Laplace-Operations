@@ -45,6 +45,19 @@ sudo LAPLACE_DROP=$LAPLACE_PGDATA ./setup.sh drop all   # the cluster emptied an
 
 Every name of the machine's is a variable of `laplace.env` with this installation's value as its default: the paths (`LAPLACE_PREFIX`, `LAPLACE_PG_DIR`, `LAPLACE_PGDATA`, `LAPLACE_PGWAL`, `LAPLACE_PGTEMP`), the users and groups (`LAPLACE_PGUSER`, `LAPLACE_ROLE`, `LAPLACE_GROUP`, `LAPLACE_PG_GROUP`), the service (`LAPLACE_PGSERVICE`), the volumes (`LAPLACE_VOLUMES`), the network (`LAPLACE_LAN`) and the agent. Another machine sets its own before running `setup.sh`.
 
+### The shares
+
+```sh
+sudo ./setup.sh shares                             # the SMB shares for the development machine; not part of all
+```
+
+`shares` serves `LAPLACE_SHARES` (vault, archive, backup, inbox) to `LAPLACE_SHARE_USER` alone. It uses plain SMB 3,
+smbd only (nmbd is disabled), and admits only the LAN: `hosts allow` and `interfaces` cover `LAPLACE_LAN`,
+`LAPLACE_SHARE_LAN6`, and link-local on `LAPLACE_SHARE_IF`, and ufw allows 445/tcp from the same sources. It
+declares the whole `smb.conf` and keeps the distribution's original as `smb.conf.orig`. A change is reloaded and
+never restarted, so a copy in flight is not cut. A user without an SMB password is asked for one (`smbpasswd`); it
+is never written down. HART-DESKTOP checks the shares with `setup.ps1 shares`.
+
 ### The agents
 
 ```sh
@@ -146,6 +159,46 @@ password across the installation, the deployment target's: `access` reads it fro
 the operator's SSH key and gives it to the role here, so one pgpass line reaches both databases; the operator's pgpass
 lines for other hosts are kept. HART-DESKTOP's one-time cleanup of what earlier set-ups left is
 `toolchain/windows/retire.ps1`, not part of setup.
+
+### The desktop's own parts
+
+Three parts of `setup.ps1` declare what HART-DESKTOP is besides a Laplace host. None is part of `all`; each is named to
+be run, says what it changed, changes nothing on a second run, and with `status` (`setup.ps1 backup status`; alone,
+`setup.ps1 status`, all three) only reports. Their names are variables of `laplace.env.ps1`.
+
+```powershell
+pwsh -File setup.ps1 shares           # hart-server's shares answer by UNC path, with a credential
+pwsh -File setup.ps1 services         # elevated: the operator may start, stop and query the GPU services
+pwsh -File setup.ps1 firewall         # elevated: the inbound rules this machine's endpoints need
+pwsh -File setup.ps1 backup           # the copy-off task, registered or updated; then its state
+pwsh -File setup.ps1 status           # all four, reporting only
+```
+
+**shares** checks, and makes nothing: the Credential Manager entry for `LAPLACE_SHARE_HOST` (never printed), that
+445/tcp answers, and that each `\\<host>\<share>` of `LAPLACE_SHARES` answers. No drive letter is mapped and the
+operator's Explorer locations are left alone. A failed check says what to do: `cmdkey /add:hart-server /user:ahart
+/pass` (it asks for the password), or `sudo ./setup.sh shares` on hart-server.
+
+**services** appends one allow ACE for the operator's own SID (`LCRPWPLO`: query, start, stop, interrogate) to each
+service of `LAPLACE_GPU_SERVICES`, so `chess\chess-gpu.ps1` switches the card without elevation. Already granted is
+known by the SID, never by the ACE's text (Windows reorders the rights). A change prints the SDDL before and after;
+`sc.exe sdset <service> "<before>"` undoes it.
+
+**firewall** makes the inbound rules of `LAPLACE_FIREWALL` (`name=port@client;…`; today `engines=5190@192.168.1.2`, the
+engine endpoint for hart-server): one named rule each, TCP, from that one client, on private networks. A missing rule
+is created and one whose port, client or profile differs is corrected; a second run changes nothing.
+
+**backup** is the copy-off of HART-DESKTOP's drives to hart-server, in `backup\`. `jobs.psd1` is the job list: each
+set (D:, then C:'s `source`) with its inbox, and each job's source, destination, robocopy exclusions, manifest
+destination and whether it is only hashed. The `Models-*` jobs are on hold and run only with `-Models`. `copyoff.ps1
+-Set D` writes each job's SHA-256 manifest first (`hash-manifest.ps1`: compiled C#, 8 workers, rows streamed to
+`.part`; `# path<TAB>size<TAB>sha256   source=ROOT`, the rows, `# total files=N bytes=B`). It then checks for room on
+hart-server over SSH (what is left to copy, plus 5 GiB, or exit 3 and nothing more is copied) and copies with
+`robocopy /E /COPY:DAT /DCOPY:DAT /XJ /FFT /R:2 /W:5 /MT:8 /NP /UNILOG+`. It never uses `/MIR`, `/PURGE` or `/MOV`.
+The D: set also keeps the uncommitted edits in `LAPLACE_DEPSRC`'s checkouts as patches. `run.ps1` runs every set.
+The part registers it as the scheduled task `LAPLACE_BACKUP_TASK`, which runs as the operator, interactive and not
+elevated, with no time limit and no trigger, in a headless console. The part never changes the task while it runs.
+Start it with `Start-ScheduledTask -TaskName copyoff`; logs and manifests are under `LAPLACE_BACKUP_LOGS`.
 
 ## The chess lab's conventional reference
 

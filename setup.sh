@@ -5,6 +5,7 @@
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
 #                              site | agents | report
 #   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
+#   sudo ./setup.sh shares     the SMB shares for the development machine (LAPLACE_SHARES); not part of all
 #   sudo LAPLACE_DROP=/data/pgdata ./setup.sh drop all
 #                              the cluster dropped and made again, empty: never part of all, and named to be dropped
 #
@@ -321,6 +322,85 @@ chess(){ part chess
   if [ -s "$pending" ]; then while IFS=$'\t' read -r target name; do ln -sfn "$target" "$PREFIX/bin/$name"; say "$PREFIX/bin/$name" "-> $target"; done < "$pending"; rm -f "$pending"; fi
   as_op "$here/chess/provision.sh report"
 }
+# The machine's shares (LAPLACE_SHARES) for the development machine, which reaches them by UNC path with its own
+# credential (setup.ps1 shares there checks them): plain SMB 3 for one user, from the LAN only, served by smbd alone (no
+# NetBIOS: Windows finds the machine through DNS), with ufw's 445/tcp rules when ufw is active. The whole smb.conf is
+# declared, not lines added to whatever is there; the distribution's original is kept as smb.conf.orig. A changed
+# configuration is reloaded, never restarted, so a copy running over a share is not cut off. The SMB password is the
+# operator's to type when the user has none (smbpasswd asks); nothing here writes or prints it. Not part of all: a
+# database host needs none of it, and it is named to be run.
+SMB_LL6=fe80::/10
+smbconf(){
+  cat <<EOF
+# Laplace (setup.sh shares): the shares for the development machine. The distribution's original is smb.conf.orig.
+[global]
+   workgroup = WORKGROUP
+   server string = $(hostname)
+   server role = standalone server
+   server min protocol = SMB3
+   smb encrypt = desired
+   hosts allow = 127.0.0.1 ::1 $LAPLACE_LAN $LAPLACE_SHARE_LAN6 $SMB_LL6
+   hosts deny = 0.0.0.0/0
+   interfaces = lo $LAPLACE_SHARE_IF
+   bind interfaces only = yes
+   map to guest = never
+   load printers = no
+   printing = bsd
+   printcap name = /dev/null
+   disable spoolss = yes
+   log file = /var/log/samba/log.%m
+   max log size = 1000
+   logging = file
+   # large sequential copies over 1 GbE
+   use sendfile = yes
+   aio read size = 1
+   aio write size = 1
+EOF
+  echo "$LAPLACE_SHARES" | while read -r name path _; do [ -n "$name" ] || continue
+    printf '\n[%s]\n   path = %s\n   valid users = %s\n   read only = no\n   force user = %s\n   create mask = 0664\n   directory mask = 2775\n' \
+      "$name" "$path" "$LAPLACE_SHARE_USER" "$LAPLACE_SHARE_USER"; done
+}
+shares(){ part shares
+  u=$LAPLACE_SHARE_USER; conf=/etc/samba/smb.conf; changed=0
+  id "$u" >/dev/null 2>&1 || { say "shares" "REFUSED: no user $u (LAPLACE_SHARE_USER)"; return 0; }
+  dpkg-query -W -f '${Status}\n' samba 2>/dev/null | grep -q "install ok installed" || { DEBIAN_FRONTEND=noninteractive apt-get install -y -q samba >/dev/null; say "samba" "installed"; }
+  say "samba" "$(smbd --version)"
+  # each share's folder: a mount that is there, or a folder under one, made; the top folder the user's (the top only:
+  # what is already inside keeps its owner)
+  echo "$LAPLACE_SHARES" | while read -r name path _; do [ -n "$name" ] || continue
+    if [ ! -d "$path" ]; then
+      parent=$(dirname "$path")
+      if [ "$parent" != / ] && [ -d "$parent" ]; then install -d -o "$u" -g "$u" -m 2775 "$path"; say "$path" "made"
+      else say "[$name] $path" "MISSING: not mounted (volumes)"; continue; fi
+    fi
+    [ "$(stat -c %U "$path")" = "$u" ] || { chown "$u:$u" "$path"; say "$path" "given to $u"; }
+    mountpoint -q "$path" || [ "$(stat -c %a "$path")" = 2775 ] || { chmod 2775 "$path"; say "$path" "mode 2775"; }
+    say "[$name] $path" "$(stat -c '%U:%G %a' "$path")"
+  done
+  [ -f "$conf.orig" ] || [ ! -f "$conf" ] || cp -a "$conf" "$conf.orig"
+  smbconf > "$conf.setup"
+  if cmp -s "$conf.setup" "$conf"; then rm -f "$conf.setup"; say "smb.conf" "as declared"
+  elif testparm -s "$conf.setup" >/dev/null 2>&1; then mv -f "$conf.setup" "$conf"; changed=1; say "smb.conf" "written"
+  else rm -f "$conf.setup"; say "smb.conf" "NOT WRITTEN: the declaration does not pass testparm -s"; return 0; fi
+  if pdbedit -L 2>/dev/null | grep -q "^$u:"; then say "SMB user $u" "present (sudo smbpasswd $u changes the password)"
+  elif [ -t 0 ]; then echo "  the SMB password for $u (what Windows asks for):"; smbpasswd -a "$u"; say "SMB user $u" "made"
+  else say "SMB user $u" "MISSING: from a terminal, sudo smbpasswd -a $u"; fi
+  # ufw says when a rule is already there ("Skipping adding existing rule"): only a rule it adds is reported as added
+  if command -v ufw >/dev/null && ufw status | grep -q "^Status: active"; then
+    for src in "$LAPLACE_LAN" "$LAPLACE_SHARE_LAN6"; do
+      out=$(ufw allow from "$src" to any port 445 proto tcp comment 'SMB from the LAN' 2>&1)
+      case $out in *Skipping*) say "ufw 445/tcp from $src" "present" ;; *) say "ufw 445/tcp from $src" "added" ;; esac; done
+    out=$(ufw allow in on "$LAPLACE_SHARE_IF" from "$SMB_LL6" to any port 445 proto tcp comment 'SMB from the LAN (link-local)' 2>&1)
+    case $out in *Skipping*) say "ufw 445/tcp from $SMB_LL6 on $LAPLACE_SHARE_IF" "present" ;; *) say "ufw 445/tcp from $SMB_LL6 on $LAPLACE_SHARE_IF" "added" ;; esac
+  else say "firewall" "ufw not active: hosts allow alone limits SMB to the LAN"; fi
+  systemctl is-enabled -q smbd || { systemctl enable -q smbd; say "smbd" "enabled"; }
+  if ! systemctl is-active -q smbd; then systemctl start smbd; say "smbd" "started"
+  elif [ "$changed" = 1 ]; then systemctl reload smbd
+    say "smbd" "reloaded; interfaces take effect at its next restart (sudo systemctl restart smbd, when no copy is running)"; fi
+  if systemctl is-enabled -q nmbd 2>/dev/null || systemctl is-active -q nmbd 2>/dev/null; then systemctl disable --now -q nmbd; say "nmbd" "stopped and disabled"; fi
+  say "smbd" "$(systemctl is-active smbd), $(ss -ltn | grep -q ':445 ' && echo 'listening on :445' || echo 'NOT LISTENING on :445')"
+  say "shares" "$(echo "$LAPLACE_SHARES" | awk -v h="$(hostname)" 'NF {printf "\\\\%s\\%s  ", h, $1}')"
+}
 report(){ part report
   say "server" "$($PGBIN/postgres --version)   $(systemctl is-active "$SERVICE.service")"
   say "PostGIS" "$(q "SELECT default_version FROM pg_available_extensions WHERE name = 'postgis'")"
@@ -332,8 +412,8 @@ report(){ part report
 }
 
 parts=${*:-all}
-for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report|chess) ;;
-  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report|chess ...]"; exit 2 ;; esac; done
+for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report|chess|shares) ;;
+  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report|chess|shares ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
   all) volumes; packages; rights; kernel; deps; cluster; settings; access; site; agents; report ;;
   *) "$p" ;;
