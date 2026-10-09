@@ -97,7 +97,7 @@ volumes(){ part volumes
       fi
       # the volume is a bucket, or a directory in one: "gcs laplace-data-xxxx/Data 20G gcsfuse $LAPLACE_DATA"
       bucket=${lv%%/*}; dir=${lv#"$bucket"}; dir=${dir#/}
-      cache=/var/cache/laplace-gcsfuse/$bucket; install -d -m 755 "$cache" "$mnt"
+      cache=/var/cache/laplace-gcsfuse/$(echo "$lv" | tr / -); install -d -m 755 "$cache" "$mnt"   # one cache per mount
       cache_mb=$(echo "$size" | awk '/G$/ {print $1 * 1024; next} /M$/ {print $1 + 0; next} {print 20480}')
       opts="ro,_netdev,allow_other,implicit_dirs,file_cache_max_size_mb=$cache_mb,cache_dir=$cache,metadata_cache_ttl_secs=3600,uid=$(id -u "$op"),gid=$(getent group "$LAPLACE_GROUP" | cut -d: -f3)${dir:+,only_dir=$dir}"
       grep -q "^$bucket $mnt gcsfuse $opts " /etc/fstab || { sed -i "\| $mnt gcsfuse |d" /etc/fstab; printf '%s %s gcsfuse %s 0 0\n' "$bucket" "$mnt" "$opts" >> /etc/fstab; say "$mnt" "added to fstab (bucket $bucket${dir:+, directory $dir})"; }
