@@ -44,6 +44,7 @@ step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
 step tune-pg    bash "$here/tune-pg.sh"                          # the server's settings: apply, reload, check. a drift fails the deploy
 step build      "$here/build.sh" install
 "$here/data.sh" status >/dev/null 2>&1 || step data "$here/data.sh" fetch   # the data sets the recipes read, from their publishers, when one is missing
+mkdir -p "$(dirname "$LAPLACE_TIER0")"                                   # the perf-caches' directory: a new host has none until here
 [ -s "$LAPLACE_TIER0" ] || step tier0 laplace tier0
 [ -s "${LAPLACE_TIER0%.bin}.flags" ] || step flags laplace flags
 step highway    laplace highway                                   # seconds; always current with the generator and the resources
