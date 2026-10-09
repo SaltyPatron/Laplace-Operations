@@ -4,7 +4,7 @@
 # the wordnet in minutes instead of receiving a copy of another machine's directory. Nothing here is renamed or
 # rewritten: a file lands as the publisher serves it, at the path the recipe reads it from.
 #
-#   ./data.sh fetch [SET...]    every declared set (or these): mirrored, downloaded when newer, or the latest release
+#   ./data.sh fetch [SET...]    every declared set (or these): mirrored, downloaded when newer, the latest release, an archive opened
 #   ./data.sh status            each declared set present or missing, then each recipe's roots: resolved or not;
 #                               exit 1 when a declared set is missing
 #   ./data.sh record            set, file, bytes, SHA-256 of what $LAPLACE_DATA holds for the declared sets
@@ -32,6 +32,9 @@ fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
             name=${u##*/}; edition=${name#"$pre"}; edition=${edition%%.*}; set=${set//\{edition\}/$edition}   # the name after the pattern's prefix, before its extension
             dest=$LAPLACE_DATA/$set/$name; get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"
             printf '  %-28s %s, the latest release\n' "$set" "$name" ;;
+    extract) dest=$LAPLACE_DATA/$set/${into%/}; mkdir -p "$dest"
+            unzip -q -o -DD "$LAPLACE_DATA/$set/$origin" -d "$dest"          # the publisher's archive, opened beside itself
+            printf '  %-28s %s opened into %s\n' "$set" "${origin##*/}" "${into%/}" ;;
     *) echo "  $set: $kind is not a kind data.sh fetches"; return 1 ;;
   esac; }
 case $op in

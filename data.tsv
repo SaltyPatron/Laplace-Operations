@@ -6,8 +6,10 @@
 #   listing  a GitHub contents listing (api.github.com/repos/O/R/contents/PATH): every file of it, into a directory
 #   release  the latest GitHub release (api.github.com/repos/O/R/releases/latest): the asset matching into's pattern;
 #            {edition} in the set's name is the asset's name after the pattern's literal prefix, before its extension
+#   extract  an archive the set already holds (origin: its path under the set), opened into a directory under the set
 # set	kind	origin	into
 UCD	mirror	https://www.unicode.org/Public/UCD/latest/	.
+UCD	extract	Public/UCD/latest/ucdxml/ucd.all.flat.zip	Public/UCD/latest/ucdxml/
 ISO639	file	https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3.tab	./
 ISO639	file	https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3_Name_Index.tab	./
 ISO639	file	https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3_Retirements.tab	./
