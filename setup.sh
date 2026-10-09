@@ -57,6 +57,7 @@ postgis     $LAPLACE_PG_DIR/share/extension/postgis.control   postgis   https://
 blake3      $LAPLACE_DEPSRC/blake3/c/blake3.h   source     https://github.com/BLAKE3-team/BLAKE3.git        master
 core-math   $LAPLACE_DEPSRC/core-math/src       source     https://gitlab.inria.fr/core-math/core-math.git  master
 tree-sitter $LAPLACE_DEPSRC/tree-sitter/lib/src/lib.c   source   https://github.com/tree-sitter/tree-sitter.git   master
+Fathom      $LAPLACE_DEPSRC/Fathom/src/tbprobe.c   source   https://github.com/jdart1/Fathom.git              master
 "
 # The server's settings (Database.md). tune-pg.sh holds the declaration and the check.
 # CI applies it on every deploy, as the role. This script applies the same set when a
