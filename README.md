@@ -108,7 +108,7 @@ hash of the trees of Laplace-Native, Laplace-Engine (its source and recipes), La
 floating-point contract (`toolchain/`, `math/`, `patches/`, `dependencies.tsv`). Documentation, workflows, tests and the
 firmware do not count, since none of them changes what is recorded. When the stamp the code makes differs from the
 database's, or the database has none, the deployment drops the database and seeds it again from empty. The data on the
-target is expendable; the repository variable `LAPLACE_RESEED=never` stops automatic reseeds. A reseed that was cut
+target is expendable. Since 2026-10-09 the policy only reports: a deployment on a push or a main-merged dispatch never ingests, because a build is not an ingest; the stamp's verdict is in the run's summary, and the reseed is done by hand. A reseed that was cut
 off leaves the stamp `pending`, and the next deployment with the same stamp picks the ingest up again without a drop.
 By hand, in one click: `laplace.yml` with `drop` (empty, no ingest) or `reseed` (drop, then every source), or
 `ingest.yml` with `reseed`.
