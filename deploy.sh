@@ -1,6 +1,7 @@
 #!/bin/sh
-# Laplace, from an empty server to a Laplace database ready to be loaded: the build, the perf-caches generated (tier 0
-# and its flags once, the highway every time: it takes seconds), the grammars, the database with its extension and
+# Laplace, from an empty server to a Laplace database ready to be loaded: the build, the data sets fetched from their
+# publishers (when one is missing), the perf-caches generated (tier 0 and its flags once, the highway every time: it
+# takes seconds), the grammars, the database with its extension and
 # schema, and its status. No data is loaded here: loading is ingest.sh, an operation of its own on what this left
 # (Laplace-Operations; the code is Laplace-Native, Laplace-postgres and Laplace-Engine beside it under $LAPLACE_SRC).
 # Everything it does can be done again: what is built is not rebuilt, what is recorded is passed over by its bytes,
@@ -42,6 +43,7 @@ step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
 
 step tune-pg    bash "$here/tune-pg.sh"                          # the server's settings: apply, reload, check. a drift fails the deploy
 step build      "$here/build.sh" install
+"$here/data.sh" status >/dev/null 2>&1 || step data "$here/data.sh" fetch   # the data sets the recipes read, from their publishers, when one is missing
 [ -s "$LAPLACE_TIER0" ] || step tier0 laplace tier0
 [ -s "${LAPLACE_TIER0%.bin}.flags" ] || step flags laplace flags
 step highway    laplace highway                                   # seconds; always current with the generator and the resources
