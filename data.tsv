@@ -34,3 +34,7 @@ VerbNet	git	https://github.com/cu-clear/verbnet	verbnet-cu-clear/
 SemLink	git	https://github.com/cu-clear/semlink	semlink-cu-clear/
 UD-Tools	git	https://github.com/UniversalDependencies/tools	tools/
 Wordnet	archive	https://wordnetcode.princeton.edu/3.0/WordNet-3.0.tar.gz	.
+# FrameNet 1.7 as NLTK redistributes it (CC BY 3.0 per NLTK's index; Berkeley FrameNet's own release is on request); VerbAtlas 1.1.0 as
+# its publisher serves it (CC BY-NC-SA 4.0: the download page asks the licence be accepted; LICENSES.txt is in the archive)
+FrameNet	archive	https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/framenet_v17.zip	.
+VerbAtlas-1.1	archive	https://verbatlas.org/downloads/VerbAtlas-1.1.0.zip	.
