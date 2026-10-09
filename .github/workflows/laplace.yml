@@ -31,6 +31,10 @@ on:
         description: "drop the database and seed it again: every source of LAPLACE_SOURCES (laplace.env; empty: every source in recipes/order)"
         type: boolean
         default: false
+      production:
+        description: "after staging has passed in this run: deploy the same revisions to hart-cloud (production) and lay its record beside hart-server's"
+        type: boolean
+        default: false
 concurrency:
   group: hart-server-laplace
   cancel-in-progress: false
@@ -40,7 +44,7 @@ env:
   LAPLACE_RESEED: ${{ vars.LAPLACE_RESEED || 'auto' }}
 jobs:
   deploy:
-    runs-on: [self-hosted, laplace, Laplace-Operations]
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 240
     outputs:
       ingest: ${{ steps.policy.outputs.ingest }}
@@ -102,10 +106,49 @@ jobs:
   reads:
     needs: [deploy, ingest]
     if: always() && needs.deploy.result == 'success' && needs.ingest.result != 'failure' && needs.ingest.result != 'cancelled'
-    runs-on: [self-hosted, laplace, Laplace-Operations]
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations, clean: false }
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
+  # Production: hart-cloud (a Google Compute c3, Sapphire Rapids: AVX-512 and its VNNI, which hart-server's processor
+  # lacks), its runner labelled production, after the staging deployment and its checks have passed, and after the
+  # production environment's reviewer has approved. The same revisions, deployed by the same script; its own checks
+  # lay its build's record beside hart-server's for the same commits, so a difference between the AVX2 machine and
+  # the AVX-512 machine is a failure here. No ingest: production holds what it is deployed with until the data has
+  # a way there.
+  # The gate is the dispatch itself: production deploys only when this workflow is run by hand with `production`
+  # set (a private repository has no reviewer rule on an environment), and only once staging has passed in that run.
+  deploy-production:
+    needs: [deploy, checks]
+    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.production == true
+    runs-on: [self-hosted, laplace, Laplace-Operations, production]
+    environment: production
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: Laplace-Operations }
+      - uses: actions/checkout@v4
+        with: { repository: "${{ github.repository_owner }}/Laplace-Native", ref: main, path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - uses: actions/checkout@v4
+        with: { repository: "${{ github.repository_owner }}/Laplace-postgres", ref: main, path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - uses: actions/checkout@v4
+        with: { repository: "${{ github.repository_owner }}/Laplace-Engine", ref: main, path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - name: the build, the perf-caches, the database with its schema and extension, and its status
+        run: |
+          { echo "## hart-cloud: the deployment"; echo; echo "- $(lscpu | sed -n 's/^Model name: *//p')"
+            echo '- `'"$(grep -o -wE 'avx2|avx_vnni|avx512f|avx512_vnni|avx512_bf16|amx_tile' /proc/cpuinfo | sort -u | tr '\n' ' ')"'`'; echo; } >> "$GITHUB_STEP_SUMMARY"
+          ./Laplace-Operations/deploy.sh
+  checks-production:
+    needs: deploy-production
+    runs-on: [self-hosted, laplace, Laplace-Operations, production]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: Laplace-Operations, clean: false }
+      - name: does it work on another machine (this build's record beside hart-server's and HART-DESKTOP's)
+        env:
+          LAPLACE_FINGERPRINT_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
+        run: ./Laplace-Operations/verify.sh build

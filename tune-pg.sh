@@ -38,12 +38,21 @@ cores=$(env -u OMP_NUM_THREADS -u MKL_NUM_THREADS nproc)
 # and sysfs: findmnt's SIZE and df both stat the mount, and the data directory is not
 # readable by the role that deploys.
 wal_bytes() {
-  local src dev base sectors
-  src=$(awk -v m="$PGWAL" '$2==m {print $1; exit}' /proc/mounts)
-  [ -n "$src" ] || { echo "tune-pg: $PGWAL is not mounted" >&2; return 1; }
-  dev=$(readlink -f "$src"); base=$(basename "$dev")
-  sectors=$(cat "/sys/class/block/$base/size")
-  echo $(( sectors * 512 ))
+  # The mount holding $PGWAL is the one whose point is the longest prefix of it (the WAL's own volume when there is
+  # one, else the volume it shares with the data); its device by major:minor through sysfs, so a loop file, a bind
+  # mount or a root the table names /dev/root all resolve. No stat of the directory: the role that deploys cannot.
+  # On a shared volume the log is bounded at 32 GB of it, so a single-disk host keeps room for the data.
+  local line mp dev='' l=0 shared=1 bytes
+  while IFS= read -r line; do
+    set -- $line; mp=$5
+    case $PGWAL in "$mp"|"$mp"/*) ;; *) [ "$mp" = / ] || continue ;; esac
+    if [ ${#mp} -gt $l ]; then l=${#mp}; dev=$3; if [ "$mp" = "$PGWAL" ]; then shared=0; else shared=1; fi; fi
+  done < /proc/self/mountinfo
+  [ -n "$dev" ] || { echo "tune-pg: no mount holds $PGWAL" >&2; return 1; }
+  [ -r "/sys/dev/block/$dev/size" ] || { echo "tune-pg: device $dev of $PGWAL has no size in sysfs" >&2; return 1; }
+  bytes=$(( $(cat "/sys/dev/block/$dev/size") * 512 ))
+  [ "$shared" = 1 ] && [ "$bytes" -gt $((32 * 1024 * 1024 * 1024)) ] && bytes=$((32 * 1024 * 1024 * 1024))
+  echo "$bytes"
 }
 wal_mb() { echo $(( $(wal_bytes) / 1048576 / 2 )); }
 # wal_compression zstd: on 23,450 of ConceptNet's B-tree images, level 3 wrote 3,781 bytes
@@ -180,7 +189,7 @@ SQL
 
 tune_apply() {
   declare -A want=()
-  local name value match context source pending live n=0
+  local name value match context source pending live literal n=0
   while read -r name value; do [ -n "$name" ] && want[$name]=$value; done < <(declared)
   while IFS='|' read -r name match context source pending live; do
     [ -n "$name" ] || continue
@@ -190,7 +199,15 @@ tune_apply() {
       continue
     fi
     value=${want[$name]}
-    if ! tune_psql "ALTER SYSTEM SET $name = '${value//\'/\'\'}'" >/dev/null; then
+    # A list parameter takes its items as separate literals. One literal holding commas is one
+    # item: shared_preload_libraries = 'a,b' is written as '"a,b"' and the server then looks for a
+    # library called a,b and does not start.
+    case $name in
+      shared_preload_libraries|session_preload_libraries|local_preload_libraries|search_path|temp_tablespaces|log_destination|synchronous_standby_names|unix_socket_directories|listen_addresses|wal_consistency_checking)
+        literal=$(printf '%s' "$value" | awk -F, '{for (i = 1; i <= NF; i++) {gsub(/^ +| +$/, "", $i); gsub(/\x27/, "\x27\x27", $i); printf "%s\x27%s\x27", (i > 1 ? ", " : ""), $i}}') ;;
+      *) literal="'${value//\'/\'\'}'" ;;
+    esac
+    if ! tune_psql "ALTER SYSTEM SET $name = $literal" >/dev/null; then
       echo "tune-pg: REFUSED $name $value" >&2
       return 1
     fi
