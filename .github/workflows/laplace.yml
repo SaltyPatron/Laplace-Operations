@@ -117,8 +117,8 @@ jobs:
   # lacks), its runner labelled production, after the staging deployment and its checks have passed, and after the
   # production environment's reviewer has approved. The same revisions, deployed by the same script; its own checks
   # lay its build's record beside hart-server's for the same commits, so a difference between the AVX2 machine and
-  # the AVX-512 machine is a failure here. No ingest: production holds what it is deployed with until the data has
-  # a way there.
+  # the AVX-512 machine is a failure here. Its ingest takes the sources its own declaration names (LAPLACE_SOURCES in
+  # /etc/laplace/machine.env: the ones in the bucket mounted at its data root), then the reads.
   # The gate is the dispatch itself: production deploys only when this workflow is run by hand with `production`
   # set (a private repository has no reviewer rule on an environment), and only once staging has passed in that run.
   deploy-production:
@@ -152,3 +152,23 @@ jobs:
         env:
           LAPLACE_FINGERPRINT_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
         run: ./Laplace-Operations/verify.sh build
+  ingest-production:
+    needs: [deploy-production, checks-production]
+    if: always() && needs.deploy-production.result == 'success' && needs.checks-production.result == 'success'
+    runs-on: [self-hosted, laplace, Laplace-Operations, production]
+    timeout-minutes: 7200
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: Laplace-Operations, clean: false }
+      - name: the ingest of this machine's sources, its status, and its measurements
+        run: ./Laplace-Operations/ingest.sh
+  reads-production:
+    needs: [deploy-production, ingest-production]
+    if: always() && needs.deploy-production.result == 'success' && needs.ingest-production.result != 'failure' && needs.ingest-production.result != 'cancelled'
+    runs-on: [self-hosted, laplace, Laplace-Operations, production]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: Laplace-Operations, clean: false }
+      - name: the database, read
+        run: ./Laplace-Operations/verify.sh reads
