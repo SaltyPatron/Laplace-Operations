@@ -26,10 +26,10 @@ fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
     listing) local u; for u in $(curl -fsSL "$origin" | urls download_url); do
               dest=$(land "$set" "$into" "${u##*/}"); get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"; done
             printf '  %-28s %s: %s files from %s\n' "$set" "${into%/}" "$(ls "$LAPLACE_DATA/$set/${into%/}" | wc -l)" "$origin" ;;
-    release) local u name edition pre=${into%%\**} suf=${into#*\*}
+    release) local u name edition pre=${into%%\**}
             u=$(curl -fsSL "$origin" | urls browser_download_url | while read -r x; do case ${x##*/} in $into) echo "$x"; break ;; esac; done)
             [ -n "$u" ] || { echo "  $set: no asset of the latest release matches $into"; return 1; }
-            name=${u##*/}; edition=${name#"$pre"}; edition=${edition%"$suf"}; set=${set//\{edition\}/$edition}
+            name=${u##*/}; edition=${name#"$pre"}; edition=${edition%%.*}; set=${set//\{edition\}/$edition}   # the name after the pattern's prefix, before its extension
             dest=$LAPLACE_DATA/$set/$name; get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"
             printf '  %-28s %s, the latest release\n' "$set" "$name" ;;
     *) echo "  $set: $kind is not a kind data.sh fetches"; return 1 ;;

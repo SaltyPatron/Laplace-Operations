@@ -5,7 +5,7 @@
 #   file     one file: into is the path under the set it lands at (a directory when it ends with /: the origin's own name)
 #   listing  a GitHub contents listing (api.github.com/repos/O/R/contents/PATH): every file of it, into a directory
 #   release  the latest GitHub release (api.github.com/repos/O/R/releases/latest): the asset matching into's pattern;
-#            {edition} in the set's name is what the pattern's * matched
+#            {edition} in the set's name is the asset's name after the pattern's literal prefix, before its extension
 # set	kind	origin	into
 UCD	mirror	https://www.unicode.org/Public/UCD/latest/	.
 ISO639	file	https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3.tab	./
