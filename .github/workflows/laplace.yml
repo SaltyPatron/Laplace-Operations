@@ -6,12 +6,14 @@
 #            the build, the perf-caches, the database with its schema and extension, its status (no data)
 #   checks   verify.sh build: the build's record (tier 0 and flags made afresh, the highway, the claims of
 #            $LAPLACE_DETERMINISM decomposed twice), against HART-DESKTOP's record for the same commits; no database
-#   ingest   when the policy says so: ingest.sh, every source of $LAPLACE_SOURCES (laplace.env), and the stamp written
+#   ingest   only when run by hand with `reseed`: ingest.sh, every source of $LAPLACE_SOURCES (laplace.env), and the
+#            stamp written. A deployment on a push or a main-merged dispatch never ingests (the inventor, 2026-10-09:
+#            a build is not an ingest); the policy still says what the stamp calls for, in the run's summary
 #   reads    verify.sh reads: laplace status and reads through the indexes
 # The reseed policy: a database carries the stamp of the code it was seeded from (seed-stamp.sh); when Laplace-Native,
 # Laplace-Engine's source or recipes, Laplace-postgres or Operations' floating-point contract change, the stamp
-# changes, and the database is dropped and seeded again from empty (the data on this machine is expendable; the
-# repository variable LAPLACE_RESEED=never stops it). By hand: drop (empty, no ingest) or reseed (drop and every source).
+# changes, and the policy says the database is due a reseed. It is reported, never acted on by itself: by hand, drop
+# (empty, no ingest) or reseed (drop and every source), here or in ingest.yml.
 # The three code repositories are checked out beside this one (private: the secret LAPLACE_CHECKOUT); builds and work are
 # the runner's own (runner/.env); the database is laplace.env's. A deployment never runs under an ingest (deploy.sh
 # leaves): ingest.yml shares this workflow's concurrency group, so the two queue rather than collide.
@@ -66,7 +68,8 @@ jobs:
           GITHUB_OUTPUT= ./Laplace-Operations/seed-stamp.sh decide > policy.txt; cat policy.txt
           drop=$(sed -n 's/^drop=//p' policy.txt); ingest=$(sed -n 's/^ingest=//p' policy.txt); why=$(sed -n 's/^why=//p' policy.txt)
           if [ "$RESEED" = true ]; then drop=true ingest=true why="dispatched with reseed: dropped, and every source seeded again"
-          elif [ "$DROP" = true ]; then drop=true ingest=false why="dispatched with drop: made again empty, no ingest"; fi
+          elif [ "$DROP" = true ]; then drop=true ingest=false why="dispatched with drop: made again empty, no ingest"
+          else why="$why; a deployment ingests only when dispatched with reseed: drop $drop, ingest $ingest were called for, neither is done"; drop=false; ingest=false; fi
           echo "drop=$drop" >> "$GITHUB_OUTPUT"; echo "ingest=$ingest" >> "$GITHUB_OUTPUT"
           { echo "## hart-server: the deployment"; echo
             echo "- triggered by: ${{ github.event_name }} ${{ github.event.client_payload.repository }} ${{ github.event.client_payload.sha }}"
@@ -117,8 +120,9 @@ jobs:
   # lacks), its runner labelled production, after the staging deployment and its checks have passed, and after the
   # production environment's reviewer has approved. The same revisions, deployed by the same script; its own checks
   # lay its build's record beside hart-server's for the same commits, so a difference between the AVX2 machine and
-  # the AVX-512 machine is a failure here. Its ingest takes the sources its own declaration names (LAPLACE_SOURCES in
-  # /etc/laplace/machine.env: the ones in the bucket mounted at its data root), then the reads.
+  # the AVX-512 machine is a failure here. Its ingest, only when the run was dispatched with `reseed` too, takes the
+  # sources its own declaration names (LAPLACE_SOURCES in /etc/laplace/machine.env, fetched from their publishers by
+  # data.sh), then the reads.
   # The gate is the dispatch itself: production deploys only when this workflow is run by hand with `production`
   # set (a private repository has no reviewer rule on an environment), and only once staging has passed in that run.
   deploy-production:
@@ -154,7 +158,7 @@ jobs:
         run: ./Laplace-Operations/verify.sh build
   ingest-production:
     needs: [deploy-production, checks-production]
-    if: always() && needs.deploy-production.result == 'success' && needs.checks-production.result == 'success'
+    if: always() && needs.deploy-production.result == 'success' && needs.checks-production.result == 'success' && inputs.reseed == true
     runs-on: [self-hosted, laplace, Laplace-Operations, production]
     timeout-minutes: 7200
     steps:
