@@ -1,0 +1,16 @@
+machine     hart-cloud
+os          Linux 6.8.0-1069-gcp
+cpu         Intel(R) Xeon(R) Platinum 8481C CPU @ 2.70GHz
+compiler    Intel(R) oneAPI DPC++/C++ Compiler 2026.1.1 (2026.1.1.20260724)
+made        2026-10-09T23:53:40Z
+native      729e3b9f41c4
+engine      aa38df13d4a0
+postgres    0429d10a2b41
+operations  65195019c936
+tier0       c62a86575d59cb0958e316d9b9dc8e943341b9e81b26681552e0a7b4314de794
+flags       db65bc417239dea62076e657bd032ec0d59bbe379449a1166def73df6c5b0024
+highway     77c2d5b08336564445c3268061918d59449b168efbda791bc736c47e42eed698
+claims      iso-639 93797 e35ab9e854d16d17
+determinism iso-639 same: twice 93797 claims, e35ab9e854d16d17
+claims      open-english-wordnet 1390805 ea1472609027b87f
+determinism open-english-wordnet same: twice 1390805 claims, ea1472609027b87f
