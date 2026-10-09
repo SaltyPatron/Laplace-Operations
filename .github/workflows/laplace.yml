@@ -82,7 +82,7 @@ jobs:
         run: ./Laplace-Operations/seed-stamp.sh pending
   checks:
     needs: deploy
-    runs-on: [self-hosted, laplace, Laplace-Operations]
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +94,7 @@ jobs:
   ingest:
     needs: [deploy, checks]
     if: always() && needs.deploy.result == 'success' && needs.deploy.outputs.ingest == 'true'
-    runs-on: [self-hosted, laplace, Laplace-Operations]
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 7200
     steps:
       - uses: actions/checkout@v4
