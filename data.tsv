@@ -1,0 +1,26 @@
+# Every data set the recipes read that a publisher serves, declared once: the set (its directory under $LAPLACE_DATA), how it
+# is fetched, its origin, and where under the set it lands. data.sh fetch pulls each from its origin at the latest, at the
+# machine's own network speed; Laplace-Engine/recipes/*/source names the roots the recipes read them from.
+#   mirror   the publisher's directory, as it serves it (wget -r): into is the set itself
+#   file     one file: into is the path under the set it lands at (a directory when it ends with /: the origin's own name)
+#   listing  a GitHub contents listing (api.github.com/repos/O/R/contents/PATH): every file of it, into a directory
+#   release  the latest GitHub release (api.github.com/repos/O/R/releases/latest): the asset matching into's pattern;
+#            {edition} in the set's name is what the pattern's * matched
+# set	kind	origin	into
+UCD	mirror	https://www.unicode.org/Public/UCD/latest/	.
+ISO639	file	https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3.tab	./
+ISO639	file	https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3_Name_Index.tab	./
+ISO639	file	https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3_Retirements.tab	./
+ISO639	file	https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3-macrolanguages.tab	./
+ISO639	file	https://www.loc.gov/standards/iso639-2/ISO-639-2_utf-8.txt	./
+ISO639	file	https://www.loc.gov/standards/iso639-5/iso639-5.atom10.xml	./
+ISO639	file	https://www.loc.gov/standards/iso639-5/iso639-5.rss20.xml	./
+ISO639	file	https://id.loc.gov/vocabulary/iso639-1.rdf	loc/
+ISO639	file	https://id.loc.gov/vocabulary/iso639-2.rdf	loc/
+ISO639	file	https://id.loc.gov/vocabulary/iso639-5.rdf	loc/
+ISO639	file	https://www.iana.org/assignments/language-subtag-registry/language-subtag-registry	iana/language-subtag-registry.txt
+ISO639	listing	https://api.github.com/repos/unicode-org/cldr/contents/common/bcp47	cldr/bcp47/
+ISO639	file	https://raw.githubusercontent.com/unicode-org/cldr/main/common/supplemental/likelySubtags.xml	cldr/
+ISO639	file	https://raw.githubusercontent.com/unicode-org/cldr/main/common/supplemental/supplementalData.xml	cldr/
+ISO639	file	https://raw.githubusercontent.com/unicode-org/cldr/main/common/supplemental/supplementalMetadata.xml	cldr/
+OpenEnglishWordNet-{edition}	release	https://api.github.com/repos/globalwordnet/english-wordnet/releases/latest	english-wordnet-*-plus.xml.gz

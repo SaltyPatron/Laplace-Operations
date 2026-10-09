@@ -23,7 +23,15 @@ value in it is `${VAR:-default}`, so another machine sets its own.
 LAPLACE_CONNINFO="host=/tmp port=5432 user=laplace dbname=NAME" ./deploy.sh
 ```
 
-`deploy.sh` runs, in order: the build and install, tier 0 and its flags (each made only when missing), the highway (always: its slots are frozen by the manifest), the grammars (when `$LAPLACE_GRAMMARS` is empty), `laplace deploy` (the database, its extensions and settings, the schema and its indexes, the highway's records), and `laplace status`. It loads no data. It takes a lock per database, and leaves (exit 3) while an ingest of that database runs. Each step's output is kept under `$LAPLACE_WORK/logs/deploy`. `./deploy.sh drop` first drops the database through the role (`DROP DATABASE … WITH (FORCE)`, never root; never `postgres` or an empty name), then deploys it again, empty.
+`deploy.sh` runs, in order: the build and install, the data sets (`data.sh fetch`, when a declared set is missing), tier 0 and its flags (each made only when missing), the highway (always: its slots are frozen by the manifest), the grammars (when `$LAPLACE_GRAMMARS` is empty), `laplace deploy` (the database, its extensions and settings, the schema and its indexes, the highway's records), and `laplace status`. It loads no data. It takes a lock per database, and leaves (exit 3) while an ingest of that database runs. Each step's output is kept under `$LAPLACE_WORK/logs/deploy`. `./deploy.sh drop` first drops the database through the role (`DROP DATABASE … WITH (FORCE)`, never root; never `postgres` or an empty name), then deploys it again, empty.
+
+```sh
+./data.sh fetch                                    # every data set data.tsv declares, from its publisher, at the latest
+./data.sh status                                   # each set present or missing; each recipe's roots, resolved or not
+./grammars.sh fetch                                # every grammar grammars.tsv declares, cloned from its origin at the latest
+```
+
+A host receives no copy of another host's data. `data.tsv` declares each data set the recipes read: its directory under `$LAPLACE_DATA`, how it is fetched (a mirror of the publisher's directory, a file, a GitHub listing, the latest GitHub release), its origin and where under the set it lands, and `data.sh fetch` pulls it from there at the machine's own network speed, as the publisher serves it. `grammars.tsv` and `grammars.sh` do the same for the tree-sitter grammars. `data.sh record` and `grammars.sh record` are the record of what a machine holds. Dev, staging and production are the same by construction: each fetched the same declarations from the same origins.
 
 ```sh
 ./ingest.sh                                        # every source, in recipes/order
