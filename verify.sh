@@ -51,7 +51,7 @@ reads(){
     if grep -q DIFFERS "$log/status.txt"; then bad "laplace status: the database's tier 0 or highway DIFFERS from this engine's"; else good "laplace status"; fi
   else bad "laplace status failed"; fi
   block "$log/status.txt"
-  empty=0; grep -q 'attestation  *[1-9]' "$log/status.txt" || empty=1
+  empty=0; grep -q 'consensus  *[1-9]' "$log/status.txt" || empty=1        # a standing for every claim a witness's records say (provenance is containment: no attestation table)
   md "### Reads"; md "| read | exit | ms | first lines |"; md "|---|---|---|---|"
   for r in "text|30|text hello" "hop|120|hop -n 5 dog" "translate|120|translate dog en fr" "fills|60|fills -n 5 the"; do
     name=${r%%|*}; rest=${r#*|}; limit=${rest%%|*}; args=${rest#*|}
@@ -62,7 +62,7 @@ reads(){
     case $name in fills) ;;                                      # fills is measured, not required (it can take minutes)
       *) [ "$e" = 0 ] || bad "laplace $args exited $e" ;; esac
   done
-  [ "$empty" = 0 ] || md "- the database holds no attestations yet: reads say nothing until a source is in"
+  [ "$empty" = 0 ] || md "- the database holds no standings yet: reads say nothing until a source is in"
 }
 
 case ${1:-build} in
