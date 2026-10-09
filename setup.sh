@@ -43,7 +43,8 @@ VOLUMES=$LAPLACE_VOLUMES
 # Packages from the distribution: the build tools and the libraries PostgreSQL, PostGIS, PROJ and GDAL are built on.
 PACKAGES="build-essential cmake ninja-build meson pkg-config flex bison liburing-dev libssl-dev liblz4-dev libzstd-dev
 libreadline-dev zlib1g-dev libxml2-dev libsqlite3-dev libtiff-dev libcurl4-openssl-dev libprotobuf-c-dev
-protobuf-c-compiler libjson-c-dev libeigen3-dev xfsprogs lvm2 openssl linux-tools-$(uname -r) linux-tools-generic"   # linux-tools: perf for the running kernel
+protobuf-c-compiler libjson-c-dev libeigen3-dev xfsprogs lvm2 openssl linux-tools-$(uname -r) linux-tools-generic
+sqlite3 autoconf automake libtool libgmp-dev libmpfr-dev curl ca-certificates"   # linux-tools: perf for the running kernel; sqlite3: PROJ's build runs it; autotools: PostGIS's autogen; GMP, MPFR: PostGIS 3.6
 # Dependencies built from source under $LAPLACE_SRC, in this order; each is known by the file it installs, and is
 # cloned when its source is not there. name  proof  how  origin  branch
 DEPS="
@@ -84,6 +85,35 @@ ident(){ echo "# who connects over the socket as $LAPLACE_ROLE: the members of $
 volumes(){ part volumes
   echo "$VOLUMES" | while read -r vg lv size fs mnt _; do [ -n "$vg" ] || continue
     dev=/dev/$vg/$lv
+    if [ "$vg" = gcs ]; then
+      # A Cloud Storage bucket as a volume (the data on a cloud host): mounted read-only through gcsfuse with a file
+      # cache on the local disk, so an ingest reads each file once from the bucket; the line names the bucket as the
+      # volume, the size as the cache's bound (e.g. 20G), e.g. "gcs laplace-data-xxxx 20G gcsfuse $LAPLACE_DATA".
+      if ! command -v gcsfuse >/dev/null; then
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.asc] https://packages.cloud.google.com/apt gcsfuse-$(lsb_release -cs) main" > /etc/apt/sources.list.d/gcsfuse.list
+        curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg > /usr/share/keyrings/cloud.google.asc
+        apt-get update -q >/dev/null; DEBIAN_FRONTEND=noninteractive apt-get install -y -q gcsfuse >/dev/null; say "$mnt" "gcsfuse installed"
+      fi
+      # the volume is a bucket, or a directory in one: "gcs laplace-data-xxxx/Data 20G gcsfuse $LAPLACE_DATA"
+      bucket=${lv%%/*}; dir=${lv#"$bucket"}; dir=${dir#/}
+      cache=/var/cache/laplace-gcsfuse/$bucket; install -d -m 755 "$cache" "$mnt"
+      cache_mb=$(echo "$size" | awk '/G$/ {print $1 * 1024; next} /M$/ {print $1 + 0; next} {print 20480}')
+      opts="ro,_netdev,allow_other,implicit_dirs,file_cache_max_size_mb=$cache_mb,cache_dir=$cache,metadata_cache_ttl_secs=3600,uid=$(id -u "$op"),gid=$(getent group "$LAPLACE_GROUP" | cut -d: -f3)${dir:+,only_dir=$dir}"
+      grep -q "^$bucket $mnt gcsfuse $opts " /etc/fstab || { sed -i "\| $mnt gcsfuse |d" /etc/fstab; printf '%s %s gcsfuse %s 0 0\n' "$bucket" "$mnt" "$opts" >> /etc/fstab; say "$mnt" "added to fstab (bucket $bucket${dir:+, directory $dir})"; }
+      findmnt -n "$mnt" >/dev/null || { mount "$mnt" >/dev/null 2>&1 && say "$mnt" "mounted" || say "$mnt" "DID NOT MOUNT: give the host's service account roles/storage.objectViewer on the bucket: gcloud storage buckets add-iam-policy-binding gs://$bucket --member=serviceAccount:<the host's> --role=roles/storage.objectViewer"; }
+      say "$mnt" "$(findmnt -n -o SOURCE,FSTYPE "$mnt" 2>/dev/null || echo 'not mounted')"; continue
+    fi
+    if [ "$vg" = file ]; then
+      # No volume group on this machine (a cloud host with one disk): the volume is a file, mounted through a loop
+      # device, so what reads the mount table (tune-pg's WAL bound) sees a device of its own size.
+      [ "$size" != ALL ] || { say "$mnt" "a file volume needs a size, not ALL: skipped"; continue; }
+      img=/var/lib/laplace/volumes/$lv.img
+      if [ ! -e "$img" ]; then install -d -m 700 /var/lib/laplace/volumes; fallocate -l "$size" "$img"; mkfs."$fs" -q "$img"; say "$mnt" "made $img $size $fs"; fi
+      mkdir -p "$mnt"
+      grep -q "^$img " /etc/fstab || { printf '%s  %s  %s  loop,noatime,nofail  0  0\n' "$img" "$mnt" "$fs" >> /etc/fstab; say "$mnt" "added to fstab"; }
+      findmnt -n "$mnt" >/dev/null || { mount "$mnt"; say "$mnt" "mounted"; }
+      say "$mnt" "$(findmnt -n -o SOURCE,SIZE,AVAIL "$mnt")"; continue
+    fi
     if ! vgs "$vg" >/dev/null 2>&1; then say "$mnt" "volume group $vg is not on this machine: skipped"; continue; fi
     if [ ! -e "$dev" ]; then
       if [ "$size" = ALL ]; then lvcreate -l 100%FREE -n "$lv" "$vg" >/dev/null; else lvcreate -L "$size" -n "$lv" "$vg" >/dev/null; fi
@@ -139,24 +169,40 @@ kernel(){ part kernel
 }
 deps(){ part dependencies
   set +u; . /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 || true; set -u
-  [ -d "$LAPLACE_ICU_DIR/lib" ] && say "ICU 78 (Unicode 17)" "$LAPLACE_ICU_DIR" || say "ICU 78" "MISSING: unpack the release into $LAPLACE_ICU_DIR (lib, include); tier 0 is Unicode 17"
+  # ICU 78 is a release, not a build: unicode-org's Linux binaries, unpacked under $LAPLACE_ICU_DIR (lib, include)
+  if [ -d "$LAPLACE_ICU_DIR/lib" ]; then say "ICU 78 (Unicode 17)" "$LAPLACE_ICU_DIR"
+  else
+    url=https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-Ubuntu22.04-x64.tgz; t=$(mktemp -d)
+    if curl -fsSL "$url" | tar xz -C "$t" && [ -d "$t/icu/usr/local/lib" ]; then
+      install -d "$LAPLACE_ICU_DIR"; cp -a "$t/icu/usr/local/." "$LAPLACE_ICU_DIR/"; say "ICU 78 (Unicode 17)" "fetched into $LAPLACE_ICU_DIR"
+    else say "ICU 78" "COULD NOT FETCH $url: unpack the release into $LAPLACE_ICU_DIR (lib, include); tier 0 is Unicode 17"; fi
+    rm -rf "$t"
+  fi
+  # The loader finds ICU 78 and the compiler's runtime (libimf, libsvml, libintlc: everything icx built needs them)
+  # without anyone's environment: the server's user, the agent and a systemd unit have none.
+  printf '%s\n' "$LAPLACE_ICU_DIR/lib" > /etc/ld.so.conf.d/laplace-icu.conf
+  rt=$(ls -d /opt/intel/oneapi/compiler/[0-9]*/lib 2>/dev/null | sort -V | tail -1)
+  [ -n "$rt" ] && printf '%s\n' "$rt" > /etc/ld.so.conf.d/laplace-oneapi.conf
+  ldconfig 2>/dev/null; say "loader" "ICU 78${rt:+, oneAPI runtime $rt}"
+  # Each build's output is its own log under $LAPLACE_WORK/logs/root; a failure is said and the next dependency is
+  # tried (the loop is a pipeline: without this, one failure ended it in silence).
   echo "$DEPS" | while read -r name proof how origin branch; do [ -n "$name" ] || continue
-    src=$LAPLACE_DEPSRC/$name; b=$LAPLACE_WORK/$name
+    src=$LAPLACE_DEPSRC/$name; b=$LAPLACE_WORK/$name; dlog=$LAPLACE_WORK/logs/root/dep-$name.log
     if [ -e "$proof" ]; then say "$name" "installed"; continue; fi
     [ -d "$src" ] || { as_op "git clone -q --depth 1 -b $branch $origin $src" || { say "$name" "could not clone $origin"; continue; }; }
-    case $how in
-      cmake)     cmake -S "$src" -B "$b" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$PREFIX -DBUILD_TESTING=OFF >/dev/null; cmake --build "$b" >/dev/null; cmake --install "$b" >/dev/null; ldconfig ;;
+    if ! { case $how in
+      cmake)     cmake -S "$src" -B "$b" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$PREFIX -DBUILD_TESTING=OFF && cmake --build "$b" && cmake --install "$b" && ldconfig ;;
       source)    ;;                                                        # built into Laplace by its own CMake
-      headers)   install -d "$PREFIX/include/Spectra"; cp -a "$src/include/Spectra/." "$PREFIX/include/Spectra/" ;;
-      configure) mkdir -p "$b"; ( cd "$b"; [ -f config.status ] || CC=icx CXX=icpx "$src/configure" --prefix="$LAPLACE_PG_DIR" --with-icu --with-ssl=openssl --with-lz4 --with-zstd --with-liburing \
-                   ICU_CFLAGS="-I$LAPLACE_ICU_DIR/include" ICU_LIBS="-L$LAPLACE_ICU_DIR/lib -licui18n -licuuc -licudata" >/dev/null
-                   make -j"$cores" >/dev/null; make install >/dev/null )
-                 ln -sfn "$PGBIN/psql" "$PREFIX/bin/psql"; ln -sfn "$PGBIN/pg_config" "$PREFIX/bin/pg_config" ;;
-      postgis)   [ -x "$src/configure" ] || as_op "cd $src && ./autogen.sh" >/dev/null
-                 mkdir -p "$b"; ( cd "$b"; [ -f config.status ] || "$src/configure" --with-pgconfig="$PGBIN/pg_config" --with-geosconfig=$PREFIX/bin/geos-config --with-projdir=$PREFIX --with-gdalconfig=$PREFIX/bin/gdal-config >/dev/null
-                   make -j"$cores" >/dev/null; make install >/dev/null ); ldconfig ;;
-    esac
-    [ -e "$proof" ] && say "$name" "built and installed" || say "$name" "DID NOT INSTALL: $b"
+      headers)   install -d "$PREFIX/include/Spectra" && cp -a "$src/include/Spectra/." "$PREFIX/include/Spectra/" ;;
+      configure) mkdir -p "$b" && ( cd "$b" && { [ -f config.status ] || CC=icx CXX=icpx "$src/configure" --prefix="$LAPLACE_PG_DIR" --with-icu --with-ssl=openssl --with-lz4 --with-zstd --with-liburing \
+                   ICU_CFLAGS="-I$LAPLACE_ICU_DIR/include" ICU_LIBS="-L$LAPLACE_ICU_DIR/lib -licui18n -licuuc -licudata"; } \
+                   && make -j"$cores" && make install ) \
+                 && ln -sfn "$PGBIN/psql" "$PREFIX/bin/psql" && ln -sfn "$PGBIN/pg_config" "$PREFIX/bin/pg_config" ;;
+      postgis)   { [ -x "$src/configure" ] || as_op "cd $src && ./autogen.sh"; } \
+                 && mkdir -p "$b" && ( cd "$b" && { [ -f config.status ] || "$src/configure" --with-pgconfig="$PGBIN/pg_config" --with-geosconfig=$PREFIX/bin/geos-config --with-projdir=$PREFIX --with-gdalconfig=$PREFIX/bin/gdal-config; } \
+                   && make -j"$cores" && make install ) && ldconfig ;;
+    esac; } > "$dlog" 2>&1; then say "$name" "FAILED: $dlog"; continue; fi
+    [ -e "$proof" ] && say "$name" "built and installed" || say "$name" "DID NOT INSTALL: $b ($dlog)"
   done
   # PostgreSQL's contrib modules Laplace uses, each known by its library: pg_stat_statements and auto_explain are
   # preloaded (the settings), pg_buffercache inspects the cache, pg_walinspect reads the log while an ingest runs
@@ -304,7 +350,25 @@ access(){ part access
 }
 # The monorepo's site (SaltyPatron/Laplace: the API and the SPA over the database laplace-mono, behind nginx): its
 # directories, unit, restart path and nginx site are declared by the monorepo's own host script, run here as root.
+# What that script and the site's build (deploy/linux/site.sh) need from the distribution is declared here first, with
+# the package sources they come from: nginx; the .NET 10 SDK from Ubuntu's dotnet backports (Microsoft's feed has no
+# .NET 10 for 22.04); Node 24 from NodeSource; the GitHub CLI (agents.sh registers runners with it) from GitHub.
+SITE_PACKAGES="nginx dotnet-sdk-10.0 nodejs gh"
+site_sources(){
+  [ -e /etc/apt/sources.list.d/dotnet-ubuntu-backports-jammy.sources ] || [ -e /etc/apt/sources.list.d/dotnet-ubuntu-backports-*.list ] \
+    || { DEBIAN_FRONTEND=noninteractive apt-get install -y -q software-properties-common >/dev/null; add-apt-repository -y ppa:dotnet/backports >/dev/null 2>&1; say "source" "ppa:dotnet/backports"; }
+  [ -e /etc/apt/sources.list.d/nodesource.list ] \
+    || { curl -fsSL https://deb.nodesource.com/setup_24.x | bash - >/dev/null 2>&1; say "source" "NodeSource (Node 24)"; }
+  [ -e /etc/apt/sources.list.d/github-cli.list ] \
+    || { curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+         echo "deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+         say "source" "GitHub CLI"; }
+}
 site(){ part site
+  site_sources
+  missing=$(for p in $SITE_PACKAGES; do dpkg-query -W -f '${Status}\n' "$p" 2>/dev/null | grep -q "install ok installed" || echo "$p"; done)
+  if [ -n "$missing" ]; then apt-get update -q >/dev/null; DEBIAN_FRONTEND=noninteractive apt-get install -y -q $missing >/dev/null; say "installed" "$(echo $missing)"; else say "site packages" "all present"; fi
+  say "site toolchain" "dotnet $(dotnet --version 2>/dev/null || echo MISSING), node $(node --version 2>/dev/null || echo MISSING), nginx $(nginx -v 2>&1 | sed 's|.*/||'), gh $(gh --version 2>/dev/null | sed -n '1s/.* \([0-9.]*\) .*/\1/p')"
   m=${LAPLACE_MONOREPO:-$LAPLACE_SRC/Laplace}; s=$m/deploy/linux/site-host.sh
   [ -f "$s" ] || { say "site" "no $s: git clone https://github.com/$LAPLACE_GITHUB/Laplace $m"; return 0; }
   bash "$s"; }
@@ -405,7 +469,9 @@ report(){ part report
   say "server" "$($PGBIN/postgres --version)   $(systemctl is-active "$SERVICE.service")"
   say "PostGIS" "$(q "SELECT default_version FROM pg_available_extensions WHERE name = 'postgis'")"
   say "listening" "$(ss -ltn | awk '$4 ~ /:5432$/ {print $4}' | tr '\n' ' ')"
-  addr=$(ip -4 -o addr | awk -v lan="$LAPLACE_LAN" '{split(lan, a, "."); if ($4 ~ "^"a[1]"\\."a[2]"\\."a[3]"\\.") {print $4; exit}}' | cut -d/ -f1)
+  # this machine's address on $LAPLACE_LAN: the source the kernel would use towards that network (a /24 on a LAN
+  # interface, a /10 tailnet on tailscale0: the prefix length does not matter)
+  addr=$(ip -4 route get "$(echo "$LAPLACE_LAN" | cut -d/ -f1 | awk -F. '{print $1"."$2"."$3"."($4+1)}')" 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)
   say "from the network, as $op" "$(as_op "$PGBIN/psql -X 'host=$addr port=5432 user=$LAPLACE_ROLE dbname=postgres sslmode=require' -Atc \"SELECT 'connected, TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')\"" 2>&1 | tail -1)"
   say "over the socket, as $op" "$(as_op "$PGBIN/psql -X 'host=/tmp port=5432 user=$LAPLACE_ROLE dbname=postgres' -Atc \"SELECT 'connected as '||current_user\"" 2>&1 | tail -1)"
   echo; echo "next, as $op: ./deploy.sh (or a push to main: every repository's main deploys this machine)"
