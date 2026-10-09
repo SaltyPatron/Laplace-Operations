@@ -1,0 +1,14 @@
+machine     hart-cloud
+os          Linux 6.8.0-1069-gcp
+cpu         Intel(R) Xeon(R) Platinum 8481C CPU @ 2.70GHz
+compiler    Intel(R) oneAPI DPC++/C++ Compiler 2026.1.1 (2026.1.1.20260724)
+made        2026-10-09T19:36:29Z
+native      b24065d3bc35
+engine      cccbfc9b95e8
+postgres    0429d10a2b41
+operations  0cb01f8f5150
+tier0       f8b0882f3483f0db7f5191c230ae74ed42231ff1194a59f908658e234746b047
+flags       0cac44d487ef1edd538ae432a76d1bf5105e29a8e6c33df4a039c195d01bf2e1
+highway     
+claims      iso-639 failed: recipe /var/lib/agents/laplace-runner/Laplace-Operations/work/Laplace-Operations/Laplace-Operations/Laplace-Engine/recipes/iso-639/loc.recipe did not load: iso-639 is not read without it
+claims      open-english-wordnet failed: source open-english-wordnet is not at any of its roots
