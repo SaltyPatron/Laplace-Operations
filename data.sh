@@ -4,7 +4,8 @@
 # the wordnet in minutes instead of receiving a copy of another machine's directory. Nothing here is renamed or
 # rewritten: a file lands as the publisher serves it, at the path the recipe reads it from.
 #
-#   ./data.sh fetch [SET...]    every declared set (or these): mirrored, downloaded when newer, the latest release, an archive opened
+#   ./data.sh fetch [SET...]    every declared set (or these): mirrored, downloaded when newer, cloned at the latest, the latest
+#                               release, an archive opened
 #   ./data.sh status            each declared set present or missing, then each recipe's roots: resolved or not;
 #                               exit 1 when a declared set is missing
 #   ./data.sh record            set, file, bytes, SHA-256 of what $LAPLACE_DATA holds for the declared sets
@@ -32,6 +33,14 @@ fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
             name=${u##*/}; edition=${name#"$pre"}; edition=${edition%%.*}; set=${set//\{edition\}/$edition}   # the name after the pattern's prefix, before its extension
             dest=$LAPLACE_DATA/$set/$name; get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"
             printf '  %-28s %s, the latest release\n' "$set" "$name" ;;
+    git)    dest=$LAPLACE_DATA/$set/${into%/}
+            if [ -d "$dest/.git" ]; then git -C "$dest" pull -q --ff-only 2>/dev/null || { git -C "$dest" fetch -q --depth 1 origin && git -C "$dest" reset -q --hard FETCH_HEAD; }
+            else mkdir -p "$(dirname "$dest")"; git clone -q --depth 1 "$origin" "$dest"; fi
+            printf '  %-28s %s at %s\n' "$set" "${into%/}" "$(git -C "$dest" rev-parse --short HEAD)" ;;
+    archive) dest=$LAPLACE_DATA/$set; mkdir -p "$dest"; f=$dest/.archive/${origin##*/}
+            get "$origin" "$f" "$([ -f "$f" ] && echo "$f")"
+            case $f in *.tar.gz|*.tgz) tar xzf "$f" -C "$dest" ;; *.zip) unzip -q -o -DD "$f" -d "$dest" ;; *) echo "  $set: $f is not an archive data.sh opens"; return 1 ;; esac
+            printf '  %-28s %s opened\n' "$set" "${origin##*/}" ;;
     extract) dest=$LAPLACE_DATA/$set/${into%/}; mkdir -p "$dest"
             unzip -q -o -DD "$LAPLACE_DATA/$set/$origin" -d "$dest"          # the publisher's archive, opened beside itself
             printf '  %-28s %s opened into %s\n' "$set" "${origin##*/}" "${into%/}" ;;

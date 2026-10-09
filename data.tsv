@@ -7,6 +7,8 @@
 #   release  the latest GitHub release (api.github.com/repos/O/R/releases/latest): the asset matching into's pattern;
 #            {edition} in the set's name is the asset's name after the pattern's literal prefix, before its extension
 #   extract  an archive the set already holds (origin: its path under the set), opened into a directory under the set
+#   git      a repository cloned at the latest commit of its default branch, into a directory under the set
+#   archive  an archive from the publisher, kept under the set's .archive and opened into the set
 # set	kind	origin	into
 UCD	mirror	https://www.unicode.org/Public/UCD/latest/	.
 UCD	extract	Public/UCD/latest/ucdxml/ucd.all.flat.zip	Public/UCD/latest/ucdxml/
@@ -26,3 +28,9 @@ ISO639	file	https://raw.githubusercontent.com/unicode-org/cldr/main/common/suppl
 ISO639	file	https://raw.githubusercontent.com/unicode-org/cldr/main/common/supplemental/supplementalData.xml	cldr/
 ISO639	file	https://raw.githubusercontent.com/unicode-org/cldr/main/common/supplemental/supplementalMetadata.xml	cldr/
 OpenEnglishWordNet-{edition}	release	https://api.github.com/repos/globalwordnet/english-wordnet/releases/latest	english-wordnet-*-plus.xml.gz
+CILI	git	https://github.com/globalwordnet/cili	.
+PropBank	git	https://github.com/propbank/propbank-frames	propbank-frames/
+VerbNet	git	https://github.com/cu-clear/verbnet	verbnet-cu-clear/
+SemLink	git	https://github.com/cu-clear/semlink	semlink-cu-clear/
+UD-Tools	git	https://github.com/UniversalDependencies/tools	tools/
+Wordnet	archive	https://wordnetcode.princeton.edu/3.0/WordNet-3.0.tar.gz	.
