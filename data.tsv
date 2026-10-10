@@ -40,7 +40,8 @@ CILI	git	https://github.com/globalwordnet/cili	.@a895d7ecb18019dda3443f98901e59d
 PropBank	git	https://github.com/propbank/propbank-frames	propbank-frames/@c66e0ccf28b53f00051b187db83e937b5bee2e32
 VerbNet	git	https://github.com/cu-clear/verbnet	verbnet-cu-clear/@ae8e9cfdc2c0d3414b748763612f1a0a34194cc1
 SemLink	git	https://github.com/cu-clear/semlink	semlink-cu-clear/@2636bf5a4ae9c93b669a1184a8aaae9ca21552d3
-UD-Tools	git	https://github.com/UniversalDependencies/tools	tools/@ab0c97035527ae7c0a6e15ba0e78138a6d99a368
+# the validator data: the data folder of UniversalDependencies/tools at 10ce40cf, the inventor's decision of 2026-10-06 (Laplace #1732, docs/plan/DATASET_ESTATE_MODERNIZATION.md)
+UD-Tools	git	https://github.com/UniversalDependencies/tools	tools/@10ce40cf8a577714e51cf56b443dd4c2c6d55f91
 Wordnet	archive	https://wordnetcode.princeton.edu/3.0/WordNet-3.0.tar.gz	.
 # FrameNet 1.7 as NLTK redistributes it (CC BY 3.0 per NLTK's index; Berkeley FrameNet's own release is on request); VerbAtlas 1.1.0 as
 # its publisher serves it (CC BY-NC-SA 4.0: the download page asks the licence be accepted; LICENSES.txt is in the archive)
@@ -65,6 +66,8 @@ Tatoeba	once	https://downloads.tatoeba.org/exports/users_sentences.csv	users_sen
 # host with none takes the current one; the record says which. The recipes match raw-wiktextract-data* and kaikki.org-dictionary-*.jsonl.
 Wiktionary	once	https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz	raw-wiktextract-data*.jsonl.gz
 Wiktionary	once	https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl	kaikki.org-dictionary-English*.jsonl
-# Universal Dependencies 2.18, pinned: the release LINDAT/CLARIAH holds (hdl.handle.net/11234/1-6149), the treebanks and the documentation
+# Universal Dependencies 2.18, pinned: the release LINDAT/CLARIAH holds (hdl.handle.net/11234/1-6149): the treebanks (684,056,893 bytes, MD5
+# e9bfd544…, as docs/plan/DATASET_ESTATE_MODERNIZATION.md records); the documentation pages are UniversalDependencies/docs, branch pages-source
+# (the same decision), pinned at a commit, landing at UD-Docs/docs-pages-source where the recipe reads them
 UD-Treebanks	archive	https://lindat.mff.cuni.cz/repository/server/api/core/bitstreams/d91b1ffc-fc31-41a0-bd8f-3b876864a1d5/content	ud-treebanks-v2.18.tgz
-UD-Docs	archive	https://lindat.mff.cuni.cz/repository/server/api/core/bitstreams/48a1c529-e985-4282-ae32-7feee27ca141/content	ud-documentation-v2.18.tgz
+UD-Docs	git	https://github.com/UniversalDependencies/docs	docs-pages-source/@692cb759d65bb6d3448b1a284cddbbe8b28d2118
