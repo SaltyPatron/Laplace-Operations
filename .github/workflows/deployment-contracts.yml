@@ -62,6 +62,7 @@ jobs:
           export TMPDIR="$RUNNER_TEMP"
           bash tests/tune-pg-plan.sh
           bash tests/machine-config.sh
+          SETVARS_COMPLETED=1 OMP_NUM_THREADS=2 MKL_NUM_THREADS=3 bash -c '. ./laplace.env; test "$OMP_NUM_THREADS" = 2 && test "$MKL_NUM_THREADS" = 3'
           bash tests/operation-lock.sh
           bash tests/deployment-artifacts.sh
           bash tests/deployment-readback.sh
