@@ -22,6 +22,14 @@ class DeploymentWorkflow < Minitest::Test
     assert_includes @jobs.fetch('ingest').fetch('if'), "needs.checks.result == 'success'"
     assert_includes @jobs.fetch('ingest').fetch('if'), "needs.deploy.outputs.ingest == 'true'"
   end
+  def test_compatibility_cannot_be_skipped_before_a_successful_readback
+    assert_includes @jobs.fetch('checks-cloud').fetch('if'), 'always()'
+    assert_includes @jobs.fetch('checks-cloud').fetch('if'), "needs.deploy-cloud.result == 'success'"
+    [['reads', 'checks'], ['reads-cloud', 'checks-cloud']].each do |reads, checks|
+      assert_includes @jobs.fetch(reads).fetch('needs'), checks
+      assert_includes @jobs.fetch(reads).fetch('if'), "needs.#{checks}.result == 'success'"
+    end
+  end
   def test_cloud_compute_is_acquired_and_released_for_the_run
     assert_equal './.github/workflows/cloud-lease.yml', @jobs.fetch('cloud-acquire').fetch('uses')
     assert_equal 'acquire', @jobs.fetch('cloud-acquire').fetch('with').fetch('operation')
