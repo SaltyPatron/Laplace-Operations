@@ -5,8 +5,57 @@
 The user clarified that hart-desktop will be the primary development machine.
 Development may continue on hart-server; it also serves as the dev/BAT/QA/staging
 deployment target. hart-cloud and hart-prod are production. The immediate request
-is to ensure Laplace work is on remote, not to remove development tools or working copies
+is to account for work across the entire machine and verify its remote preservation, including home folders, temporary directories and agent worktrees. It does not authorize removing development tools or working copies
 from hart-server. The server's GTX 1080 Ti remains off limits due to broken cooling.
+
+## Scope correction and unfinished preservation — verified 20:12 UTC
+
+At 19:10:31 UTC the user said the agent was focused on Laplace and not the entire
+machine. At 19:10:36 the agent replied "Understood—Laplace only" and then persisted
+that reversed instruction. Operations PR70 propagated the error. That was an agent
+interpretation error, not an instruction from the user. The scope is the entire
+machine's work, including Claude/other agent worktrees, home folders, temporary
+directories and other storage locations. Existing originals must remain intact.
+
+The stopped broader pass is partial. Re-reading its saved reports at 20:12 UTC found:
+
+| Evidence | Observed result | What it does not establish |
+| --- | --- | --- |
+| `machine-recovery/manifest.json` | 389 locally verified Git bundles, 1,575,337,640 bytes; 7 empty repositories recorded | Remote upload, all uncommitted files, or complete machine coverage |
+| `machine-git-inventory.jsonl` | 3,537 Git locations classified before interruption | Every Git location or every source file accounted for |
+| `machine-history-screen.json` | 674 repositories screened; 64 with candidate pattern matches | Confirmed exposed credentials or an exhaustive secret audit |
+| Process readback | The three named inventory/recovery jobs are not running | Completion of their work |
+
+Those reports and bundles are under `/repos/build/audit-scratch` on hart-server.
+The broader bundles have not been uploaded. The earlier Laplace recovery refs and
+snapshots listed below are separately preserved remotely. No new bulk export was
+started to make this correction. Protected-directory coverage remains incomplete.
+
+## Remaining work and acceptance criteria
+
+1. Reconcile discovered work against the actual remote objects/refs or protected
+   backup objects. Record the source location, exact content/revision, destination,
+   verification result and outstanding gap. Cached refs and a local bundle are not
+   sufficient evidence of remote preservation.
+2. Account separately for uncommitted/ignored source, broken Git pointers, agent
+   worktrees, loose files, configuration and protected material. Do not silently
+   classify everything outside Git as disposable or put credentials into source
+   repositories. Discovery errors remain explicit coverage gaps.
+3. Review unfinished changes against the invention documents and implementation
+   contracts before integrating them. Recovery commits are preservation, not
+   acceptance into implementation main. Keep the existing source histories.
+4. Resume deployment repair against the recorded failure and verify the actual
+   application/API/MCP operations promised by the deployment. Compilation, SQL
+   connectivity, HTTP health and a running process each prove only that check.
+   They do not prove a usable implementation of the invention. Preserve the
+   separation of highway generation, ingestion and deployment required by the user.
+5. Keep exact source, merged, installed and verified revisions distinct, and record
+   deployment ordering, failure recovery and remaining operational blockers. The
+   later sections retain dated observations rather than claim current completion.
+
+The historical-log review, billing/trial figures and other infrastructure tasks
+below remain outstanding. This correction does not claim that all expected work is
+complete or that a successful build proves Laplace's intended capabilities.
 
 ## Remote preservation verified around 19:07 UTC
 
@@ -37,14 +86,15 @@ The registered worktrees of these repositories have no uncommitted source change
 Laplace-MCP has two untracked compiled ELF files, `native/lpm` and `native/liblpm.so`;
 they were left intact and were not added to source control. This statement does not
 cover ignored build files, credentials, raw conversation archives, or every other
-repository on the machine. The user explicitly excludes unrelated projects from
-this task. No working directory or archive was deleted.
+repository on the machine. Earlier versions of this document incorrectly claimed
+the user excluded non-Laplace projects. The user's request covers the whole machine.
+No working directory or archive was deleted by that preservation pass.
 
 ## Expanded home, temporary and archived work check
 
 The initial15-repository check did not cover all loose files and archived agent
-worktrees. The user's explicit follow-up expanded this to Laplace work wherever
-it is stored, while keeping unrelated projects outside scope.
+worktrees. The following results describe the Laplace subset that was inspected;
+they do not delimit the user's whole-machine request.
 
 The follow-up found191 candidate checkout locations across home/temp/source/build,
 runner and mounted archive locations. It checked146 readable Git object stores,
