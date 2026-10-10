@@ -81,13 +81,14 @@ function TunePlan {   # every derived quantity, tune-pg.sh's plan(): the same na
     $maintDomKB = [int64]($privateKB / 4); $mwmKB = [math]::Max([int64]($maintDomKB / 2), 65536); $avwmKB = [math]::Max([int64]($maintDomKB / 2 / $avw), 1024)
     $execKB = $privateKB - $maintDomKB; $backends = $conns + $par; $perKB = [int64]($execKB / $backends)
     $workKB = [math]::Max([int64]($perKB / 2), 4096); $tempKB = [math]::Max([int64]($perKB / 2), 8192)
+    $overKB = [math]::Max([int64]($backends * ($workKB + $tempKB) + $mwmKB + $avw * $avwmKB - $privateKB), 0)
     if ($rotational -eq 1) { $eic = 2; $rpc = '4' } else { $eic = $iow; $rpc = '1.1' }
     [ordered]@{
         'fact.memory_kb' = $ramKB; 'fact.reserved_kb' = $reservedKB; 'fact.threads' = $threads; 'fact.cores' = $cores
         'fact.wal_volume_bytes' = $walBytes; 'fact.wal_volume_shared' = $shared; 'fact.data_rotational' = $rotational; 'fact.profile' = $TuneProfile
         usable_kb = $usableKB; shared_kb = $sharedKB; ecs_kb = $ecsKB; private_kb = $privateKB; wal_mb = $walMB; min_wal_mb = $minWalMB; wal_buf_kb = $walBufKB
         par = $par; gather = $gather; avw = $avw; iow = $iow; mwp = $mwp; conns = $conns; backends = $backends
-        mwm_kb = $mwmKB; avwm_kb = $avwmKB; work_kb = $workKB; temp_kb = $tempKB; eic = $eic; rpc = $rpc; locks = $locks
+        mwm_kb = $mwmKB; avwm_kb = $avwmKB; work_kb = $workKB; temp_kb = $tempKB; eic = $eic; rpc = $rpc; locks = $locks; over_kb = $overKB
     }
 }
 function TuneMBs([int64]$kb) { "$([int64]($kb / 1024))MB" }
@@ -165,6 +166,7 @@ function TuneShowPlan {
     foreach ($k in $p.Keys) { if ($k -like 'fact.*') { '  {0,-24} {1}' -f $k.Substring(5), $p[$k] } }
     'tune-pg: the settings they give'
     $d = TuneDeclared; foreach ($k in $d.Keys) { '  {0,-40} {1}' -f $k, $d[$k] }
+    if ($p.over_kb -gt 0) { Write-Warning "tune-pg: OVER-COMMITTED by $([int64]($p.over_kb / 1024)) MB: the connections declared, at PostgreSQL's floors, want more than the backends' quarter; fewer serving connections (LAPLACE_PG_SERVING) or more memory for the server (LAPLACE_PG_RESERVED)" }
 }
 
 # an ingest of the database laplace.env.ps1 names holds its lock open (no sharing) while it runs

@@ -37,7 +37,12 @@ while IFS=$'\t' read -r name profile ram threads cores wal shared rot reserved c
   check "effective_cache_size within what the server may use" "$(v ecs_kb)" "$(v usable_kb)"
   # the private quarter: every backend's work_mem and temp_buffers, one maintenance operation, every autovacuum worker
   private=$(( $(v backends) * ( $(v work_kb) + $(v temp_kb) ) + $(v mwm_kb) + $(v avw) * $(v avwm_kb) ))
-  check "the backends' memory within the private quarter (${private} kB)" "$private" $(( $(v private_kb) + 65536 + 8 * 8192 ))   # the floors (work_mem 4MB, temp 8MB, maintenance 64MB) may exceed it on a tiny machine
+  # at PostgreSQL's floors (work_mem 4 MB, temp_buffers 8 MB) the declared backends may want more than the quarter: then the
+  # plan says by how much (over_kb) instead of promising it, and nothing beyond that is promised
+  over=$(( private - $(v private_kb) )); [ "$over" -gt 0 ] || over=0
+  check "the backends' memory within the private quarter plus what the plan declares over-committed (${private} kB)" "$private" $(( $(v private_kb) + $(v over_kb) ))
+  [ "$(v over_kb)" = "$over" ] || { echo "  FAIL over-commitment reported as $(v over_kb) kB, is $over kB"; fail=1; }
+  [ "$over" = 0 ] || echo "  over-committed by $(( over / 1024 )) MB at the floors: declared, not promised"
   check "wal_buffers within max_wal_size/16" "$(v wal_buf_kb)" $(( $(v wal_mb) * 1024 / 16 ))
   check "min_wal_size below max_wal_size" "$(v min_wal_mb)" "$(v wal_mb)"
   check "max_wal_size within half the log's volume" "$(v wal_mb)" $(( wal / 1048576 / 2 > 1024 ? wal / 1048576 / 2 : 1024 ))

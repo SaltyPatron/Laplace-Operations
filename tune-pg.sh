@@ -147,7 +147,7 @@ clamp() { min "$(max "$1" "$2")" "$3"; }   # value lo hi
 plan() {  # every derived quantity as NAME=value lines; declared() formats them
   local ram_kb threads cores reserved_kb usable_kb cap_kb rotational wal shared wal_bytes
   local shared_kb ecs_kb private_kb maint_dom_kb exec_kb wal_mb min_wal_mb wal_buf_kb
-  local par gather avw iow mwp ingest serving reserved_conns conns backends per_kb work_kb temp_kb mwm_kb avwm_kb eic rpc locks
+  local par gather avw iow mwp ingest serving reserved_conns conns backends per_kb work_kb temp_kb mwm_kb avwm_kb eic rpc locks over_kb
   ram_kb=$(fact_ram_kb); threads=$(fact_threads); cores=$(fact_cores); reserved_kb=$(fact_reserved_kb); cap_kb=$(fact_buffers_max_kb)
   rotational=$(fact_rotational); set -- $(fact_wal_bytes); wal_bytes=$1; shared=$2
   [ "$cores" -ge 1 ] || cores=1; [ "$threads" -ge "$cores" ] || threads=$cores
@@ -179,6 +179,10 @@ plan() {  # every derived quantity as NAME=value lines; declared() formats them
   maint_dom_kb=$((private_kb / 4)); mwm_kb=$(max $((maint_dom_kb / 2)) 65536); avwm_kb=$(max $((maint_dom_kb / 2 / avw)) 1024)
   exec_kb=$((private_kb - maint_dom_kb)); backends=$((conns + par)); per_kb=$((exec_kb / backends))
   work_kb=$(max $((per_kb / 2)) 4096); temp_kb=$(max $((per_kb / 2)) 8192)
+  # the floors (work_mem 4 MB, temp_buffers 8 MB, maintenance 64 MB, autovacuum 1 MB) are PostgreSQL's useful minimums;
+  # when the declared connections at their floors want more than the private quarter, the host is over-committed by
+  # its declarations, and the plan says by how much rather than promising what is not there
+  over_kb=$(( backends * (work_kb + temp_kb) + mwm_kb + avw * avwm_kb - private_kb )); [ "$over_kb" -gt 0 ] || over_kb=0
   if [ "$rotational" = 1 ]; then eic=2; rpc=4; else eic=$iow; rpc=1.1; fi
   cat <<PLAN
 fact.memory_kb=$ram_kb
@@ -210,6 +214,7 @@ temp_kb=$temp_kb
 eic=$eic
 rpc=$rpc
 locks=$locks
+over_kb=$over_kb
 PLAN
 }
 mb() { echo "$(( $1 / 1024 ))MB"; }   # kB -> whole MB (every value here is a multiple of 8 kB blocks)
@@ -277,6 +282,8 @@ tune_plan() {
   sed -n 's/^fact\.//p' <<<"$p" | awk -F= '{printf "  %-24s %s\n", $1, $2}'
   echo "tune-pg: the settings they give"
   declared | awk '{printf "  %-40s %s\n", $1, $2}'
+  local over; over=$(sed -n 's/^over_kb=//p' <<<"$p")
+  [ "$over" = 0 ] || echo "tune-pg: OVER-COMMITTED by $((over / 1024)) MB: the connections declared, at PostgreSQL's floors, want more than the backends' quarter; fewer serving connections (LAPLACE_PG_SERVING) or more memory for the server (LAPLACE_PG_RESERVED)" >&2
 }
 
 tune_ingesting() {
