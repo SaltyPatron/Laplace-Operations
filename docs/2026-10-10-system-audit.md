@@ -22,8 +22,38 @@ Code search is unavailable: the user states the embedding service was disabled o
 | hart-desktop | Windows local development | RTX 4060 Ti; Windows behavior requires Windows evidence. |
 | hart-server | Ubuntu Server development, integration and deployment staging | GTX 1080 Ti has broken cooling and is off limits. |
 | hart-router | OpenWrt router | Network infrastructure, not another development host. |
-| hart-cloud | Stronger AVX-512 cloud machine; production web/database environment | Shutdown schedule and actual state require separate checks. |
+| hart-cloud | On-demand AVX-512 development, proof and benchmarking; existing delivery also assigns a knowledge/build role | The user explicitly says it is stopped by design to conserve the 90-day Google Cloud trial. Do not infer failure from `TERMINATED` or start it as an audit step. |
 | hart-prod | Production hosting surface | VM running does not establish application health. |
+
+## Windows workspace and lifecycle observations
+
+The desktop session inspected the machine and fetched repository refs on October 10. Fetching did not update the
+operator's working branches. Both D: and E: are approximately 2 TB NTFS volumes labelled EVO 990; D: has approximately
+8.6 GB used and E: approximately 1.4 GB used. Capacity is not the demonstrated cause of the current fragmentation.
+
+| Observed boundary | Evidence | Consequence |
+| --- | --- | --- |
+| Machine declaration governs only some entry points | Operations `laplace.env.ps1` reads `%ProgramData%\Laplace\machine.env`; that file puts repositories/work/ingest/PGDATA on E: and WAL on D: | Changing those paths does not reconfigure consumers that do not read this declaration. |
+| Monorepo Windows configuration independently chooses another installation | Laplace `5abe41bbe`, `scripts/win/env.cmd`, defaults builds and dependencies beneath `D:\Data\Laplace`, PGDATA to `D:\Data\Postgres`, ingest to `D:\Data\Ingest`, and repositories to `D:\Repositories` | The modular and monorepo entry points can select different installations, inputs and database identities on the same machine. |
+| IDE/MSBuild has a third route into the output tree | Same revision, `app/Directory.Build.props` and `Directory.Build.targets`, default directly to `D:\Data\Laplace` | Opening the solution does not establish that it shares Operations' declared build paths; separate worktrees can share these defaults. |
+| One environment variable has different identity meanings | Operations uses `LAPLACE_PGUSER` for the Windows PostgreSQL service account; monorepo `env.cmd` uses it as the database login, defaults `PGPASSWORD=postgres`, and constructs `LAPLACE_DB` | Simply sourcing both environments is unsafe. The shared configuration must distinguish OS identity, database identity and credentials. |
+| The local operational checkout is not remote main | `E:\Repositories\Laplace\Laplace-Operations` is at `8b00424` on `windows-devshell`, with modified `laplace.env.ps1` and untracked `build.ps1`; two additional Operations worktrees are present | The untracked build script exists in this old checkout, while current remote main already tracks a different build implementation. Preserve operator changes and reconcile revisions before choosing an authoritative entry point. |
+| Build graphs and deployment graphs differ | Native is compiled into postgres/Engine/MCP; MCP also compiles Engine reader sources. Operations builds postgres and Engine. The monorepo builds its own native modules, extensions, .NET endpoints and SPA | A single product release cannot be inferred from independently successful repository builds. Record the complete dependency revisions, prepared artifacts and the consumers actually deployed. |
+| Public delivery currently depends on the optional cloud host | Monorepo `5abe41bbe`, `.github/workflows/laplace.yml`, progresses from hart-server through starting/building on hart-cloud to publishing on hart-prod | An intentional cloud-off operating arrangement is not represented by selecting another compatible knowledge target alone. The release-building and runtime-host decisions also need explicit configuration. |
+
+The user explicitly rejected treating this as drive-letter cleanup. The required correction covers source ownership,
+worktree/build isolation, dependency sequencing, prepared artifacts, ingestion, runtime releases, credentials and CI/CD
+as one lifecycle. A proposed directory tree or an added launcher alone does not establish that these consumers agree.
+The monorepo and modular schemas must not be silently treated as interchangeable during that correction.
+
+Supporting desktop repairs are separately evidenced: explicit LAN share names and Tailscale DNS were applied; direct
+Tailscale transport to hart-prod was observed after the UDP firewall correction; a repository copy of 4,947 files was
+verified by destination SHA-256. These checks do not establish full product delivery or database recovery. The desktop
+backup task currently references the separate Operations repair checkout under the operator's C: profile; that live
+dependency must be accounted for when consolidating the workspace.
+
+The desktop session's proposed additional OpenBao agent/policy files were never deployed and were removed after the
+existing secrets integration landed on Operations main. Existing OpenBao and Vaultwarden placement remains unchanged.
 
 ## Documentation, research and implementation map
 
