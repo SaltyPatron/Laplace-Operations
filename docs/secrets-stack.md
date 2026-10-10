@@ -22,17 +22,25 @@ have not been verified. These names are not evidence of a public tunnel.
 
 ## Setup and recovery ownership
 
-Existing scripts are under `/home/ahart/secrets-stack` on hart-server:
+Historical scripts are under `/home/ahart/secrets-stack` on hart-server:
 `install.sh`, `init-openbao.sh`, `setup-auth.sh`, `go-live.sh`,
 `lock-signups.sh`, `revoke-root.sh`, and `backup-secrets.sh`. This directory is
-not a Git checkout. Repository ownership and integration into Operations setup
-remain unfinished; these paths record the existing implementation.
+not a Git checkout. Maintenance of installation, signup closure, publication and
+backups now belongs to Operations `secrets/`. Run `sudo ./setup.sh secrets-stack`
+on hart-server to converge the existing stack. This explicit part is excluded
+from `all`: other machines consume secrets, rather than host another store.
+Initialization, unsealing, root-token revocation and identity creation are not
+invoked by setup. The old initialization/authentication scripts are historical
+bootstrap tools, not repeatable deployment steps.
 
-The local installer now preserves an existing Vaultwarden Compose file on repeat
+The repository installer preserves an existing Vaultwarden Compose file on repeat
 setup, including closed signups and other settings. If data exists but the
 Compose file is missing, it refuses to recreate initial signup configuration.
 Fresh-install, repeat-install and missing-configuration cases passed in isolated
-filesystem fixtures. The installer was not rerun against the live stack.
+filesystem fixtures. Existing OpenBao configuration, including its audit stanza,
+is preserved too; existing data without configuration is refused. An installed
+Bao version different from the declared version requires a separate upgrade.
+The repository installer has not been rerun against the live stack.
 
 `backup-secrets.timer` is active. The service last reported exit 0 at
 2026-10-10 03:15:01 UTC; the next scheduled run is October 11 at 03:15 UTC.
@@ -40,6 +48,23 @@ The script takes a SQLite backup plus Vaultwarden supporting files, and a Raft
 snapshot when its snapshot token exists, under `/backup/secrets`, retaining
 30 days. Service success does not prove both backups exist or are restorable:
 snapshot presence, off-host copies and restore drills remain unverified.
+
+The repository replacement backup requires both stores: missing snapshot credentials,
+failed renewal, failed snapshot retrieval, SQLite corruption, or snapshot checksum
+failure returns nonzero without pruning earlier backups. It stages under the backup
+volume with private permissions and publishes only after validation. The SQLite
+fixture was restored and read; failure fixtures preserve earlier backups. These are
+script checks, not a restore drill of the live vaults. Snapshot verification follows
+OpenBao's [archive format](https://pkg.go.dev/github.com/openbao/openbao/v2@v2.7.0/internal/physical/raft/snapshot):
+`meta.json`, `state.bin`, and their SHA256SUMS. It does not validate unseal keys or
+prove recovery on another host. Vaultwarden attachments can change independently
+of its SQLite snapshot; the backup is not an atomic snapshot of all application files.
+
+Setup installs this replacement as `/usr/local/sbin/backup-secrets`, retaining the
+existing timer. It requires mounted `/hosting` and `/backup`, existing wildcard
+TLS material, and existing tool prerequisites before changing services. Nginx
+publication remains explicit through `sudo bash secrets/go-live.sh`; that command
+now fails if either HTTPS health check is unsuccessful.
 
 ## Application integration still required
 

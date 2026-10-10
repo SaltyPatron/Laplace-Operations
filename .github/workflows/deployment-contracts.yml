@@ -21,4 +21,9 @@ jobs:
           bash tests/deployment-readback.sh
           bash tests/fingerprint-comparison.sh
           ruby tests/deployment-workflow.rb
+          ruby tests/secrets-setup.rb
           pwsh -NoProfile -File tests/deployment-artifacts.ps1
+      - name: Install SQLite for backup recovery checks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3
+      - name: Check secrets backup failure and recovery behavior
+        run: TMPDIR="$RUNNER_TEMP" bash tests/secrets-backup.sh
