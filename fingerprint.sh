@@ -31,8 +31,9 @@ key(){ echo "$(sed -n 's/^native  *\([^ +]*\).*/\1/p' "$1")-$(sed -n 's/^engine 
 # the directory each source is read from whose results are in the record: the sources of $LAPLACE_DETERMINISM, and the
 # resources the highway was generated from (as its log names them). A source's directory is its first root that
 # exists; of a pattern, the newest: as the engine resolves it. A tree is said as its files and one hash: of
-# "path<TAB>bytes<TAB>sha256" for every file, in byte order of the paths.
-tree(){ ( cd "$1" && shift && find . -type f "$@" | LC_ALL=C sort | while IFS= read -r f; do
+# "path<TAB>bytes<TAB>sha256" for every file, in byte order of the paths. A name that begins with a dot, file or directory,
+# is not in it: the engine's walk does not read one (data.sh keeps .landed and .archive there).
+tree(){ ( cd "$1" && shift && find . -type f -not -path '*/.*' "$@" | LC_ALL=C sort | while IFS= read -r f; do
     printf '%s\t%s\t%s\n' "${f#./}" "$(wc -c < "$f" | tr -d ' ')" "$(sha256sum < "$f" | cut -c1-64)"; done ); }
 said(){ t=$(mktemp); cat > "$t"; echo "$(wc -l < "$t" | tr -d ' ') $(sha256sum < "$t" | cut -c1-16)"; rm -f "$t"; }
 inputs(){

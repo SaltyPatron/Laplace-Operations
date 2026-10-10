@@ -36,7 +36,9 @@ function Tree([string]$dir, [string]$except = '') {
   $root = (Resolve-Path -LiteralPath $dir).ProviderPath.TrimEnd('\')
   $rel = [Collections.Generic.List[string]]::new()
   foreach ($f in [IO.Directory]::EnumerateFiles($root, '*', [IO.SearchOption]::AllDirectories)) {
-    $r = $f.Substring($root.Length + 1).Replace('\', '/'); if ($except -and $r.StartsWith($except, [StringComparison]::Ordinal)) { continue }; $rel.Add($r) }
+    $r = $f.Substring($root.Length + 1).Replace('\', '/'); if ($except -and $r.StartsWith($except, [StringComparison]::Ordinal)) { continue }
+    if ($r.StartsWith('.') -or $r.Contains('/.')) { continue }       # a name that begins with a dot: the engine's walk does not read one
+    $rel.Add($r) }
   $rel.Sort([LaplaceByteOrder]::new())
   $sb = [Text.StringBuilder]::new()
   foreach ($r in $rel) { $p = Join-Path $root $r; [void]$sb.Append("$r`t$((Get-Item -LiteralPath $p).Length)`t$((Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLower())`n") }
