@@ -1,0 +1,16 @@
+machine     hart-server
+os          Linux 5.15.0-191-generic
+cpu         Intel(R) Core(TM) i7-6850K CPU @ 3.60GHz
+compiler    Intel(R) oneAPI DPC++/C++ Compiler 2026.1.1 (2026.1.1.20260724)
+made        2026-10-10T01:21:56Z
+native      1b9367c8055c
+engine      aa38df13d4a0
+postgres    0429d10a2b41
+operations  9d939b54050a
+tier0       f8b0882f3483f0db7f5191c230ae74ed42231ff1194a59f908658e234746b047
+flags       0cac44d487ef1edd538ae432a76d1bf5105e29a8e6c33df4a039c195d01bf2e1
+highway     ffd4b39bd5689be8d2927fad454db023f3cdf1a8e35837f6946b05e852d7ca74
+claims      iso-639 137219 32648f5f5bf177c4
+determinism iso-639 same: twice 137219 claims, 32648f5f5bf177c4
+claims      open-english-wordnet 1390805 ea1472609027b87f
+determinism open-english-wordnet same: twice 1390805 claims, ea1472609027b87f
