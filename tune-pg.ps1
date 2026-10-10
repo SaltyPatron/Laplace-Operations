@@ -97,6 +97,14 @@ function TuneMBs([int64]$kb) { "$([int64]($kb / 1024))MB" }
 function TuneDeclared {
     $p = TunePlan
     $logs = (Join-Path $env:LAPLACE_WORK 'logs\postgres') -replace '\\', '/'
+    # the libraries loaded at start: each declared one only when its DLL is in the server's library directory or one of
+    # LAPLACE_PG_LIBDIRS, since a name the server cannot load stops it at its next start; a missing one is said
+    $libdirs = @(Join-Path $env:LAPLACE_PG_DIR 'lib') + @($env:LAPLACE_PG_LIBDIRS -split ';' | Where-Object { $_ })
+    $preload = @(($(if ($env:LAPLACE_PG_PRELOAD) { $env:LAPLACE_PG_PRELOAD } else { 'pg_stat_statements,auto_explain' }) -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Where-Object {
+        $name = $_; $found = $libdirs | Where-Object { Test-Path (Join-Path $_ "$name.dll") } | Select-Object -First 1
+        if (-not $found) { Write-Warning "tune-pg: $name is declared for shared_preload_libraries but no $name.dll is in $($libdirs -join ';'): not loaded" }
+        [bool]$found
+    })
     $s = [ordered]@{
         wal_level                        = 'minimal'
         max_wal_senders                  = '0'
@@ -137,7 +145,7 @@ function TuneDeclared {
         autovacuum_analyze_scale_factor  = '0.02'
         autovacuum_vacuum_insert_scale_factor = '0.01'
         max_locks_per_transaction        = "$($p.locks)"
-        shared_preload_libraries         = 'pg_stat_statements,auto_explain'
+        shared_preload_libraries         = ($preload -join ',')
         'pg_stat_statements.track'       = 'all'
         'auto_explain.log_min_duration'  = '5s'
         track_io_timing                  = 'on'
@@ -251,7 +259,11 @@ function TuneApply {
         # can mark a restart for a value the server is already running
         if ($r.match -eq 't' -and ($r.source -eq 'configuration file' -or $r.context -eq 'postmaster')) { continue }
         $v = $want[$r.name]
-        TunePsql "ALTER SYSTEM SET $($r.name) = '$($v -replace "'", "''")'" | Out-Null
+        # a list setting is written element by element: one quoted text holding commas is one element, and the server
+        # then looks for a library named "pg_stat_statements,auto_explain,..." and does not start
+        $sql = if ($r.name -in 'shared_preload_libraries', 'temp_tablespaces') { "ALTER SYSTEM SET $($r.name) = " + (($v -split ',' | ForEach-Object { "'" + ($_.Trim() -replace "'", "''") + "'" }) -join ', ') }
+               else { "ALTER SYSTEM SET $($r.name) = '$($v -replace "'", "''")'" }
+        TunePsql $sql | Out-Null
         "tune-pg: set $($r.name) = $v"; $n++
     }
     if ($n) {

@@ -22,7 +22,7 @@ fail=0
 plan_of() {  # the plan's NAME=value lines for one fixture
   local name=$1 profile=$2 ram=$3 threads=$4 cores=$5 wal=$6 shared=$7 rot=$8 reserved=$9 cap=${10}
   LAPLACE_PG_PROFILE=$profile TUNE_FACT_RAM_KB=$ram TUNE_FACT_THREADS=$threads TUNE_FACT_CORES=$cores TUNE_FACT_WAL_BYTES=$wal TUNE_FACT_WAL_SHARED=$shared \
-  TUNE_FACT_ROTATIONAL=$rot LAPLACE_PG_RESERVED=$reserved LAPLACE_PG_BUFFERS_MAX=${cap/#0/} bash -c '. "$1"; plan' tune-pg-plan "$here/tune-pg.sh"
+  TUNE_FACT_ROTATIONAL=$rot LAPLACE_PG_RESERVED=$reserved LAPLACE_PG_BUFFERS_MAX=${cap/#0/} bash -c '. "$1"; "$2"' tune-pg-plan "$here/tune-pg.sh" "${11:-plan}"
 }
 check() { if [ "$2" -le "$3" ] 2>/dev/null; then :; else echo "  FAIL $1: $2 > $3"; fail=1; fi; }
 declare -A plans=()
@@ -30,6 +30,10 @@ while IFS=$'\t' read -r name profile ram threads cores wal shared rot reserved c
   [ -n "$name" ] || continue
   p=$(plan_of "$name" "$profile" "$ram" "$threads" "$cores" "$wal" "$shared" "$rot" "$reserved" "$cap"); plans[$name]=$p
   v(){ sed -n "s/^$1=//p" <<<"$p"; }
+  d=$(plan_of "$name" "$profile" "$ram" "$threads" "$cores" "$wal" "$shared" "$rot" "$reserved" "$cap" declared)
+  if ! awk 'NF && $1 !~ /^#/ { if (seen[$1]++) { print "  FAIL duplicate setting: " $1; bad=1 } } END { exit bad }' <<<"$d"; then fail=1; fi
+  declared_locks=$(awk '$1 == "max_locks_per_transaction" {print $2}' <<<"$d")
+  [ "$declared_locks" = "$(v locks)" ] || { echo "  FAIL declared locks differ from plan on $name"; fail=1; }
   echo "$name ($profile): usable $(( $(v usable_kb) / 1024 )) MB of $((ram / 1024)), $(v conns) connections, $(v backends) backends"
   # the four domains: shared + private + client + page cache = usable; nothing promised twice
   check "shared_buffers within PostgreSQL's 40% of memory" "$(v shared_kb)" $((ram * 2 / 5))

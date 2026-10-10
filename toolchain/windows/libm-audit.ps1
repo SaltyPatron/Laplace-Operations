@@ -4,7 +4,7 @@
 #   toolchain\windows\libm-audit.ps1 D:\Libraries\postgresql\18.6\bin, D:\Libraries\postgresql\18.6\lib   (one array)
 param([Parameter(Mandatory)][string[]]$Directories)
 
-$exact = '^(sqrtf?|roundf?|l?lroundf?|l?rintf?|nearbyintf?|truncf?|floorf?|ceilf?|fminf?|fmaxf?|fabsf?|copysignf?|nanf?|ldexpf?|scalbnf?|frexpf?|modff?|fmodf?|remainderf?|remquof?|nextafterf?|nexttowardf?|ilogbf?|logbf?|__isnanf?|__isinff?|__finitef?|__signbitf?|__fpclassifyf?|fe\w+)$'
+$exact = '^(sqrtf?|fmaf?|roundf?|l?lroundf?|l?rintf?|nearbyintf?|truncf?|floorf?|ceilf?|fminf?|fmaxf?|fabsf?|copysignf?|nanf?|ldexpf?|scalbnf?|frexpf?|modff?|fmodf?|remainderf?|remquof?|nextafterf?|nexttowardf?|ilogbf?|logbf?|__isnanf?|__isinff?|__finitef?|__signbitf?|__fpclassifyf?|fe\w+)$'
 $failed = 0
 $count = 0
 foreach ($dir in $Directories) {
