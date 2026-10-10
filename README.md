@@ -125,6 +125,17 @@ and the two runs must agree. The record is published on the branch `fingerprints
 HART-DESKTOP, `pwsh -File fingerprint.ps1`, run after `build.ps1` at the commits a deployment names, writes the
 Windows record beside it, and either side reports any field that differs.
 
+The record also says what its results are made from, so that two records which differ are told apart by their inputs
+before their arithmetic: the Unicode data (`ucd`: its version, as `DerivedAge.txt` names it, and its files but the
+charts), the ICU and the Unicode version it is of (`icu`), the resources the highway was generated from (`resources`,
+as the highway's log names them), and the directory each of those and each source of `LAPLACE_DETERMINISM` is read from
+(`data`: its files and one hash of their paths, sizes and SHA-256). A result that differs is then said to follow from
+inputs that differ, or to come from the same inputs, which alone means the machines compute differently. Either is a
+failure: machines with different data are not the same by construction. `verify.sh build` also fails when the Unicode
+data is not of the Unicode version the ICU is of. `fingerprint.sh inputs` (`fingerprint.ps1 -Inputs`) prints those lines
+alone, in about a minute and without the engine; `fingerprint.sh compare FILE DIR` (`-Against DIR`) compares with the
+records in a directory in place of the branch's.
+
 `laplace.sh`, installed as the operator's `~/.local/bin/laplace`, runs the program the last deployment built, with its
 code, recipes and environment.
 
