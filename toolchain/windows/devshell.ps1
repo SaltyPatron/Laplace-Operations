@@ -59,13 +59,16 @@ if (-not (Get-Command icx.exe -ErrorAction SilentlyContinue)) {
     if ($setvars -and (Test-Path $setvars)) { [void](Import-BatchEnvironment $setvars 'intel64'); if (-not (Get-Command icx.exe -ErrorAction SilentlyContinue)) { $said.Add("oneAPI: $setvars did not give icx") } }
     else { $said.Add('oneAPI: no installation found (ONEAPI_ROOT, the compiler the installer registered), and LAPLACE_ONEAPI names none') }
 }
-# the manifest's tools: the directories under each unpacked tool that hold programs, ahead of whatever else is on the PATH
+# the manifest's tools: the directories under each unpacked tool that hold its programs
 $tools = foreach ($line in Get-Content (Join-Path $PSScriptRoot '..\..\dependencies.tsv')) {
     if (-not $line.Trim() -or $line.StartsWith('#')) { continue }
     $f = $line -split "`t"; if ($f.Count -lt 9 -or $f[2] -ne 'tool' -or $f[6] -ne 'unpack' -or ($f[8] -split ',') -notcontains 'windows') { continue }
     $prefix = Join-Path (Join-Path $env:LAPLACE_DEPS $f[0]) $f[1]
     if (-not (Test-Path $prefix)) { continue }
-    foreach ($d in @($prefix, (Join-Path $prefix 'bin'), (Join-Path $prefix 'perl\bin'), (Join-Path $prefix 'c\bin'))) { if (@(Get-ChildItem -LiteralPath $d -Filter *.exe -File -ErrorAction SilentlyContinue).Count) { $d } }
+    # the tool's own programs only. Strawberry Perl also carries a compiler suite (c\bin: gcc, an old cmake, make):
+    # that is never put on the PATH, where it would stand in for the machine's CMake and the contract's compiler.
+    foreach ($d in @($prefix, (Join-Path $prefix 'bin'), (Join-Path $prefix 'perl\bin'))) { if (@(Get-ChildItem -LiteralPath $d -Filter *.exe -File -ErrorAction SilentlyContinue).Count) { $d } }
 }
-foreach ($d in $tools) { if (($env:PATH -split ';') -notcontains $d) { $env:PATH = "$d;$env:PATH" } }
+# after what is already there: a tool of the manifest never stands in for the machine's CMake, Ninja or Git
+foreach ($d in $tools) { if (($env:PATH -split ';') -notcontains $d) { $env:PATH = "$env:PATH;$d" } }
 foreach ($s in $said) { Write-Warning $s }

@@ -292,8 +292,13 @@ function deps {
     else {
         Attempt 'laplace-math' {
             $b = Split-Path $Math
-            Exec cmake.exe @('-S', (Join-Path $PSScriptRoot 'math'), '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DCORE_MATH=$env:LAPLACE_COREMATH")
-            Exec cmake.exe @('--build', $b)
+            # the toolchain refuses a LAPLACE_MATH that names no file, which is every build's protection and this
+            # one's obstacle: the library it names is what is being made. It is out of the environment for this build.
+            $named = $env:LAPLACE_MATH; $env:LAPLACE_MATH = $null
+            try {
+                Exec cmake.exe @('-S', (Join-Path $PSScriptRoot 'math'), '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DCORE_MATH=$env:LAPLACE_COREMATH")
+                Exec cmake.exe @('--build', $b)
+            } finally { $env:LAPLACE_MATH = $named }
             if (-not (Test-Path $Math)) { throw "no library at $Math" }
             Say 'laplace-math' "built: $Math"
         }
