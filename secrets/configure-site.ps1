@@ -5,22 +5,11 @@ param(
     [Parameter(Mandatory)][string]$InstallPrefix,
     [string]$IdentityPath = 'kv/shared/laplace-auth',
     [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9@._-]*$')][string]$SshTarget = $HostName,
-    [string]$HostLock = '/run/lock/laplace/host-resource.lock'
+    [string]$HostLock = '/run/lock/laplace/host-resource.lock',
+    [switch]$UseSudo
 )
 $ErrorActionPreference = 'Stop'
-function Invoke-Program([string]$Program, [string[]]$Arguments, [string]$InputText = '') {
-    $info = [Diagnostics.ProcessStartInfo]::new($Program)
-    $info.UseShellExecute = $false; $info.CreateNoWindow = $true
-    $info.RedirectStandardInput = $true; $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
-    foreach ($argument in $Arguments) { $info.ArgumentList.Add($argument) }
-    $process = [Diagnostics.Process]::Start($info)
-    $output = $process.StandardOutput.ReadToEndAsync(); $errorText = $process.StandardError.ReadToEndAsync()
-    $process.StandardInput.Write($InputText); $process.StandardInput.Close()
-    if (-not $process.WaitForExit(60000)) { $process.Kill($true); throw "$Program timed out" }
-    $result = $output.GetAwaiter().GetResult()
-    if ($process.ExitCode -ne 0) { throw "$Program failed: $($errorText.GetAwaiter().GetResult())" }
-    $result
-}
+. "$PSScriptRoot/process.ps1"
 
 # A per-host operator credential is created once in the existing secrets service.
 # Secret material travels through process stdin, never command arguments or output.
@@ -101,7 +90,8 @@ print(json.dumps({'changed':changed,'prefix':str(root),'restart_required':bool(c
 '@
 # Quoting only a constant Python program; credentials are the SSH process's stdin.
 $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($remote))
-$command = "python3 -c 'import base64;exec(base64.b64decode(`"$encoded`"))'"
+$launcher = if ($UseSudo) { 'sudo -n python3' } else { 'python3' }
+$command = "$launcher -c 'import base64;exec(base64.b64decode(`"$encoded`"))'"
 $result = Invoke-Program ssh @('-o','BatchMode=yes','-o','ConnectTimeout=10',$SshTarget,$command) ($payload | ConvertTo-Json -Depth 6 -Compress)
 $payload = $null; $record = $null; $identity = $null; $token = $null
 $result
