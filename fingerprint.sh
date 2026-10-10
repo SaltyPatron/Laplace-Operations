@@ -10,8 +10,8 @@
 #   ./fingerprint.sh inputs         what this machine's results are made from: the lines of the record that say its data
 #
 # The record: the commits, the compiler and the processor (said, never compared), then what must be the same on every
-# machine: tier 0 and its flags, made afresh into a scratch directory from $LAPLACE_UCD; the highway the last
-# deployment generated; and, for each source of $LAPLACE_DETERMINISM, the claims its recipes make of its files (laplace
+# machine: tier 0 and its flags, made afresh in scratch from $LAPLACE_UCD; the installed highway artifact;
+# and, for each source of $LAPLACE_DETERMINISM, the claims its recipes make of its files (laplace
 # ingest --claims, nothing loaded), counted and hashed as a sorted set. Each source is decomposed twice: the two runs
 # must give the same set (SaltyPatron/Laplace-Engine#36), and the record says whether they did.
 # Publishing needs a token that may push to Laplace-Operations (LAPLACE_FINGERPRINT_TOKEN; in a workflow the secret
@@ -28,8 +28,8 @@ key(){ echo "$(sed -n 's/^native  *\([^ +]*\).*/\1/p' "$1")-$(sed -n 's/^engine 
 # What the results are made from, so that two records which differ can be told apart by their inputs before their
 # arithmetic: the Unicode data tier 0, its flags and the unicode source are read from (its version, as DerivedAge.txt
 # names it, and its files but the charts), the ICU text is decomposed with and the Unicode version that ICU is of, and
-# the directory each source is read from whose results are in the record: the sources of $LAPLACE_DETERMINISM, and the
-# resources the highway was generated from (as its log names them). A source's directory is its first root that
+# the directory each source of $LAPLACE_DETERMINISM is read from. Highway generation inputs are unknown without
+# a provenance receipt tied to the installed artifact. A source's directory is its first root that
 # exists; of a pattern, the newest: as the engine resolves it. A tree is said as its files and one hash: of
 # "path<TAB>bytes<TAB>sha256" for every file, in byte order of the paths. A name that begins with a dot, file or directory,
 # is not in it: the engine's walk does not read one (data.sh keeps .landed and .archive there).
@@ -43,16 +43,13 @@ inputs(){
   else echo "ucd         none"; fi
   i=$LAPLACE_ICU_DIR/include/unicode
   echo "icu         $(sed -n 's/^#define U_ICU_VERSION "\(.*\)".*/\1/p' "$i/uvernum.h" 2>/dev/null | head -1) unicode $(sed -n 's/^#define U_UNICODE_VERSION "\(.*\)".*/\1/p' "$i/uchar.h" 2>/dev/null | head -1)"
-  res=$(resources | tr '\n' ' '); echo "resources   ${res% }"
+  res=; echo "resources   unknown"  # no provenance receipt binds source trees to the installed artifact
   seen=" "
   for s in $LAPLACE_DETERMINISM $res; do case $seen in *" $s "*) continue ;; esac; seen="$seen$s "; d=
     for root in $(sed -n 's/^root  *//p' "$LAPLACE_SRC/Laplace-Engine/recipes/$s/source" 2>/dev/null); do
       [ -n "$d" ] && break; for c in $(eval echo "$root"); do [ -d "$c" ] && d=$c; done; done
     if [ -n "$d" ]; then echo "data        $s $(tree "$d" | said) ${d##*/}"; else echo "data        $s none"; fi
   done; }
-# the resources the last deployment's highway was read from: each line of its log between the title and the slots
-resources(){ h=$(ls -d "$LAPLACE_WORK"/logs/deploy/*/ 2>/dev/null | sort | tail -1); [ -n "$h" ] && [ -f "$h/highway.log" ] || return 0
-  sed -n '/^laplace highway/,/^  slots:/p' "$h/highway.log" | sed -n 's/^  \([a-z][a-z0-9-]*\)  *[0-9n].*/\1/p'; }
 
 record(){ out=$1; [ -x "$L" ] || { echo "no laplace at $L: deploy.sh builds it"; exit 1; }
   scratch=$(mktemp -d); trap 'rm -rf "$scratch"' EXIT
@@ -66,8 +63,8 @@ record(){ out=$1; [ -x "$L" ] || { echo "no laplace at $L: deploy.sh builds it";
     inputs
     echo "tier0       $("$L" tier0 -o "$scratch/tier0.bin" 2>&1 | fp)"
     echo "flags       $(LAPLACE_TIER0=$scratch/tier0.bin "$L" flags -o "$scratch/tier0.flags" 2>&1 | fp)"
-    h=$(ls -d "$LAPLACE_WORK"/logs/deploy/*/ 2>/dev/null | sort | tail -1)
-    echo "highway     $( [ -n "$h" ] && fp < "$h/highway.log" )"
+    highway_record=$("$L" highway --fingerprint) || exit 1
+    echo "highway     $(printf '%s\n' "$highway_record" | fp)"
     for s in $LAPLACE_DETERMINISM; do
       for i in 1 2; do
         LAPLACE_WORK=$scratch/work LAPLACE_INGEST_ONE=1 "$L" ingest --claims "$s" > "$scratch/claims.$i" 2> "$scratch/claims.$i.err" || { echo "claims      $s failed: $(tail -1 "$scratch/claims.$i.err")"; continue 2; }
@@ -127,7 +124,7 @@ compare(){ f=$1; given=${2:-}; k=$(key "$f"); m=$(sed -n 's/^machine  *//p' "$f"
     case $(same "$a" "$b") in same) echo "  icu: same ($a)" ;; differs) echo "  icu: DIFFERS: $a here, $b there"; rc=1 ;; *) echo "  icu: not in both" ;; esac
     for s in $(sed -n 's/^data  *\([^ ]*\).*/\1/p' "$f"); do a=$(dat "$f" "$s"); b=$(dat "$o" "$s")
       case $(same "$a" "$b") in same) echo "  data $s: same ($a)" ;; differs) echo "  data $s: differs: $a here, $b there" ;; *) echo "  data $s: not in both" ;; esac; done
-    hw=$ucd; for s in $(fld "$f" resources); do hw=$(both "$hw" "$(same "$(dat "$f" "$s")" "$(dat "$o" "$s")")"); done
+    hw=unknown; for s in $(fld "$f" resources); do hw=$(both "$hw" "$(same "$(dat "$f" "$s")" "$(dat "$o" "$s")")"); done
     for field in tier0 flags highway; do a=$(fld "$f" $field); b=$(fld "$o" $field); [ $field = highway ] && in=$hw || in=$ucd
       case $(same "$a" "$b") in same) echo "  $field: same ($a)" ;; differs) if fails "$in"; then echo "  $field: DIFFERS: $a here, $b there   $(why "$in")"; rc=1; else echo "  $field: differs: $a here, $b there   $(why "$in")"; fi ;; *) echo "  $field: not in both" ;; esac; done
     for s in $(sed -n 's/^claims  *\([^ ]*\).*/\1/p' "$f"); do a=$(fld "$f" "claims  *$s"); b=$(fld "$o" "claims  *$s")

@@ -26,7 +26,7 @@ step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
         [ "$(cat "$log/$name.exit" 2>/dev/null)" = 0 ] || { echo "=== $name did not finish; what it said is in $log/$name.log"; exit 1; }; }
 
 command -v laplace >/dev/null || { echo "no laplace program on the path: deploy.sh builds it"; exit 1; }
-[ -s "$LAPLACE_TIER0" ] && [ -s "$LAPLACE_HIGHWAY" ] || { echo "no perf-caches at $LAPLACE_TIER0: deploy.sh generates them"; exit 1; }
+[ -s "$LAPLACE_TIER0" ] && [ -s "$LAPLACE_HIGHWAY" ] || { echo "no perf-caches at $LAPLACE_TIER0: prepare or install them separately (README.md)"; exit 1; }
 
 # What the log is made of while the ingest runs, by table and index: each minute, the minute before is read from the
 # log while it still holds it (pg_walinspect: a checkpoint recycles what is older), and the totals are added up when

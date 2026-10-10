@@ -1,7 +1,7 @@
 #Requires -Version 7
 <#
   Laplace on Windows, from an empty server to a Laplace database ready to be loaded: deploy.sh's counterpart. The build,
-  the perf-caches (tier 0 and its flags once, the highway every time), the grammars, the database with its extension and
+  the independently prepared perf-caches, the grammars, the database with its extension and
   schema, and its status. No data is loaded here. Everything it does can be done again.
     pwsh -File deploy.ps1                                        the database laplace.env.ps1 names
     $env:LAPLACE_CONNINFO = '... dbname=NAME'; pwsh -File deploy.ps1   another database; made if the server does not have it
@@ -23,6 +23,13 @@ if (Test-Path $ingest) { try { ([IO.File]::Open($ingest, 'Open', 'ReadWrite', 'N
 
 $env:PATH = "$env:LAPLACE_BUILD\Laplace-Engine\icx-release;$env:LAPLACE_PG_DIR\bin;$env:LAPLACE_ICU_DIR\bin64;$env:PATH"
 $psql = Join-Path $env:LAPLACE_PG_DIR 'bin\psql.exe'
+# Refuse missing artifacts before changing the database, including an explicit drop.
+$flags = if ($env:LAPLACE_FLAGS) { $env:LAPLACE_FLAGS } else { $env:LAPLACE_TIER0 -replace '\.bin$', '.flags' }
+foreach ($artifact in @($env:LAPLACE_TIER0, $flags, $env:LAPLACE_HIGHWAY, "$env:LAPLACE_HIGHWAY.layout", "$env:LAPLACE_HIGHWAY.keys")) {
+    if (-not (Test-Path -LiteralPath $artifact -PathType Leaf) -or (Get-Item -LiteralPath $artifact).Length -eq 0) {
+        throw "missing deployment artifact: $artifact; prepare or install the perf-caches separately (README.md)"
+    }
+}
 # deploy.ps1 drop: the database dropped and made again, empty, by the role, which may drop databases (the cluster
 # itself is setup.ps1 drop's, run by a person)
 if ($Drop -eq 'drop') {
@@ -41,9 +48,7 @@ function Step([string]$name, [scriptblock]$body) {
 
 Step tune-pg  { & pwsh.exe -NoProfile -File (Join-Path $PSScriptRoot 'tune-pg.ps1') }       # the server's settings: apply, reload, check. a drift fails the deploy
 Step build    { & pwsh.exe -NoProfile -File (Join-Path $PSScriptRoot 'build.ps1') install }
-if (-not (Test-Path $env:LAPLACE_TIER0)) { Step tier0 { & laplace.exe tier0 } }
-if (-not (Test-Path ($env:LAPLACE_TIER0 -replace '\.bin$', '.flags'))) { Step flags { & laplace.exe flags } }
-Step highway  { & laplace.exe highway }                                                     # seconds; always current with the generator and the resources
+Step highway-fingerprint { & laplace.exe highway --fingerprint }
 if (-not (Get-ChildItem $env:LAPLACE_GRAMMARS -ErrorAction SilentlyContinue)) {
     Step grammars { & 'C:\Program Files\Git\bin\bash.exe' (Join-Path $env:LAPLACE_SRC 'Laplace-Engine\tools\build_grammars.sh') $env:LAPLACE_GRAMMAR_SRC $env:LAPLACE_GRAMMARS }
 }
