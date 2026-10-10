@@ -1,0 +1,57 @@
+{
+  "verified_utc": "2026-10-10T20:52:42.988Z",
+  "files_checked": 33367,
+  "changed_local_files": [],
+  "environment_and_process_names": 1387,
+  "environment_evidence": 23316,
+  "computed_name_sites": 213,
+  "repository_count": 20,
+  "configuration_files": 3213,
+  "reviewed_cross_repository_contracts": 16,
+  "additional_source_findings": 13,
+  "source_verification": {
+    "trees": 19,
+    "samples": 162,
+    "local_drift": 0,
+    "verdict": "passed"
+  },
+  "checks": [
+    {
+      "category": "environment",
+      "q": "LAPLACE_APP_DB",
+      "count": 167,
+      "milliseconds": 47
+    },
+    {
+      "category": "environment",
+      "q": "LAPLACE_NO_PIN",
+      "count": 29,
+      "milliseconds": 38
+    },
+    {
+      "category": "parameter",
+      "q": "batch",
+      "count": 1202,
+      "milliseconds": 245
+    },
+    {
+      "category": "constant",
+      "q": "SLOTS_MAX",
+      "count": 3,
+      "milliseconds": 235
+    },
+    {
+      "category": "configuration",
+      "q": "timeout-minutes",
+      "count": 100,
+      "milliseconds": 263
+    },
+    {
+      "category": "path",
+      "q": "repos",
+      "count": 199939,
+      "milliseconds": 491
+    }
+  ],
+  "verdict": "source inventory and catalogue consistency verified; runtime acceptance remains open"
+}

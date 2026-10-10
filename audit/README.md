@@ -25,6 +25,9 @@ previous complete audit. `--append` on the scanner adds newly discovered checkou
 | `configuration.sqlite` | Complete occurrence/glossary database and full-text search index |
 | `index.html`, `data.js` | Viewer and coverage metadata |
 | `environment-glossary.json` | Names with a direct environment reader, assignment/reference, or declaration |
+| `environment-contracts.json`, `environment-contracts.csv` | Source-level definitions and consumers, including credential names, mixed-case names, wrapper flags, shell inputs, GitHub variables/secrets and service declarations; computed-name locations and changed local files are explicit |
+| `repository-index.json` | Every repository's environment names, category counts and configuration-file source links |
+| `configuration-review.json` | Reviewed precedence, units, capacities, resource equations and cross-repository findings with acceptance checks |
 | `reviewed-glossary.json`, `findings.json` | Reviewed meanings and findings, tied to the reviewed source revisions |
 | `glossary.json` | Every indexed term, expressions, source comments and locations; unreviewed meanings stay unreviewed |
 | `occurrences.jsonl`, `occurrences.csv` | Full lexical results, including compile-time and process-local name candidates |
@@ -38,7 +41,7 @@ previous complete audit. `--append` on the scanner adds newly discovered checkou
 The lexer covers environment access, configuration files, absolute/derived paths, CMake settings, CLI options, named
 numeric assignments/constants, array bounds, SQL settings/query bounds and threshold comparisons. Tests, documentation,
 generated code and historical material remain searchable. These are **source occurrences**, not a count of independent
-settings. General shell/CMake names and `LAPLACE_*` identifiers are candidates; the environment reader catalogue separates
+settings. General shell/CMake names and `LAPLACE_*` identifiers are labelled `environment-candidate`; the environment reader catalogue separates
 direct evidence from name matching. Numeric assignments can be ordinary implementation variables rather than configurable limits.
 
 Text files have no size cutoff. Binary assets, private keys, LFS payloads and submodule contents are listed as excluded.
@@ -58,3 +61,10 @@ node ./audit/verify-index.mjs --output $auditDirectory
 The regression fixture checks actual Git snapshots, local edits, multiline environment readers, paths, constants, SQL
 settings/bounds, unusual text extensions, credential suppression, binary/LFS exclusions, repeat append behavior, full-text
 index coverage, and rejection of compile guards/printf tokens as proven environment readers.
+
+The environment projection re-reads captured source blobs and verifies hashes before extracting definitions and consumers.
+This retains credential **names** even when the lexical export suppressed their contexts, and excludes SQL `SET` from
+environment definitions. Dotted test-project names are classified as tests. CMD assignments and shell references remain
+labelled as process/shell state; their presence does not imply that they are supported operator controls. The source contracts
+include comments and exact expressions, while the reviewed cross-repository report explains selected precedence and resource
+relationships. No effective values are invented for dynamically computed names or changed local files.

@@ -64,7 +64,7 @@ const directEnv=(r)=>{
 };
 db.exec('DROP TABLE IF EXISTS environment_terms; CREATE TABLE environment_terms(symbol TEXT PRIMARY KEY,payload TEXT);');
 const environments=new Map();
-for(const item of db.prepare("SELECT payload FROM occurrences WHERE category='environment'").iterate()){
+for(const item of db.prepare("SELECT payload FROM occurrences WHERE category IN ('environment','environment-candidate')").iterate()){
  const row=JSON.parse(item.payload),evidence=directEnv(row);if(!evidence)continue;
  if(!environments.has(row.symbol))environments.set(row.symbol,{symbol:row.symbol,evidence:[],meaning:reviewApplies?meanings[row.symbol]||null:null});
  const term=environments.get(row.symbol);

@@ -12,6 +12,21 @@ const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 const git=(root,args,options={})=>execFileSync('git',['-C',root,...args],{maxBuffer:512*1024*1024,...options});
 const acquisitions=readJson(path.join(out,'acquisition.json'));
 const catalog=readJson(path.join(out,'catalog.json'));
+// Validate acquired tree entries before opening/truncating any existing outputs.
+// The API cache may identify the requested commit or the resolved tree object.
+const validatedTrees=new Map();
+for(const acquired of acquisitions){
+  if(acquired.exit_code!==0||acquired.empty)continue;
+  let treeFile=path.join(out,'trees',acquired.name+'-'+acquired.revision+'.json');
+  if(!fs.existsSync(treeFile))treeFile=path.join(out,'trees',acquired.name+'.json');
+  if(!fs.existsSync(treeFile))continue;
+  const metadata=readJson(treeFile);
+  if(metadata.truncated)throw Error('Truncated tree: '+acquired.name);
+  const local=git(acquired.path,['ls-tree','-rz',acquired.revision]).toString('utf8').split('\0').filter(Boolean).map(s=>{const m=s.match(/^(\d+) (\w+) ([a-f\d]+)\t([\s\S]+)$/);if(!m)throw Error('Invalid Git tree entry');return {mode:m[1],type:m[2],oid:m[3],file:m[4]};});
+  const expected=new Map(local.map(e=>[e.file,e])),actual=metadata.tree.filter(e=>e.type!=='tree');
+  if(actual.length!==local.length||actual.some(e=>{const a=expected.get(e.path);return !a||a.oid!==e.sha||a.mode!==e.mode||a.type!==e.type;}))throw Error('Tree entries differ from pinned commit: '+acquired.name);
+  validatedTrees.set(acquired.name,metadata);
+}
 const previous=argv.includes('--append')?readJson(path.join(out,'coverage.json')):null;
 const sources=previous?previous.sources:[], files=previous?readJson(path.join(out,'files.json')):[], skipped=previous?readJson(path.join(out,'skipped.json')):[], failures=previous?previous.failures:[],discovery=previous?readJson(path.join(out,'discovery.json')):[];
 const database=new DatabaseSync(path.join(out,'configuration.sqlite'));
@@ -41,21 +56,24 @@ function scrub(line,symbol='') {
   if(secretName.test(symbol) || /(?:Password\s*=|-----BEGIN .*PRIVATE KEY|Bearer\s+\S+|(?:gh[pousr]_|github_pat_|sk_live_|sk-proj-)[A-Za-z0-9_-]{12,})/i.test(line))
     return '[credential-bearing context omitted; inspect the cited source]';
   return line.replace(/https?:\/\/[^\s/@:]+:[^\s/@]+@/g,'https://[redacted]@')
-    .replace(/((?:password|passwd|secret|token|api[_-]?key)\w*\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/ig,'$1[redacted]').slice(0,900);
+    .replace(/((?:password|passwd|secret|token|api[_-]?key)\w*["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/ig,'$1[redacted]').slice(0,900);
 }
 function domain(file) {
-  if(/(?:^|\/)(?:tests?|testdata|fixtures?|__tests__)(?:\/|\.)|[._-](?:test|spec)\./i.test(file)) return 'test';
+  if(/(?:^|\/)[^/]*(?:[._-](?:Tests?|Specs?))(?:\/|\.)|(?:^|\/)(?:tests?|testdata|fixtures?|__tests__)(?:\/|\.)|(?:^|\/)(?:test[-_]|[^/]+[._-](?:test|spec)\.)/i.test(file)) return 'test';
   if(/(?:^|\/)(?:vendor|external|third.party|node_modules)(?:\/)/i.test(file)) return 'third-party';
   if(/\.(?:md|rst|txt|adoc)$/i.test(file) || /(?:^|\/)docs?\//.test(file)) return 'documentation';
   if(/(?:package-lock\.json|yarn\.lock|\.min\.[jc]s|generated)/i.test(file)) return 'generated';
   return 'implementation';
 }
 function scan(text,source,file,sha) {
-  const lines=text.split(/\r?\n/), seen=new Set(), kind=domain(file);
+  const lines=text.split(/\r?\n/), seen=new Set(), kind=domain(file), safeLines=new Map();
   const add=(line,category,symbol,role='reference',expression='')=>{
     if(!symbol || symbol.length>260) return;
     const k=`${line}\0${category}\0${symbol}`; if(seen.has(k)) return; seen.add(k);
-    const raw=lines[line-1]||'', safe=scrub(raw,symbol);
+    // Inline JSON can put thousands of settings on one line. Scrub that line once;
+    // credential-named symbols still suppress their entire context separately.
+    if(!safeLines.has(line))safeLines.set(line,scrub(lines[line-1]||''));
+    const safe=secretName.test(symbol)?scrub('',symbol):safeLines.get(line);
     const value=scrub(expression,symbol);
     const credential=secretName.test(symbol);
     const unit=expression.match(/\b(?:GiB|MiB|KiB|GB|MB|KB|milliseconds|seconds|minutes|bytes|kilobytes)\b/i)?.[0]||null;
@@ -65,12 +83,26 @@ function scan(text,source,file,sha) {
       source_note:lines.slice(Math.max(0,line-4),line-1).filter(s=>/^\s*(?:#|\/\/|\/\*|\*|<!--|rem\b)/i.test(s)).map(s=>scrub(s,symbol)).join('\n')||null,
       url:source.scope==='github-default'?`${source.url}/blob/${source.revision}/${file.split('/').map(encodeURIComponent).join('/')}#L${line}`:null});
   };
+  // JSON keys need their full object/array path, including inline/minified objects.
+  // A line regex loses later keys and conflates equal leaf names in different sections.
+  if(/\.json$/i.test(file)) {
+    let valid=true;try{JSON.parse(text);}catch{valid=false;}
+    if(valid){let pos=0,line=1;
+      const space=()=>{while(/\s/.test(text[pos]||'!')){if(text[pos++]==='\n')line++;}};
+      const string=()=>{const start=pos++;while(pos<text.length){const c=text[pos++];if(c==='\\')pos++;else if(c==='"')break;}return text.slice(start,pos);};
+      const value=(key,at)=>{space();const start=pos;
+        if(text[pos]==='{'){pos++;space();while(text[pos]!=='}'){const keyLine=line,name=JSON.parse(string());space();pos++;value(key?key+'.'+name:name,keyLine);space();if(text[pos]!==',')break;pos++;space();}pos++;}
+        else if(text[pos]==='['){pos++;space();let n=0;while(text[pos]!==']'){value(key+'['+(n++)+']',line);space();if(text[pos]!==',')break;pos++;space();}pos++;}
+        else {if(text[pos]==='"')string();else while(pos<text.length&&!/[\s,\]}]/.test(text[pos]))pos++;add(at,'configuration',key||'$','definition',text.slice(start,pos));}
+      };space();value('',line);
+    }
+  }
   for(let i=0;i<lines.length;i++) {
     const line=lines[i], n=i+1;
     // Configuration names are indexed in prose and test fixtures as well as executable code.
     for(const m of line.matchAll(/\bLAPLACE_[A-Z][A-Z0-9_]*\b/g)) {
       const definition=new RegExp(`(?:Set-Default\\s+${m[0]}\\b|(?:export\\s+)?${m[0]}\\s*(?:=|:)|<${m[0]}(?:\\s|>))`).test(line);
-      add(n,'environment',m[0],definition?'definition':'reference',definition?line.trim():'');
+      add(n,'environment-candidate',m[0],definition?'definition':'reference',definition?line.trim():'');
     }
     const envPatterns=[
       /\$env:([A-Za-z_][A-Za-z0-9_]*)/g, /%([A-Za-z_][A-Za-z0-9_]*)%/g,
@@ -84,12 +116,12 @@ function scan(text,source,file,sha) {
     ];
     for(const re of envPatterns) for(const m of line.matchAll(re)) {
       const def=/(?:Set-Default\s|\bexport\s|\bset\s)/i.test(line)||new RegExp(`\\b${m[1]}\\s*=`).test(line);
-      add(n,'environment',m[1],def?'definition':'reference',def?line.trim():'');
+      add(n,'environment-candidate',m[1],def?'definition':'reference',def?line.trim():'');
     }
     // Calls split across lines, with the literal name on the following line.
     if(/\b(?:getenv|GetEnvironmentVariable|os\.getenv|env::var)\s*\(\s*$/.test(line)) {
       const next=lines[i+1]||'', m=next.match(/^\s*["']([A-Za-z_][A-Za-z0-9_]*)["']/);
-      if(m) add(i+2,'environment',m[1],'reference');
+      if(m) add(i+2,'environment-candidate',m[1],'reference');
     }
     for(const m of line.matchAll(/([A-Za-z]:[\\/][^"'<>|\r\n]*|\/(?:opt|etc|repos|build|vault|archive|backup|data|home|usr|var|run|mnt|srv|pgtemp|tmp|proc|sys|dev)(?:\/[^\s"'<>;,)}\]]*)?)/g)) {
       let value=m[1].trim(); if(/^[A-Za-z]:/.test(value)) value=value.replace(/\s+(?:#|rem\b|\/\/).*$/,'').replace(/[);]+$/,'');
@@ -137,7 +169,7 @@ function scanGit(source) {
   if(!fs.existsSync(treeFile))treeFile=path.join(out,'trees',source.repository+'.json');
   const metadata=fs.existsSync(treeFile)?readJson(treeFile):null;
   if(metadata?.truncated) throw Error(`GitHub tree was truncated: ${source.repository}`);
-  if(metadata && metadata.sha!==git(source.path,['rev-parse',source.revision+'^{tree}']).toString().trim())throw Error(`Tree metadata does not match pinned revision: ${source.repository}`);
+  if(metadata && !validatedTrees.has(source.repository))throw Error(`Tree metadata was not validated: ${source.repository}`);
   const tree=metadata?metadata.tree.filter(e=>e.type!=='tree').map(e=>({mode:e.mode,type:e.type,oid:e.sha,size:e.size,file:e.path})):
     git(source.path,['ls-tree','-rz',source.revision]).toString('utf8').split('\0').filter(Boolean).map(item=>{
       const m=item.match(/^(\d+) (\w+) ([a-f\d]+)\t([\s\S]+)$/);if(!m)throw Error('Unparsed tree entry');
@@ -228,7 +260,7 @@ for(const row of rows) {
   if(/definition/.test(row.role)) {entry.definitions++;if(row.expression)entry.expressions.add(row.expression);}
 }
 const glossary=[...glossaryMap.values()].map(e=>({...e,repositories:[...e.repositories].sort(),expressions:[...e.expressions].sort()})).sort((a,b)=>a.symbol.localeCompare(b.symbol)||a.category.localeCompare(b.category));
-const variants=glossary.filter(e=>e.expressions.length>1&&['environment','configuration','database-setting','parameter'].includes(e.category));
+const variants=glossary.filter(e=>e.expressions.length>1&&['environment-candidate','configuration','database-setting','parameter'].includes(e.category));
 const coverage={schema_version:1,started_utc:started,completed_utc:new Date().toISOString(),scanner_sha256:scannerHash,
   scanner_history:previous?[...(previous.scanner_history||[{sha256:previous.scanner_sha256,started_utc:previous.started_utc,completed_utc:previous.completed_utc}]),{sha256:scannerHash,started_utc:started}]:[{sha256:scannerHash,started_utc:started}],
   repository_count:catalog.length,acquired_repositories:acquisitions.filter(r=>r.exit_code===0).length,source_count:sources.length,

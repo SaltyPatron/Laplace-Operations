@@ -23,6 +23,8 @@ if($LocalRoots.Count){
 if($LASTEXITCODE -ne 0){throw 'Configuration scan failed or was incomplete'}
 & node "$PSScriptRoot/review-configuration.mjs" --output $Output
 if($LASTEXITCODE -ne 0){throw 'Glossary review enrichment failed'}
+& node "$PSScriptRoot/environment-contracts.mjs" --output $Output
+if($LASTEXITCODE -ne 0){throw 'Environment definition/consumer extraction failed'}
 & node "$PSScriptRoot/index-search.mjs" --output $Output
 if($LASTEXITCODE -ne 0){throw 'Search indexing failed'}
 Write-Output "Audit written to $Output"
