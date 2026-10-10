@@ -56,7 +56,7 @@ $Tools = [ordered]@{
     win_bison = 'winflexbison (dependencies.tsv, in the developer shell)'; nasm = 'NASM (dependencies.tsv, in the developer shell)'
 }
 # MSYS2's packages: what toolchain\windows\postgis.sh runs under (autotools, make, pkgconf; MinGW's cpp for the SQL).
-$Msys2Packages = 'autoconf', 'automake', 'libtool', 'make', 'pkgconf', 'mingw-w64-ucrt-x86_64-gcc'
+$Msys2Packages = 'autoconf', 'automake', 'libtool', 'make', 'pkgconf', 'bison', 'flex', 'mingw-w64-ucrt-x86_64-gcc'   # bison, flex: a checkout of PostGIS carries its grammars, not the parsers made from them
 # How each dependency the manifest says to build is configured on Windows: the options beyond the toolchain file,
 # the contract and the prefix, as the installs on HART-DESKTOP were made (their build trees' caches, 2026-10-04).
 $DepSourceDir = @{ lz4 = 'build\cmake'; zstd = 'build\cmake' }

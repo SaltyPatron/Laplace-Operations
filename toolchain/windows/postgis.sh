@@ -91,6 +91,8 @@ patches() {
 configure() {
   shims
   patches
+  # a checkout of the pinned commit carries configure.ac, not configure: its own autogen.sh makes it, once
+  [ -x "$SRC/configure" ] || ( cd "$SRC" && ./autogen.sh )
   mkdir -p "$B" && cd "$B"
   # _cv_*: the probes for math errno and signed zeros run programs the contract makes behave as PostGIS wants.
   _cv_nomatherrno=no _cv_nosignedzeros=no \
