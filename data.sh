@@ -4,8 +4,8 @@
 # the wordnet in minutes instead of receiving a copy of another machine's directory. Nothing here is renamed or
 # rewritten: a file lands as the publisher serves it, at the path the recipe reads it from.
 #
-#   ./data.sh fetch [SET...]    every declared set (or these): mirrored, downloaded when newer, cloned at the latest, the latest
-#                               release, an archive opened
+#   ./data.sh fetch [SET...]    every declared set (or these): mirrored, downloaded when newer, cloned at a pinned commit or the
+#                               latest, the latest release, an archive opened
 #   ./data.sh status            each declared set present or missing, then each recipe's roots: resolved or not;
 #                               exit 1 when a declared set is missing
 #   ./data.sh record            set, file, bytes, SHA-256 of what $LAPLACE_DATA holds for the declared sets
@@ -35,14 +35,20 @@ fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
             name=${u##*/}; edition=${name#"$pre"}; edition=${edition%%.*}; set=${set//\{edition\}/$edition}   # the name after the pattern's prefix, before its extension
             dest=$LAPLACE_DATA/$set/$name; get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"
             printf '  %-28s %s, the latest release\n' "$set" "$name" ;;
-    git)    dest=$LAPLACE_DATA/$set/${into%/}
-            if [ -d "$dest/.git" ]; then git -C "$dest" pull -q --ff-only 2>/dev/null || { git -C "$dest" fetch -q --depth 1 origin && git -C "$dest" reset -q --hard FETCH_HEAD; }
+    git)    local pin=""; case $into in *@*) pin=${into##*@}; into=${into%@*} ;; esac; dest=$LAPLACE_DATA/$set/${into%/}
+            if [ -n "$pin" ]; then                                              # the declared commit, and no other
+              [ -d "$dest/.git" ] || { mkdir -p "$(dirname "$dest")"; git init -q "$dest"; git -C "$dest" remote add origin "$origin"; }
+              [ "$(git -C "$dest" rev-parse HEAD 2>/dev/null)" = "$pin" ] || { git -C "$dest" fetch -q --depth 1 origin "$pin" && git -C "$dest" -c advice.detachedHead=false checkout -q --force "$pin"; }
+            elif [ -d "$dest/.git" ]; then git -C "$dest" pull -q --ff-only 2>/dev/null || { git -C "$dest" fetch -q --depth 1 origin && git -C "$dest" reset -q --hard FETCH_HEAD; }
             else mkdir -p "$(dirname "$dest")"; git clone -q --depth 1 "$origin" "$dest"; fi
-            printf '  %-28s %s at %s\n' "$set" "${into%/}" "$(git -C "$dest" rev-parse --short HEAD)" ;;
-    archive) dest=$LAPLACE_DATA/$set; mkdir -p "$dest"; f=$dest/.archive/${origin##*/}
+            printf '  %-28s %s at %s%s\n' "$set" "${into%/}" "$(git -C "$dest" rev-parse --short HEAD)" "${pin:+ (pinned)}" ;;
+    archive) dest=$LAPLACE_DATA/$set; mkdir -p "$dest"; local name=${origin##*/}
+            case $into in *.tgz|*.tar.gz|*.tar.bz2|*.zip) name=${into##*/}; into=${into%/*}; [ "$into" != "$name" ] || into=. ;; esac   # a URL that does not name its file: into names it
+            [ "$into" = . ] || { dest=$dest/${into%/}; mkdir -p "$dest"; }
+            f=$LAPLACE_DATA/$set/.archive/$name
             get "$origin" "$f" "$([ -f "$f" ] && echo "$f")"
-            case $f in *.tar.gz|*.tgz) tar xzf "$f" -C "$dest" ;; *.zip) unzip -q -o -DD "$f" -d "$dest" ;; *) echo "  $set: $f is not an archive data.sh opens"; return 1 ;; esac
-            printf '  %-28s %s opened\n' "$set" "${origin##*/}" ;;
+            case $f in *.tar.gz|*.tgz) tar xzf "$f" -C "$dest" ;; *.tar.bz2) tar xjf "$f" -C "$dest" ;; *.zip) unzip -q -o -DD "$f" -d "$dest" ;; *) echo "  $set: $f is not an archive data.sh opens"; return 1 ;; esac
+            printf '  %-28s %s opened\n' "$set" "$name" ;;
     extract) dest=$LAPLACE_DATA/$set/${into%/}; mkdir -p "$dest"
             unzip -q -o -DD "$LAPLACE_DATA/$set/$origin" -d "$dest"          # the publisher's archive, opened beside itself
             printf '  %-28s %s opened into %s\n' "$set" "${origin##*/}" "${into%/}" ;;

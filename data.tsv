@@ -8,8 +8,10 @@
 #   release  the latest GitHub release (api.github.com/repos/O/R/releases/latest): the asset matching into's pattern;
 #            {edition} in the set's name is the asset's name after the pattern's literal prefix, before its extension
 #   extract  an archive the set already holds (origin: its path under the set), opened into a directory under the set
-#   git      a repository cloned at the latest commit of its default branch, into a directory under the set
-#   archive  an archive from the publisher, kept under the set's .archive and opened into the set
+#   git      a repository into a directory under the set: at the commit after @ in into (pinned: every host the same), or at the
+#            latest of its default branch when there is none
+#   archive  an archive from the publisher, kept under the set's .archive and opened into the set (into: a directory under the
+#            set, or the archive's file name when the URL does not carry one, e.g. a repository's bitstream)
 # set	kind	origin	into
 # Unicode 17.0.0, pinned: the version ICU 78 and tier 0 are built from (laplace.env). The recipes and the Engine read it at
 # Public/UCD/latest, the name the publisher's rolling directory has; what is there is 17.0.0, not whatever is latest today.
@@ -31,13 +33,29 @@ ISO639	file	https://raw.githubusercontent.com/unicode-org/cldr/main/common/suppl
 ISO639	file	https://raw.githubusercontent.com/unicode-org/cldr/main/common/supplemental/supplementalData.xml	cldr/
 ISO639	file	https://raw.githubusercontent.com/unicode-org/cldr/main/common/supplemental/supplementalMetadata.xml	cldr/
 OpenEnglishWordNet-{edition}	release	https://api.github.com/repos/globalwordnet/english-wordnet/releases/latest	english-wordnet-*-plus.xml.gz
-CILI	git	https://github.com/globalwordnet/cili	.
-PropBank	git	https://github.com/propbank/propbank-frames	propbank-frames/
-VerbNet	git	https://github.com/cu-clear/verbnet	verbnet-cu-clear/
-SemLink	git	https://github.com/cu-clear/semlink	semlink-cu-clear/
-UD-Tools	git	https://github.com/UniversalDependencies/tools	tools/
+CILI	git	https://github.com/globalwordnet/cili	.@a895d7ecb18019dda3443f98901e59d81ce8722b
+PropBank	git	https://github.com/propbank/propbank-frames	propbank-frames/@c66e0ccf28b53f00051b187db83e937b5bee2e32
+VerbNet	git	https://github.com/cu-clear/verbnet	verbnet-cu-clear/@ae8e9cfdc2c0d3414b748763612f1a0a34194cc1
+SemLink	git	https://github.com/cu-clear/semlink	semlink-cu-clear/@2636bf5a4ae9c93b669a1184a8aaae9ca21552d3
+UD-Tools	git	https://github.com/UniversalDependencies/tools	tools/@ab0c97035527ae7c0a6e15ba0e78138a6d99a368
 Wordnet	archive	https://wordnetcode.princeton.edu/3.0/WordNet-3.0.tar.gz	.
 # FrameNet 1.7 as NLTK redistributes it (CC BY 3.0 per NLTK's index; Berkeley FrameNet's own release is on request); VerbAtlas 1.1.0 as
 # its publisher serves it (CC BY-NC-SA 4.0: the download page asks the licence be accepted; LICENSES.txt is in the archive)
 FrameNet	archive	https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/framenet_v17.zip	.
 VerbAtlas-1.1	archive	https://verbatlas.org/downloads/VerbAtlas-1.1.0.zip	.
+# Tatoeba's weekly exports: the publisher keeps only the current week, so these are the latest by nature; the record (fingerprint.sh
+# inputs) says which week a host holds. users_sentences is not among the exports it publishes today.
+Tatoeba	archive	https://downloads.tatoeba.org/exports/links.tar.bz2	.
+Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences.tar.bz2	.
+Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences_CC0.tar.bz2	.
+Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences_detailed.tar.bz2	.
+Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences_with_audio.tar.bz2	.
+Tatoeba	archive	https://downloads.tatoeba.org/exports/tags.tar.bz2	.
+Tatoeba	archive	https://downloads.tatoeba.org/exports/transcriptions.tar.bz2	.
+Tatoeba	archive	https://downloads.tatoeba.org/exports/user_languages.tar.bz2	.
+# Wiktextract's raw dump of the English Wiktionary (kaikki.org): one current file, replaced in place by the publisher (2.8 GB); the
+# record says which dump a host holds. The recipe matches raw-wiktextract-data*.
+Wiktionary	file	https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz	./
+# Universal Dependencies 2.18, pinned: the release LINDAT/CLARIAH holds (hdl.handle.net/11234/1-6149), the treebanks and the documentation
+UD-Treebanks	archive	https://lindat.mff.cuni.cz/repository/server/api/core/bitstreams/d91b1ffc-fc31-41a0-bd8f-3b876864a1d5/content	ud-treebanks-v2.18.tgz
+UD-Docs	archive	https://lindat.mff.cuni.cz/repository/server/api/core/bitstreams/48a1c529-e985-4282-ae32-7feee27ca141/content	ud-documentation-v2.18.tgz
