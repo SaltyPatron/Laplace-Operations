@@ -1,0 +1,4 @@
+# The hosts whose backups this deployment's landing host accepts (setup.sh landing), one a line:
+#   host   the public key that host's backup part made (its /etc/laplace/backup.pub)
+# A host lands only under <LAPLACE_LANDING>/<host>, write-only: it cannot read, change or remove what is there.
+# A public key is not a secret; the private half never leaves its host.
