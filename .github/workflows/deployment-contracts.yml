@@ -1,0 +1,22 @@
+name: Deployment failure boundaries
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check deployment sequencing and failure propagation
+        shell: bash
+        run: |
+          export TMPDIR="$RUNNER_TEMP"
+          bash tests/deployment-artifacts.sh
+          bash tests/deployment-readback.sh
+          bash tests/fingerprint-comparison.sh
+          ruby tests/deployment-workflow.rb
+          pwsh -NoProfile -File tests/deployment-artifacts.ps1

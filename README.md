@@ -121,9 +121,11 @@ repository at its main, one deployment at a time (the concurrency group `hart-se
 | job | what |
 |---|---|
 | deploy | `seed-stamp.sh decide`, then `deploy.sh`, or `deploy.sh drop` when the database is reseeded |
-| checks | `verify.sh build`: the build's record (`fingerprint.sh`), determinism, HART-DESKTOP's record for the same commits |
+| checks | `verify.sh deployment`: extension version/tables and Engine/PostgreSQL artifact compatibility, with observed binary/artifact hashes |
 | ingest | only for an explicit reseed request: `ingest.sh` (every source of `LAPLACE_SOURCES`), then `seed-stamp.sh seeded` |
 | reads | `verify.sh reads`: `laplace status`, and `text`, `hop`, `translate`, `fills` through the indexes |
+
+Production additionally waits for successful staging runtime reads. Missing cross-machine qualification records are still incomplete evidence, but are not a substitute for this infrastructure deployment gate.
 
 Each job writes what it found to the run's summary.
 
@@ -134,8 +136,7 @@ firmware do not count in that stamp. Since 2026-10-09 the policy only reports: a
 By hand, in one click: `laplace.yml` with `drop` (empty, no ingest) or `reseed` (drop, then every source), or
 `ingest.yml` with `reseed`.
 
-**Build fingerprints and local repeatability** (`verify.sh`, `fingerprint.sh`, `fingerprint.ps1`). Every deployment writes the
-record of its build: the commits, tier 0 and its flags made afresh, the highway, and, for each source of
+**Separate build qualification** (`verify.sh build`, `fingerprint.sh`, `fingerprint.ps1`). An explicitly requested qualification writes the record of its build: the commits, tier 0 and its flags made afresh, the highway, and, for each source of
 `LAPLACE_DETERMINISM`, the claims its recipes make, counted and hashed as a sorted set. Each source is decomposed twice,
 and the two runs must agree. The record is published on the branch `fingerprints` of this repository, at
 `<native>-<engine>/<machine>.txt`, and compared with every other machine's record for the same commits. On
