@@ -98,11 +98,16 @@ publish(){ f=$1; k=$(key "$f"); m=$(sed -n 's/^machine  *//p' "$f"); d=$(mktemp 
 # Laying two records side by side. fld: one field of a record; dat: a source's data as "files hash" (or none);
 # same: two values as same, differs, or unknown (one is not said: a record from before the inputs were); both: two such
 # answers as one (any differs: differs; else any unknown: unknown); why: what a result's difference then is.
+# What fails the comparison (compare's exit): a result that differs from the same inputs, or from inputs one record does
+# not say; ICU, or the Unicode version, differing. A host's data differing from another's does not: hosts hold different
+# data by declaration (data.tsv's `once`: a host keeps the dump it loaded), and a result that differs because its inputs
+# do is said as that. fails: whether a result's difference does, by what its inputs were.
 fld(){ sed -n "s/^$2  *//p" "$1" | head -1; }
 dat(){ sed -n "s/^data  *$2  *\([0-9][0-9]* [0-9a-f][0-9a-f]*\).*/\1/p; s/^data  *$2  *none.*/none/p" "$1" | head -1; }
 same(){ if [ -z "$1" ] || [ -z "$2" ]; then echo unknown; elif [ "$1" = "$2" ]; then echo same; else echo differs; fi; }
 both(){ if [ "$1" = differs ] || [ "$2" = differs ]; then echo differs; elif [ "$1" = unknown ] || [ "$2" = unknown ]; then echo unknown; else echo same; fi; }
 why(){ case $1 in differs) echo "(its inputs differ: not a difference of arithmetic)" ;; same) echo "(from the same inputs: the machines compute differently)" ;; *) echo "(the inputs are not said in both records)" ;; esac; }
+fails(){ [ "$1" != differs ]; }
 
 compare(){ f=$1; given=${2:-}; k=$(key "$f"); m=$(sed -n 's/^machine  *//p' "$f"); d=$(mktemp -d); rc=0
   url=https://github.com/$LAPLACE_GITHUB/Laplace-Operations.git; tok=${LAPLACE_FINGERPRINT_TOKEN:-}
@@ -113,17 +118,19 @@ compare(){ f=$1; given=${2:-}; k=$(key "$f"); m=$(sed -n 's/^machine  *//p' "$f"
   for o in "$d/$k"/*.txt; do [ -f "$o" ] || continue; om=$(basename "$o" .txt); [ "$om" = "$m" ] && continue; n=$((n + 1))
     echo "against $om ($(sed -n 's/^os  *//p' "$o"); made $(sed -n 's/^made  *//p' "$o"))"
     # the inputs first: what differs in a result is then said to follow from them, or to be the machines' arithmetic
-    ucd=$(same "$(fld "$f" ucd)" "$(fld "$o" ucd)")
-    for field in ucd icu; do a=$(fld "$f" $field); b=$(fld "$o" $field)
-      case $(same "$a" "$b") in same) echo "  $field: same ($a)" ;; differs) echo "  $field: DIFFERS: $a here, $b there"; rc=1 ;; *) echo "  $field: not in both" ;; esac; done
+    a=$(fld "$f" ucd); b=$(fld "$o" ucd); ucd=$(same "${a%% *}" "${b%% *}")      # the Unicode version: tier 0 and the flags are made from it, whatever else the directory holds
+    a=$(fld "$f" ucd); b=$(fld "$o" ucd)
+    case $(same "$a" "$b") in same) echo "  ucd: same ($a)" ;; unknown) echo "  ucd: not in both" ;; *) if [ "${a%% *}" = "${b%% *}" ]; then echo "  ucd: differs: $a here, $b there   (the same Unicode version; the files held differ)"; else echo "  ucd: DIFFERS: $a here, $b there"; rc=1; fi ;; esac
+    a=$(fld "$f" icu); b=$(fld "$o" icu)
+    case $(same "$a" "$b") in same) echo "  icu: same ($a)" ;; differs) echo "  icu: DIFFERS: $a here, $b there"; rc=1 ;; *) echo "  icu: not in both" ;; esac
     for s in $(sed -n 's/^data  *\([^ ]*\).*/\1/p' "$f"); do a=$(dat "$f" "$s"); b=$(dat "$o" "$s")
-      case $(same "$a" "$b") in same) echo "  data $s: same ($a)" ;; differs) echo "  data $s: DIFFERS: $a here, $b there"; rc=1 ;; *) echo "  data $s: not in both" ;; esac; done
+      case $(same "$a" "$b") in same) echo "  data $s: same ($a)" ;; differs) echo "  data $s: differs: $a here, $b there" ;; *) echo "  data $s: not in both" ;; esac; done
     hw=$ucd; for s in $(fld "$f" resources); do hw=$(both "$hw" "$(same "$(dat "$f" "$s")" "$(dat "$o" "$s")")"); done
     for field in tier0 flags highway; do a=$(fld "$f" $field); b=$(fld "$o" $field); [ $field = highway ] && in=$hw || in=$ucd
-      case $(same "$a" "$b") in same) echo "  $field: same ($a)" ;; differs) echo "  $field: DIFFERS: $a here, $b there   $(why "$in")"; rc=1 ;; *) echo "  $field: not in both" ;; esac; done
+      case $(same "$a" "$b") in same) echo "  $field: same ($a)" ;; differs) if fails "$in"; then echo "  $field: DIFFERS: $a here, $b there   $(why "$in")"; rc=1; else echo "  $field: differs: $a here, $b there   $(why "$in")"; fi ;; *) echo "  $field: not in both" ;; esac; done
     for s in $(sed -n 's/^claims  *\([^ ]*\).*/\1/p' "$f"); do a=$(fld "$f" "claims  *$s"); b=$(fld "$o" "claims  *$s")
       in=$(both "$ucd" "$(same "$(dat "$f" "$s")" "$(dat "$o" "$s")")")
-      case $(same "$a" "$b") in same) echo "  claims $s: same ($a)" ;; differs) echo "  claims $s: DIFFERS: $a here, $b there   $(why "$in")"; rc=1 ;; *) echo "  claims $s: not decomposed there" ;; esac; done
+      case $(same "$a" "$b") in same) echo "  claims $s: same ($a)" ;; differs) if fails "$in"; then echo "  claims $s: DIFFERS: $a here, $b there   $(why "$in")"; rc=1; else echo "  claims $s: differs: $a here, $b there   $(why "$in")"; fi ;; *) echo "  claims $s: not decomposed there" ;; esac; done
   done
   [ "$n" -gt 0 ] || echo "no other machine has a record for $k yet (on HART-DESKTOP: fingerprint.ps1 at these commits)"
   rm -rf "$d"; return $rc; }

@@ -164,26 +164,27 @@ try {
     if ($o.BaseName -eq $env:COMPUTERNAME) { continue }
     $n++; $other = @(Get-Content $o.FullName); "  $($o.BaseName) ($(Field $other 'os'); made $(Field $other 'made'))"
     # the inputs first: what differs in a result is then said to follow from them, or to be the machines' arithmetic
-    $ucd = Same (Field $rec 'ucd') (Field $other 'ucd')
-    foreach ($f in 'ucd', 'icu') {
-      $a = Field $rec $f; $b = Field $other $f
-      switch (Same $a $b) { 'same' { "    ${f}: same ($a)" } 'differs' { "    ${f}: DIFFERS: $a here, $b there"; $differs = $true } default { "    ${f}: not in both" } }
-    }
+    # What fails: a result that differs from the same inputs (or from inputs one record does not say), ICU, the Unicode
+    # version. A host's data differing does not: hosts hold different data by declaration (data.tsv's `once`).
+    $a = Field $rec 'ucd'; $b = Field $other 'ucd'; $ucd = Same (($a -split ' ')[0]) (($b -split ' ')[0])      # the Unicode version: tier 0 and the flags are made from it
+    switch (Same $a $b) { 'same' { "    ucd: same ($a)" } 'unknown' { "    ucd: not in both" } default { if ($ucd -eq 'same') { "    ucd: differs: $a here, $b there   (the same Unicode version; the files held differ)" } else { "    ucd: DIFFERS: $a here, $b there"; $differs = $true } } }
+    $a = Field $rec 'icu'; $b = Field $other 'icu'
+    switch (Same $a $b) { 'same' { "    icu: same ($a)" } 'differs' { "    icu: DIFFERS: $a here, $b there"; $differs = $true } default { "    icu: not in both" } }
     foreach ($s in ($rec | Where-Object { $_ -match '^data\s' } | ForEach-Object { ($_ -split '\s+')[1] })) {
       $a = DataOf $rec $s; $b = DataOf $other $s
-      switch (Same $a $b) { 'same' { "    data ${s}: same ($a)" } 'differs' { "    data ${s}: DIFFERS: $a here, $b there"; $differs = $true } default { "    data ${s}: not in both" } }
+      switch (Same $a $b) { 'same' { "    data ${s}: same ($a)" } 'differs' { "    data ${s}: differs: $a here, $b there" } default { "    data ${s}: not in both" } }
     }
     $hwin = $ucd; foreach ($s in ((Field $rec 'resources') -split '\s+' | Where-Object { $_ })) { $hwin = Both $hwin (Same (DataOf $rec $s) (DataOf $other $s)) }
     foreach ($f in 'tier0', 'flags', 'highway') {
       $a = Field $rec $f; $b = Field $other $f; $in = if ($f -eq 'highway') { $hwin } else { $ucd }
-      switch (Same $a $b) { 'same' { "    ${f}: same ($a)" } 'differs' { "    ${f}: DIFFERS: $a here, $b there   $(Why $in)"; $differs = $true } default { "    ${f}: not in both" } }
+      switch (Same $a $b) { 'same' { "    ${f}: same ($a)" } 'differs' { if ($in -eq 'differs') { "    ${f}: differs: $a here, $b there   $(Why $in)" } else { "    ${f}: DIFFERS: $a here, $b there   $(Why $in)"; $differs = $true } } default { "    ${f}: not in both" } }
     }
     foreach ($c in ($rec | Where-Object { $_ -match '^claims\s' })) {
       $p = $c -split '\s+'; if ($p[2] -eq 'failed') { continue }
       $a = "$($p[2]) $($p[3])"
       $b = ($other | Where-Object { $_ -match "^claims\s+$([regex]::Escape($p[1]))\s" } | Select-Object -First 1) -replace '^claims\s+\S+\s+', ''
       $in = Both $ucd (Same (DataOf $rec $p[1]) (DataOf $other $p[1]))
-      switch (Same $a $b) { 'same' { "    claims $($p[1]): same ($a)" } 'differs' { "    claims $($p[1]): DIFFERS: $a here, $b there   $(Why $in)"; $differs = $true } default { "    claims $($p[1]): not decomposed there" } }
+      switch (Same $a $b) { 'same' { "    claims $($p[1]): same ($a)" } 'differs' { if ($in -eq 'differs') { "    claims $($p[1]): differs: $a here, $b there   $(Why $in)" } else { "    claims $($p[1]): DIFFERS: $a here, $b there   $(Why $in)"; $differs = $true } } default { "    claims $($p[1]): not decomposed there" } }
     }
   }
   if (-not $n) { "  no other machine has a record for $key yet" }
