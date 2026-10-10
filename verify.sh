@@ -9,7 +9,8 @@
 #   ./verify.sh reads    the database: laplace status, and reads through the indexes (text, hop, translate, fills)
 #
 # Exit 1 when something that must hold does not: two decompositions of one source differ, the installed tier 0 is not
-# this build's, a record differs from another machine's, the status says DIFFERS, or a read fails.
+# this build's, a result differs from another machine's that had the same inputs (or its ICU or Unicode version does), the
+# status says DIFFERS, or a read fails. Data a host holds that another does not is said, and fails nothing.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/laplace.env"
@@ -44,7 +45,7 @@ build(){
   elif [ "$made" = "$installed" ]; then good "$LAPLACE_TIER0 is the tier 0 this build makes ($made)"
   else bad "$LAPLACE_TIER0 is $installed; this build makes $made: deploy.sh drop makes it again (with a reseed)"; fi
   md "### Against other machines, same commits"
-  if "$here/fingerprint.sh" compare "$log/record.txt" > "$log/compare.txt" 2>&1; then good "no record differs"; else bad "a record differs from another machine's"; fi
+  if "$here/fingerprint.sh" compare "$log/record.txt" > "$log/compare.txt" 2>&1; then good "no result differs from another machine's from the same inputs"; else bad "a result differs from another machine's from the same inputs, or its ICU or Unicode version does"; fi
   block "$log/compare.txt"
   if "$here/fingerprint.sh" publish "$log/record.txt" > "$log/publish.txt" 2>&1; then md "- $(tail -1 "$log/publish.txt") on the branch fingerprints of Laplace-Operations"
   else md "- the record was not published: $(tail -1 "$log/publish.txt")"; fi
