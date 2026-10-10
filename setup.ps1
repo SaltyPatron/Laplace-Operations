@@ -38,7 +38,7 @@ $PgDir = $env:LAPLACE_PG_DIR; $PgBin = Join-Path $PgDir 'bin'; $PgData = $env:LA
 $PgHost = $env:LAPLACE_PGHOST; $PgPort = $env:LAPLACE_PGPORT; $PgService = $env:LAPLACE_PGSERVICE; $PgAccount = $env:LAPLACE_PGUSER; $PgRole = $env:LAPLACE_ROLE; $PgLan = $env:LAPLACE_LAN; $Locks = $env:LAPLACE_LOCKS
 $PgLogs = Join-Path $Work 'logs\postgres'
 $PgCanon = 'C:\ProgramData\Laplace\pgpass.conf'   # the role's password: one canonical copy, administrators only (setup.sh: /etc/laplace/pgpass)
-$Math = $env:LAPLACE_MATH; $Msys2 = $env:LAPLACE_MSYS2; $DevShell = $env:LAPLACE_DEVSHELL
+$Math = $env:LAPLACE_MATH; $DevShell = $env:LAPLACE_DEVSHELL
 $Toolchain = Join-Path $PSScriptRoot 'toolchain\laplace.cmake'
 
 $logDir = Join-Path $Work 'logs\root'
@@ -56,7 +56,7 @@ $Tools = [ordered]@{
     win_bison = 'winflexbison (dependencies.tsv, in the developer shell)'; nasm = 'NASM (dependencies.tsv, in the developer shell)'
 }
 # MSYS2's packages: what toolchain\windows\postgis.sh runs under (autotools, make, pkgconf; MinGW's cpp for the SQL).
-$Msys2Packages = 'autoconf', 'automake', 'libtool', 'make', 'pkgconf', 'mingw-w64-ucrt-x86_64-gcc'
+$Msys2Packages = 'autoconf', 'automake', 'libtool', 'make', 'pkgconf', 'bison', 'flex', 'mingw-w64-ucrt-x86_64-gcc'   # bison, flex: a checkout of PostGIS carries its grammars, not the parsers made from them
 # How each dependency the manifest says to build is configured on Windows: the options beyond the toolchain file,
 # the contract and the prefix, as the installs on HART-DESKTOP were made (their build trees' caches, 2026-10-04).
 $DepSourceDir = @{ lz4 = 'build\cmake'; zstd = 'build\cmake' }
@@ -169,6 +169,8 @@ function Prefix($r) {
 }
 function Proof($r) { if ($r.proof) { Join-Path (Prefix $r) $r.proof } }
 function Checkout($r) { if ($r.kind -eq 'release' -and $r.build -eq 'amalgamation') { Join-Path (Join-Path (Join-Path $DepSrc $r.name) $r.version) 'source' } else { Join-Path $DepSrc $r.name } }
+# MSYS2: the machine's own when it names one (LAPLACE_MSYS2), else where the manifest's msys2 row is unpacked (deps)
+$Msys2 = if ($env:LAPLACE_MSYS2) { $env:LAPLACE_MSYS2 } else { $m = Manifest | Where-Object build -eq 'sfx' | Select-Object -First 1; if ($m) { Prefix $m } }
 function DependsPrefixes($r) { foreach ($d in ($r.depends -split ',')) { if ($d) { $row = Manifest | Where-Object name -eq $d | Select-Object -First 1; if ($row -and $row.kind -ne 'tool') { Prefix $row } } } }
 
 # ------------------------------------------------------------------------------------------------------ the parts
@@ -195,7 +197,7 @@ function volumes {
 function packages {
     Part 'packages'
     if (Test-Path $DevShell) { Say 'developer shell' "$DevShell$(if (DevShell) { '' } else { '   icx NOT FOUND after loading it' })" }
-    else { Say 'developer shell' "MISSING: $DevShell (LAPLACE_DEVSHELL): Visual Studio's vcvars64 and oneAPI's oneapi-vars, by hand" }
+    else { Say 'developer shell' "MISSING: $DevShell (LAPLACE_DEVSHELL): the repository's is toolchain\windows\devshell.ps1" }
     foreach ($t in $Tools.Keys) {
         $c = Get-Command "$t.exe" -ErrorAction SilentlyContinue
         if (-not $c) { Say $t "MISSING: $($Tools[$t])"; continue }
@@ -205,7 +207,7 @@ function packages {
         if ($t -eq 'cmake' -and [version]($v -replace '-.*$') -lt [version]'3.25') { Say $t "$v at $($c.Source): TOO OLD, 3.25 or newer (4.x for icx 2026)" } else { Say $t "$v   $($c.Source)" }
     }
     $pacman = Join-Path $Msys2 'usr\bin\pacman.exe'
-    if (-not (Test-Path $pacman)) { Say 'MSYS2' "MISSING: no pacman at $Msys2 (LAPLACE_MSYS2): the manifest's msys2 archive, unpacked, then pacman -Syu"; return }
+    if (-not (Test-Path $pacman)) { Say 'MSYS2' "not unpacked yet at ${Msys2}: deps unpacks the manifest's msys2 row there, and this part then installs its packages"; return }
     $missing = @(foreach ($p in $Msys2Packages) { & $pacman -Q $p 2>$null | Out-Null; if ($LASTEXITCODE) { $p } })
     if ($missing.Count) { Attempt 'MSYS2 packages' { Exec $pacman (@('-S', '--needed', '--noconfirm') + $missing); Say 'MSYS2 packages' "installed $($missing -join ' ')" } }
     else { Say 'MSYS2 packages' "all $($Msys2Packages.Count) present at $Msys2" }
@@ -390,7 +392,8 @@ function deps {
                     try { foreach ($p in Get-ChildItem (Join-Path $PSScriptRoot 'patches\postgresql') -Filter '*.patch') { & git.exe apply --reverse --check $p.FullName 2>$null; if ($LASTEXITCODE) { Exec git.exe @('apply', $p.FullName) } } }
                     finally { Pop-Location }
                     $native = Join-Path (Join-Path $Build 'deps') 'pg-native.ini'
-                    & python.exe (Join-Path $PSScriptRoot 'toolchain\meson-native.py') msvc $Math | Set-Content $native
+                    # uv brings the Python: the machine declares uv (packages), not a python on the PATH
+                    & uv.exe run --no-project --quiet (Join-Path $PSScriptRoot 'toolchain\meson-native.py') msvc $Math | Set-Content $native
                     if ($LASTEXITCODE) { throw 'meson-native.py failed' }
                     $inc = ($libs | ForEach-Object { "$_\include" -replace '\\', '/' }) -join ','
                     $lib = ($libs | ForEach-Object { foreach ($l in 'lib', 'lib64') { if (Test-Path "$_\$l") { "$_\$l" -replace '\\', '/' } } }) -join ','
@@ -423,6 +426,37 @@ function deps {
             Say $what "built and installed at $prefix"
         }
     }
+    Attempt 'runtime closure' { RuntimeClosure }
+}
+# What PostgreSQL loads, beside it. Its service runs as NetworkService and reads no person's PATH (Operations#2), and
+# the libraries it was built against are each under a prefix of their own (ICU, zlib, lz4, zstd, OpenSSL, libxml2;
+# GEOS, PROJ and theirs for PostGIS) with the compiler's runtime under oneAPI: none of that is found by a service, and
+# a client's PostgreSQL on the PATH would be found in their place. Every library the installed programs and modules
+# import, and what those import in turn, is copied into PostgreSQL's bin when it is one of ours (a manifest prefix or
+# the compiler's runtime); Windows' own are left to Windows. Read from the files themselves (dumpbin /dependents).
+function RuntimeClosure {
+    if (-not (Test-Path (Join-Path $PgBin 'postgres.exe'))) { Say 'runtime closure' 'no PostgreSQL installed yet'; return }
+    if (-not (DevShell) -or -not (Get-Command dumpbin.exe -ErrorAction SilentlyContinue)) { throw 'no dumpbin: the developer shell does not provide Visual Studio''s tools' }
+    $from = [Collections.Generic.List[string]]::new()
+    foreach ($r in (Manifest | Where-Object { $_.kind -ne 'tool' -and $_.name -ne 'postgis' })) { foreach ($s in 'bin', 'bin64', 'lib') { $d = Join-Path (Prefix $r) $s; if (Test-Path $d) { $from.Add($d) } } }
+    $rt = Split-Path (Get-Command icx.exe).Source; if (Test-Path (Join-Path $rt 'libmmd.dll')) { $from.Add($rt) }
+    $have = @{}; Get-ChildItem $PgBin -Filter *.dll | ForEach-Object { $have[$_.Name.ToLowerInvariant()] = $true }
+    $queue = [Collections.Generic.Queue[string]]::new()
+    Get-ChildItem $PgBin, (Join-Path $PgDir 'lib') -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object { $queue.Enqueue($_.FullName) }
+    $seen = @{}; $copied = [Collections.Generic.List[string]]::new()
+    while ($queue.Count) {
+        $file = $queue.Dequeue(); if ($seen[$file]) { continue }; $seen[$file] = $true
+        foreach ($line in (& dumpbin.exe /nologo /dependents $file 2>$null)) {
+            $name = $line.Trim(); if ($name -notmatch '^[\w.+-]+\.dll$') { continue }
+            $key = $name.ToLowerInvariant(); if ($have[$key]) { continue }
+            $src = $from | ForEach-Object { Join-Path $_ $name } | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if (-not $src) { continue }                                       # not ours: Windows' own, or the C runtime
+            Copy-Item -LiteralPath $src -Destination $PgBin; $have[$key] = $true; $copied.Add($name); $queue.Enqueue((Join-Path $PgBin $name))
+        }
+    }
+    $v = & (Join-Path $PgBin 'postgres.exe') --version 2>&1
+    if ($LASTEXITCODE) { throw "postgres.exe does not start from its own directory (exit $LASTEXITCODE): a library it loads is in none of the manifest's prefixes" }
+    Say 'runtime closure' "$(if ($copied.Count) { "copied $($copied.Count) beside postgres.exe: $($copied -join ' ')" } else { 'complete' }); $v"
 }
 # The cluster: made once (Sequence 8: UTF-8, the C.UTF-8 locale, data checksums, the log where LAPLACE_PGWAL says),
 # run as the Windows service, its account over its directories; then the certificate, before ssl = on is declared (a
