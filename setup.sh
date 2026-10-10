@@ -6,6 +6,7 @@
 #                              appdb | backup | site | agents | idlestop | report
 #   sudo ./setup.sh machine    public declaration permissions only; no packages, database or service changes
 #   sudo ./setup.sh secrets-stack  converge the existing hart-server Vaultwarden/OpenBao stack; not part of all
+#   sudo ./setup.sh secrets-backup install the backup job only and run a checked backup; not part of all
 #   sudo ./setup.sh secrets-client refresh the declared app DB credentials through this host's Bao AppRole; install timer
 #   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
 #   sudo ./setup.sh shares     the SMB shares for the development machine (LAPLACE_SHARES); not part of all
@@ -682,6 +683,7 @@ PRUNE
 }
 
 secrets-stack(){ part "secrets stack"; bash "$here/secrets/install.sh"; }
+secrets-backup(){ part "secrets backups"; bash "$here/secrets/install-backup.sh"; }
 secrets-client(){ part "OpenBao application database credentials"
   [[ -n ${LAPLACE_APP_DBNAME:-} ]] || { echo 'No application database declared on this host'; return 1; }
   local host=${LAPLACE_BAO_APPDB_HOST:-$(hostname -s)} credentials=${LAPLACE_BAO_CREDENTIALS:-/etc/laplace/approle.json}
@@ -739,7 +741,7 @@ report(){ part report
 }
 
 parts=${*:-all}
-for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-client) ;;
+for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client) ;;
   *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
   all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup; landing_of_all=1; landing; landing_of_all=; site; agents; idlestop; report ;;
