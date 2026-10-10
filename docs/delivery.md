@@ -90,4 +90,4 @@ is what proves either; it is an operation to run on a schedule, and its log is t
 - Environments `staging` and `production` on the monorepo's jobs for the deployment records and URLs; no protection rules.
 - One reusable delivery body called per target; the serving-latency profile (p50–p99) in the load stage.
 - pgBackRest for the application database; the scheduled restore drill.
-- Secrets to the hosts from OpenBao at deploy time (AppRoles `host-hart-prod`, `host-hart-laptop`), not from files.
+- Secrets to the hosts from the existing OpenBao deployment at deploy time. Reconcile actual AppRole names and policies before wiring consumers; see [the observed secrets stack and integration gaps](secrets-stack.md).

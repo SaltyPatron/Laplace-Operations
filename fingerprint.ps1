@@ -9,7 +9,7 @@
     pwsh -File fingerprint.ps1 -Inputs         what this machine's results are made from: the lines of the record that say its data
   The build is the one build.ps1 made under $LAPLACE_BUILD (or -Laplace PATH) for the checkouts under $LAPLACE_SRC: to
   compare with a deployment, build at the commits it names (its summary, or the branch fingerprints). The record:
-  the commits, tier 0 and its flags made afresh into a scratch directory, the highway the last deployment generated,
+  the commits, tier 0 and its flags made afresh into a scratch directory, the installed highway artifact,
   and the claims of each source of $LAPLACE_DETERMINISM decomposed twice (laplace ingest --claims, nothing loaded).
   Runs the engine inside the developer shell (its run-time DLLs), never outside it.
 #>
@@ -55,7 +55,6 @@ function RootOf([string]$source) {                                      # its fi
     $found = @(Resolve-Path -Path $p -ErrorAction SilentlyContinue | ForEach-Object ProviderPath | Where-Object { Test-Path -LiteralPath $_ -PathType Container })
     if ($found.Count) { [string[]]$f = $found; [Array]::Sort($f, [LaplaceByteOrder]::new()); return $f[-1] }
   }; '' }
-function HighwayLog { Get-ChildItem (Join-Path $env:LAPLACE_WORK 'logs\deploy\*\highway.log') -ErrorAction SilentlyContinue | Sort-Object FullName | Select-Object -Last 1 }
 function InputLines {
   $u = Join-Path $env:LAPLACE_UCD 'Public\UCD\latest'                   # where tier0.c, flags.c and the unicode recipe read it
   if (Test-Path $u) {
@@ -64,11 +63,8 @@ function InputLines {
     "ucd         $v $(Tree $u 'charts/')"
   } else { 'ucd         none' }
   "icu         $(HeaderValue 'uvernum.h' 'U_ICU_VERSION') unicode $(HeaderValue 'uchar.h' 'U_UNICODE_VERSION')"
-  $res = @(); $hl = HighwayLog; $in = $false
-  if ($hl) { foreach ($l in Get-Content $hl) {
-    if ($l -match '^laplace highway') { $in = $true; continue }; if (-not $in) { continue }; if ($l -match '^  slots:') { break }
-    if ($l -cmatch '^  ([a-z][a-z0-9-]*) +[0-9n]') { $res += $Matches[1] } } }
-  "resources   $($res -join ' ')"
+  $res = @()
+  'resources   unknown' # no receipt binds source trees to the installed artifact
   $seen = @{}
   foreach ($s in @($env:LAPLACE_DETERMINISM -split '\s+' | Where-Object { $_ }) + $res) {
     if ($seen[$s]) { continue }; $seen[$s] = $true; $d = RootOf $s
@@ -124,9 +120,9 @@ try {
   $t0 = Join-Path $scratch 'tier0.bin'
   $rec.Add("tier0       $(Fp (Run @('tier0', '-o', $t0)).out)")
   $rec.Add("flags       $(Fp (Run @('flags', '-o', (Join-Path $scratch 'tier0.flags')) @{ LAPLACE_TIER0 = $t0 }).out)")
-  $hw = ''
-  $hl = HighwayLog
-  if ($hl) { $hw = Fp (Get-Content $hl) }
+  $hwOutput = & $Laplace highway --fingerprint
+  if ($LASTEXITCODE) { throw 'cannot fingerprint the installed highway artifact' }
+  $hw = Fp $hwOutput
   $rec.Add("highway     $hw")
   foreach ($s in ($env:LAPLACE_DETERMINISM -split '\s+' | Where-Object { $_ })) {
     $runs = @()
@@ -174,7 +170,7 @@ try {
       $a = DataOf $rec $s; $b = DataOf $other $s
       switch (Same $a $b) { 'same' { "    data ${s}: same ($a)" } 'differs' { "    data ${s}: differs: $a here, $b there" } default { "    data ${s}: not in both" } }
     }
-    $hwin = $ucd; foreach ($s in ((Field $rec 'resources') -split '\s+' | Where-Object { $_ })) { $hwin = Both $hwin (Same (DataOf $rec $s) (DataOf $other $s)) }
+    $hwin = 'unknown'; foreach ($s in ((Field $rec 'resources') -split '\s+' | Where-Object { $_ })) { $hwin = Both $hwin (Same (DataOf $rec $s) (DataOf $other $s)) }
     foreach ($f in 'tier0', 'flags', 'highway') {
       $a = Field $rec $f; $b = Field $other $f; $in = if ($f -eq 'highway') { $hwin } else { $ucd }
       switch (Same $a $b) { 'same' { "    ${f}: same ($a)" } 'differs' { if ($in -eq 'differs') { "    ${f}: differs: $a here, $b there   $(Why $in)" } else { "    ${f}: DIFFERS: $a here, $b there   $(Why $in)"; $differs = $true } } default { "    ${f}: not in both" } }

@@ -1,0 +1,30 @@
+name: Deployment failure boundaries
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Check deployment sequencing and failure propagation
+        shell: bash
+        run: |
+          export TMPDIR="$RUNNER_TEMP"
+          bash tests/machine-config.sh
+          bash tests/operation-lock.sh
+          bash tests/deployment-artifacts.sh
+          bash tests/deployment-readback.sh
+          bash tests/fingerprint-comparison.sh
+          ruby tests/deployment-workflow.rb
+          ruby tests/secrets-setup.rb
+          bash tests/appdb-secrets.sh
+          pwsh -NoProfile -File tests/deployment-artifacts.ps1
+      - name: Install SQLite for backup recovery checks
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3
+      - name: Check secrets backup failure and recovery behavior
+        run: TMPDIR="$RUNNER_TEMP" bash tests/secrets-backup.sh

@@ -1,11 +1,7 @@
 #!/bin/sh
-# Laplace, from an empty server to a Laplace database ready to be loaded: the build, the data sets fetched from their
-# publishers (when one is missing), the perf-caches generated (tier 0 and its flags once, the highway every time: it
-# takes seconds), the grammars, the database with its extension and
-# schema, and its status. No data is loaded here: loading is ingest.sh, an operation of its own on what this left
-# (Laplace-Operations; the code is Laplace-Native, Laplace-postgres and Laplace-Engine beside it under $LAPLACE_SRC).
-# Everything it does can be done again: what is built is not rebuilt, what is recorded is passed over by its bytes,
-# and a run that was cut off is taken up by running it again.
+# Build and deploy Laplace using independently prepared perf-cache artifacts.
+# Generation, resource fetching and content admission are separate operations.
+# Deployment builds the code, installs it, updates the database schema/settings and reports status.
 #
 #   ./deploy.sh                                      the database laplace.env names
 #   LAPLACE_CONNINFO="... dbname=NAME" ./deploy.sh   another database; it is made if the server does not have it
@@ -13,10 +9,13 @@
 #   ./deploy.sh as-is                                from the checkouts as they are, not brought to their upstream (after drop, with it)
 #
 # What it needs first: PostgreSQL 18 with PostGIS running, a role that may create databases and extensions, and the
-# data under $LAPLACE_DATA (Operations: Setup, Builds). What each step said is kept in $LAPLACE_WORK/logs/deploy.
+# prepared perf-cache artifacts (README.md). What each step said is kept in $LAPLACE_WORK/logs/deploy.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/laplace.env"
+. "$here/operation-lock.sh"
+laplace_host_lock exclusive
+
 # Never from old sources. A person's checkouts under $LAPLACE_SRC are kept current by nothing: a deployment from ones
 # days behind builds an old engine, reads old recipes (roots that are no longer where the data is) and writes a highway
 # with most of its types gone over the one the machine runs on. Each repository this builds from is brought to its
@@ -54,6 +53,10 @@ echo $$ > "$lock.pid"
 # never under an ingest: it rebuilds the program the ingest runs and changes the schema it writes into
 ingest=$LAPLACE_LOCKS/ingest-${db:-default}.lock
 if [ -e "$ingest" ] && ! flock -n "$ingest" true 2>/dev/null; then echo "an ingest of $db is running (pid $(cat "$ingest.pid" 2>/dev/null)): this deployment leaves: run it again when the ingest is done"; exit 3; fi
+# Refuse missing artifacts before changing the database, including an explicit drop.
+for artifact in "$LAPLACE_TIER0" "${LAPLACE_FLAGS:-${LAPLACE_TIER0%.bin}.flags}" "$LAPLACE_HIGHWAY" "$LAPLACE_HIGHWAY.layout" "$LAPLACE_HIGHWAY.keys"; do
+  [ -s "$artifact" ] || { echo "missing deployment artifact: $artifact; prepare or install the perf-caches separately (README.md)"; exit 1; }
+done
 # ./deploy.sh drop: the database dropped and made again, empty, before it is deployed: by the role, which may drop
 # databases, never by root (the cluster itself is setup.sh drop's, run by a person)
 if [ "${1:-}" = drop ]; then
@@ -68,12 +71,8 @@ step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
 
 step tune-pg    bash "$here/tune-pg.sh"                          # the server's settings: apply, reload, check. a drift fails the deploy
 step build      "$here/build.sh" install
-"$here/data.sh" status >/dev/null 2>&1 || step data "$here/data.sh" fetch   # the data sets the recipes read, from their publishers, when one is missing
-mkdir -p "$(dirname "$LAPLACE_TIER0")"                                   # the perf-caches' directory: a new host has none until here
-[ -s "$LAPLACE_TIER0" ] || step tier0 laplace tier0
-[ -s "${LAPLACE_TIER0%.bin}.flags" ] || step flags laplace flags
-[ -n "$(ls "$LAPLACE_GRAMMARS" 2>/dev/null)" ] || step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"   # before the highway: it reads the resources through them
-step highway    laplace highway                                   # seconds; always current with the generator and the resources
+[ -n "$(ls "$LAPLACE_GRAMMARS" 2>/dev/null)" ] || step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"   # compiled grammar dependencies; no resource admission
+step highway-fingerprint laplace highway --fingerprint
 step deploy     laplace deploy
 step status     laplace status
 ss -ltn 2>/dev/null | grep -q "0.0.0.0:5432\|\*:5432" || echo "

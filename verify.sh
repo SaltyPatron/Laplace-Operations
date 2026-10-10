@@ -1,12 +1,13 @@
 #!/bin/sh
-# Does it work on another machine: the checks a deployment target runs after a deployment, each written to the
+# Deployment readback and separately invoked build qualification, each written to the
 # workflow's summary ($GITHUB_STEP_SUMMARY; to the terminal otherwise) and kept under $LAPLACE_WORK/logs/verify.
 #
+#   ./verify.sh deployment  extension version/tables and Engine/PostgreSQL artifact compatibility; no generation or ingest
 #   ./verify.sh build    no database: the record of this build (fingerprint.sh: commits, tier 0 and its flags made
 #                        afresh, the highway, the claims of $LAPLACE_DETERMINISM decomposed twice), the tier 0 installed
 #                        against the one this build makes, and the record laid beside every other machine's for the same
 #                        commits (HART-DESKTOP's, from fingerprint.ps1); published on the branch fingerprints
-#   ./verify.sh reads    the database: laplace status, and reads through the indexes (text, hop, translate, fills)
+#   ./verify.sh reads    the database: laplace status, and reads through the indexes (text, hop, translate)
 #
 # Exit 1 when something that must hold does not: two decompositions of one source differ, the installed tier 0 is not
 # this build's, a result differs from another machine's that had the same inputs (or its ICU or Unicode version does), the
@@ -14,12 +15,41 @@
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/laplace.env"
+case ${1:-build} in
+  deployment|reads) . "$here/operation-lock.sh"; laplace_host_lock shared ;;
+esac
 L=${LAPLACE_PROGRAM:-$LAPLACE_BUILD/Laplace-Engine/icx-release/laplace}
 log=$LAPLACE_WORK/logs/verify/$(date -u +%Y%m%dT%H%M%SZ)-${1:-build}; mkdir -p "$log"
-summary=${GITHUB_STEP_SUMMARY:-/dev/stdout}
-md(){ printf '%s\n' "$*" >> "$summary"; }
-block(){ md '```'; cat "$1" >> "$summary"; md '```'; }
+summary=${GITHUB_STEP_SUMMARY:-}
+md(){ if [ -n "$summary" ]; then printf '%s\n' "$*" >> "$summary"; else printf '%s\n' "$*"; fi; }
+block(){ md '```'; if [ -n "$summary" ]; then cat "$1" >> "$summary"; else cat "$1"; fi; md '```'; }
 rc=0; bad(){ rc=1; md "- **FAIL** $*"; }; good(){ md "- ok: $*"; }
+
+deployment(){
+  md "## $(hostname): deployment readback"
+  if ! "$L" text a > "$log/engine-tier0.txt" 2>&1; then bad 'the selected Engine cannot read tier 0'; return; fi
+  if ! "$L" highway --fingerprint > "$log/engine-highway.txt" 2>&1; then bad 'the selected Engine cannot read the installed highway'; return; fi
+  t0=$(sed -n 's/^tier 0  *\([0-9a-f]\{64\}\).*/\1/p' "$log/engine-tier0.txt")
+  hw=$(sed -n 's/^fingerprint  *\([0-9a-f]\{64\}\).*/\1/p' "$log/engine-highway.txt")
+  if [ "${#t0}" != 64 ] || [ "${#hw}" != 64 ]; then bad 'Engine did not return both artifact fingerprints'; return; fi
+  expected=$(sed -n "s/^default_version = '\([^']*\)'.*/\1/p" "$LAPLACE_SRC/Laplace-postgres/laplace.control")
+  [ -n "$expected" ] || { bad 'candidate extension version is missing'; return; }
+  if ! "$LAPLACE_PG_DIR/bin/psql" "$LAPLACE_CONNINFO" -XAt -v ON_ERROR_STOP=1 -F '|' -c "
+    SELECT e.extversion, laplace_fingerprint(), laplace_highway_fingerprint(),
+      to_regclass('entity') IS NOT NULL AND to_regclass('physicality') IS NOT NULL
+      AND to_regclass('witness') IS NOT NULL AND to_regclass('consensus') IS NOT NULL
+    FROM pg_extension e WHERE e.extname='laplace'" > "$log/database.txt" 2> "$log/database.err"; then
+    bad 'database extension readback failed'; block "$log/database.err"; return
+  fi
+  IFS='|' read -r version database_t0 database_hw schema < "$log/database.txt" || { bad 'database extension is absent'; return; }
+  [ "$version" = "$expected" ] && good "extension version $version" || bad "extension version $version; candidate requires $expected"
+  [ "$schema" = t ] && good 'required extension tables exist' || bad 'required extension tables are missing'
+  [ "$database_t0" = "$t0" ] && good 'Engine and PostgreSQL use the same tier-0 artifact' || bad 'Engine/PostgreSQL tier-0 fingerprints differ or are missing'
+  [ "$database_hw" = "$hw" ] && good 'Engine and PostgreSQL use the same highway artifact' || bad 'Engine/PostgreSQL highway fingerprints differ or are missing'
+  # Record observed bytes; these hashes do not claim an unrecorded build provenance.
+  sha256sum "$L" "$LAPLACE_TIER0" "$LAPLACE_HIGHWAY" "$LAPLACE_HIGHWAY.layout" "$LAPLACE_HIGHWAY.keys" > "$log/runtime.sha256" || { bad 'could not record runtime artifact bytes'; return; }
+  block "$log/runtime.sha256"
+}
 
 build(){
   md "## $(hostname): the build"
@@ -43,7 +73,7 @@ build(){
   made=$(sed -n 's/^tier0  *//p' "$log/record.txt"); installed=$("$L" text a 2>/dev/null | sed -n 's/^tier 0  *\([0-9a-f]\{64\}\).*/\1/p')
   if [ -z "$made" ]; then bad "tier 0 was not made afresh (see $log)"
   elif [ "$made" = "$installed" ]; then good "$LAPLACE_TIER0 is the tier 0 this build makes ($made)"
-  else bad "$LAPLACE_TIER0 is $installed; this build makes $made: deploy.sh drop makes it again (with a reseed)"; fi
+  else bad "$LAPLACE_TIER0 is $installed; this build makes $made: prepare or install the required artifact separately; dropping the database does not regenerate it"; fi
   md "### Against other machines, same commits"
   comparison=0
   "$here/fingerprint.sh" compare "$log/record.txt" > "$log/compare.txt" 2>&1 || comparison=$?
@@ -68,22 +98,22 @@ reads(){
   block "$log/status.txt"
   empty=0; grep -q 'consensus  *[1-9]' "$log/status.txt" || empty=1        # a standing for every claim a witness's records say (provenance is containment: no attestation table)
   md "### Reads"; md "| read | exit | ms | first lines |"; md "|---|---|---|---|"
-  for r in "text|30|text hello" "hop|120|hop -n 5 dog" "translate|120|translate dog en fr" "fills|60|fills -n 5 the"; do
+  for r in "text|30|text hello" "hop|120|hop -n 5 dog" "translate|120|translate dog en fr"; do
     name=${r%%|*}; rest=${r#*|}; limit=${rest%%|*}; args=${rest#*|}
     # shellcheck disable=SC2086
     set -- $(read_one "$name" "$limit" $args); e=$1 ms=$2
     first=$(grep -v '^\s*$' "$log/$name.txt" | head -3 | cut -c1-90 | tr '|' '/' | sed 's/$/<br>/' | tr -d '\n')
     md "| laplace $args | $e | $ms | $first |"
-    case $name in fills) ;;                                      # fills is measured, not required (it can take minutes)
-      *) [ "$e" = 0 ] || bad "laplace $args exited $e" ;; esac
+    [ "$e" = 0 ] || bad "laplace $args exited $e"
   done
   [ "$empty" = 0 ] || md "- the database holds no standings yet: reads say nothing until a source is in"
 }
 
 case ${1:-build} in
+  deployment) deployment ;;
   build) build ;;
   reads) reads ;;
-  *) echo "verify.sh build|reads"; exit 2 ;;
+  *) echo "verify.sh deployment|build|reads"; exit 2 ;;
 esac
 echo "verify.sh ${1:-build}: $( [ $rc = 0 ] && echo passed || echo FAILED ); kept in $log"
 exit $rc

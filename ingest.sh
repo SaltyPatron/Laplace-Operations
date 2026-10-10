@@ -10,6 +10,9 @@
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/laplace.env"
+. "$here/operation-lock.sh"
+laplace_host_lock shared
+
 # one ingest per database at a time, whoever runs it (the operator, an agent): the second says so and leaves
 db=$(echo "$LAPLACE_CONNINFO" | sed -n 's/.*dbname=\([^ ]*\).*/\1/p'); [ -w "$LAPLACE_LOCKS" ] || LAPLACE_LOCKS=$LAPLACE_WORK   # before setup.sh: this user's own
 umask 002                                                                      # what this makes, every operator of the group may take up
@@ -26,13 +29,13 @@ step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
         [ "$(cat "$log/$name.exit" 2>/dev/null)" = 0 ] || { echo "=== $name did not finish; what it said is in $log/$name.log"; exit 1; }; }
 
 command -v laplace >/dev/null || { echo "no laplace program on the path: deploy.sh builds it"; exit 1; }
-[ -s "$LAPLACE_TIER0" ] && [ -s "$LAPLACE_HIGHWAY" ] || { echo "no perf-caches at $LAPLACE_TIER0: deploy.sh generates them"; exit 1; }
+[ -s "$LAPLACE_TIER0" ] && [ -s "$LAPLACE_HIGHWAY" ] || { echo "no perf-caches at $LAPLACE_TIER0: prepare or install them separately (README.md)"; exit 1; }
 
 # What the log is made of while the ingest runs, by table and index: each minute, the minute before is read from the
 # log while it still holds it (pg_walinspect: a checkpoint recycles what is older), and the totals are added up when
 # the ingest ends. Full-page images and their bytes, and the bytes of the records' own data ($log/wal.tsv: time, the
 # relation, its resource manager, blocks, full-page images, their bytes, data bytes). XLOG rows are hint-bit images.
-sql(){ psql -X "$LAPLACE_CONNINFO" -Atq -F '	' -c "$1" 9>&-; }                  # 9>&-: no query outlives the ingest holding its lock
+sql(){ psql -X "$LAPLACE_CONNINFO" -Atq -F '	' -c "$1" 8>&- 9>&-; }                  # 8>&- 9>&-: no query outlives the ingest holding its lock
 # Where pg_wal begins now: a minute of a heavy load can write more than max_wal_size, and a checkpoint recycles what is
 # older, so a read starts no earlier than the oldest segment still there (its name is timeline, log, segment).
 wal_oldest="SELECT (substr(n, 9, 8) || '/' || to_hex(('x' || substr(n, 17, 8))::bit(32)::bigint * pg_size_bytes(current_setting('wal_segment_size'))))::pg_lsn
@@ -58,7 +61,7 @@ wal_summary(){ [ -s "$log/wal.tsv" ] || { echo "  no log was read"; return 0; }
   awk -F '\t' '{ n += $5; f += $6; d += $7 } END { printf "  every relation, in the sample (64 MB a minute): %d page images, %.2f GB of them; %.2f GB of data\n", n, f / 2^30, d / 2^30 }' "$log/wal.tsv"; }
 sql "CREATE EXTENSION IF NOT EXISTS pg_walinspect" || exit 1
 sql "SELECT pg_current_wal_lsn()" > "$log/wal.from"
-wal_sampler 9>&- & sampler=$!                                  # 9>&-: the lock is the ingest's, never held on by the sampler or its sleep
+wal_sampler 8>&- 9>&- & sampler=$!                                  # 8>&- 9>&-: the lock is the ingest's, never held on by the sampler or its sleep
 trap wal_stop EXIT
 
 # Where the time goes, measured on the run itself. The engine: perf samples every thread of the ingest and of each

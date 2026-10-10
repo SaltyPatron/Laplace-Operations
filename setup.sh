@@ -4,6 +4,9 @@
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
 #                              appdb | backup | site | agents | idlestop | report
+#   sudo ./setup.sh machine    public declaration permissions only; no packages, database or service changes
+#   sudo ./setup.sh secrets-stack  converge the existing hart-server Vaultwarden/OpenBao stack; not part of all
+#   sudo ./setup.sh secrets-client refresh the declared app DB credentials through this host's Bao AppRole; install timer
 #   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
 #   sudo ./setup.sh shares     the SMB shares for the development machine (LAPLACE_SHARES); not part of all
 #   sudo ./setup.sh landing    where other hosts' backups land (LAPLACE_LANDING, backup/landing.keys): part of all on the
@@ -18,15 +21,16 @@
 # machine's (paths, users, groups, volumes, the service, the network) is a variable of laplace.env, so another machine
 # declares its own.
 set -euo pipefail
-here=$(cd "$(dirname "$0")" && pwd); . "$here/laplace.env"
+here=$(cd "$(dirname "$0")" && pwd)
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
+. "$here/machine-config.sh"
+machine_config_permissions
+if [[ $# == 1 && $1 == machine ]]; then
+  echo '/etc/laplace: 755; machine.env: 644 when present; credentials unchanged'
+  exit 0
+fi
+. "$here/laplace.env"
 op=${SUDO_USER:-$(id -un)}; ophome=$(getent passwd "$op" | cut -d: -f6)
-# The machine's declaration, /etc/laplace/machine.env, is every user's to read: the runner's jobs, the server's unit and
-# the operator all take their names from it (laplace.env reads it first; the monorepo's site.sh reads it too). A
-# directory only root could enter left the runner on hart-prod with hart-server's defaults (2026-10-10: the API looked for
-# a socket in /tmp instead of the knowledge host over the tailnet). What is secret in it protects itself: pgpass and
-# backup.key are 600.
-install -d -m 755 /etc/laplace; [ ! -f /etc/laplace/machine.env ] || chmod 644 /etc/laplace/machine.env
 PGDATA=$LAPLACE_PGDATA; PGWAL=$LAPLACE_PGWAL; PGTEMP=$LAPLACE_PGTEMP; PGUSER=$LAPLACE_PGUSER; PGBIN=$LAPLACE_PG_DIR/bin; PREFIX=$LAPLACE_PREFIX; SERVICE=$LAPLACE_PGSERVICE
 as_pg(){ su "$PGUSER" -c "$*" </dev/null; }                                     # as the server's user; never reads our stdin
 as_op(){ su -s /bin/bash "$op" -c "$*" </dev/null; }                              # as whoever ran this (an agent has no shell of its own)
@@ -678,6 +682,51 @@ PRUNE
   say "room" "$(df -h --output=avail,pcent "$L" | tail -1 | awk '{print $1" free, "$2" used"}') on $(df --output=target "$L" | tail -1)"
 }
 
+secrets-stack(){ part "secrets stack"; bash "$here/secrets/install.sh"; }
+secrets-client(){ part "OpenBao application database credentials"
+  [[ -n ${LAPLACE_APP_DBNAME:-} ]] || { echo 'No application database declared on this host'; return 1; }
+  local host=${LAPLACE_BAO_APPDB_HOST:-$(hostname -s)} credentials=${LAPLACE_BAO_CREDENTIALS:-/etc/laplace/approle.json}
+  local connect_host=${LAPLACE_APP_PGHOST:-127.0.0.1} u h
+  [[ -r $credentials ]] || { echo "Host AppRole credentials required at $credentials"; return 1; }
+  local destinations=(/etc/laplace/pgpass)
+  for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [[ ! -f $h/.pgpass ]] || destinations+=("$h/.pgpass"); done
+  # Validate the record and DB authentication before installing recurring work.
+  bash "$here/secrets/appdb-sync.sh" "$host" "$credentials" "$connect_host" "${destinations[@]}"
+  install -d -m 755 /usr/local/libexec
+  install -m 755 "$here/secrets/appdb-sync.sh" /usr/local/libexec/laplace-appdb-secrets
+  {
+    printf '#!/bin/bash\nset -euo pipefail\nexport BAO_ADDR=%q\nexec /usr/local/libexec/laplace-appdb-secrets ' "${BAO_ADDR:-https://openbao.hartonomous.com}"
+    printf '%q ' "$host" "$credentials" "$connect_host" "${destinations[@]}"
+    printf '\n'
+  } > /usr/local/libexec/laplace-appdb-secrets-refresh
+  chmod 755 /usr/local/libexec/laplace-appdb-secrets-refresh
+  cat > /etc/systemd/system/laplace-appdb-secrets.service <<'UNIT'
+[Unit]
+Description=Refresh application database credentials from the host OpenBao AppRole
+Wants=network-online.target
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/laplace-appdb-secrets-refresh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+UNIT
+  cat > /etc/systemd/system/laplace-appdb-secrets.timer <<'TIMER'
+[Unit]
+Description=Refresh application database credentials from OpenBao
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+[Install]
+WantedBy=timers.target
+TIMER
+  systemctl daemon-reload
+  systemctl enable --now laplace-appdb-secrets.timer
+  say 'OpenBao appdb refresh' 'authentication verified; timer enabled; each invocation uses and revokes a scoped token'
+}
+
 report(){ part report
   say "server" "$($PGBIN/postgres --version)   $(systemctl is-active "$SERVICE.service")"
   say "PostGIS" "$(q "SELECT default_version FROM pg_available_extensions WHERE name = 'postgis'")"
@@ -691,7 +740,7 @@ report(){ part report
 }
 
 parts=${*:-all}
-for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing) ;;
+for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-client) ;;
   *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
   all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup; landing_of_all=1; landing; landing_of_all=; site; agents; idlestop; report ;;
