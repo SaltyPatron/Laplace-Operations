@@ -314,7 +314,8 @@
         {
           "id": "cloud-off-serving",
           "platform": "any",
-          "argv": null,
+          "argv": ["pwsh", "-NoProfile", "-File", "acceptance/cloud-off-serving.ps1", "-ControlHost", "hart-server", "-Gcloud", "/home/ahart/google-cloud-sdk/bin/gcloud", "-Project", "project-f5812b96-f924-41a4-94c", "-Zone", "us-east1-b", "-CloudHost", "hart-cloud", "-ApplicationHost", "hart-prod", "-PublicBase", "https://api.hartonomous.com", "-PublicMcp", "https://mcp.hartonomous.com/mcp"],
+          "timeout_seconds": 150,
           "evidence": "End-to-end operation receipts with cloud-off state and the actual selected target."
         }
       ]

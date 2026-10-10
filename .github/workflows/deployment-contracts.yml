@@ -69,6 +69,7 @@ jobs:
           ruby tests/deployment-workflow.rb
           ruby tests/secrets-setup.rb
           bash tests/appdb-secrets.sh
+          python3 tests/knowledge-compatibility.py
           pwsh -NoProfile -File tests/deployment-artifacts.ps1
       - name: Verify acceptance result failure boundaries
         shell: pwsh

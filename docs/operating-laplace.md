@@ -59,6 +59,20 @@ Production can select the existing hart-server knowledge database while keeping 
 `sudo ./setup.sh knowledge-client` installs the existing host AppRole's credential refresh timer. Selecting a new
 knowledge source is explicit; the timer only refreshes the selected credential. It never moves account/session data.
 
+Selection checks the installed Tier-0 receipt before writing configuration. Use the installed helper with
+`--select --verification-base https://api.hartonomous.com` and its existing host/AppRole arguments to activate
+the selected knowledge credential. It verifies authenticated application work afterward and restores the prior
+credential and configuration if activation fails. Changing knowledge contents does not imply a stale replica.
+
+After the cloud lease has ended and hart-cloud is stopped, verify continued public API/MCP operation with:
+
+```powershell
+./acceptance/verify.ps1 -Check cloud-off-serving -Output "$env:LAPLACE_WORK/operations/cloud-off-$(Get-Date -Format yyyyMMdd-HHmmss).json"
+```
+
+The acceptance registry declares the installation's actual control host, cloud project, serving host and public URLs.
+The check verifies cloud state both before and after execution; it does not start or stop the VM.
+
 When MCP runs on the knowledge host, declare `LAPLACE_MCP_UPSTREAM` in the consumer's machine.env and run the
 site host installer. Distribute the existing MCP credential with:
 
