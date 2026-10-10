@@ -1,15 +1,45 @@
 #!/bin/bash
-# The server's settings, converged and checked. declared() is the set. setup.sh settings
-# is this same set when a person runs it as root. deploy.sh runs this on every deployment,
-# as the role: the role is superuser, so ALTER SYSTEM needs no root. A drift fails the run.
-# A setting that needs a restart is restarted only when this user may restart the unit and
-# no ingest holds the lock.
-#
-# The monorepo phase tune-pg (scripts/pipeline.sh, laplace_admin) targets the old substrate
-# and a different cluster. It is not this server.
+# The server's settings, derived from the machine that runs it, converged and checked. declared() is the set. setup.sh
+# settings is this same set when a person runs it as root; setup.sh appdb is it again for the application cluster
+# (LAPLACE_PG_PROFILE=app). deploy.sh runs this on every deployment, as the role: the role is superuser, so ALTER SYSTEM
+# needs no root. A drift fails the run. A setting that needs a restart is restarted only when this user may restart the
+# unit and no ingest holds the lock.
 #
 #   ./tune-pg.sh           apply what differs, reload, check
 #   ./tune-pg.sh --check   report drift, change nothing
+#   ./tune-pg.sh --plan    the facts read from this machine and every setting they give; no connection
+#
+# One rule set, every machine its own numbers. The facts are read, not declared: the memory (and a cgroup's limit when
+# it is lower), the logical processors and the physical cores they sit on, the volume holding the write-ahead log and
+# whether it is the log's own, whether the data's device rotates. What a machine cannot say is declared in its
+# machine.env with the measurement that set it: LAPLACE_PG_RESERVED (memory its other residents keep: HART-DESKTOP's
+# llama-servers), LAPLACE_PG_BUFFERS_MAX (the largest shared memory a build maps: Windows), LAPLACE_PG_PROFILE
+# (knowledge: the server shares the host with the ingest client, the build and the agent; app: with the API, the MCP
+# and the agent; what differs is the connection plan).
+#
+# The memory is one equation in four domains (the monorepo's PostgresResourcePlan, which the laplace program sizes
+# its own working sets from, so the two never promise the same byte twice): of what the server may use (the memory
+# less LAPLACE_PG_RESERVED), a quarter is the shared cache, a quarter the backends' private memory, a quarter the
+# client's (ingest, build, API) and a quarter the operating system's page cache. The private quarter is divided by the
+# backends the connection plan allows (every connection and every parallel worker), so work_mem is what each may hold
+# and not a number that was right on one host. PostgreSQL's own guidance: 25% of memory for shared_buffers and no
+# more than 40%; work_mem is spent by every sort and hash of every backend at once; maintenance_work_mem is taken by
+# every autovacuum worker unless autovacuum_work_mem bounds it (runtime-config-resource, 18).
+#
+# The log's bound is the volume it is on. max_wal_size is the checkpoint target, not a directory quota: the log runs
+# past it while a checkpoint catches up, and a target equal to the volume filled it and stopped the server. Half of a
+# dedicated volume leaves a reserve the size of the target (2026-10-03: the three-eighths target, 24 GB, checkpointed
+# from WAL 35 times and from the timer never; 170 GB and 36 million full-page images in an evening). A log that shares
+# its volume with the data is bounded at a quarter of it, 32 GB at most, so the host keeps room for the data.
+# wal_compression zstd: on 23,450 of ConceptNet's B-tree images, level 3 wrote 3,781 bytes a page against lz4's 4,711,
+# at 57 us a page against 17. wal_level minimal: nothing reads this server's log but its own crash recovery (no
+# standby, no slot, no archive); a table made or truncated in a transaction is written without WAL and synced at
+# commit, which is how laplace merge rewrites a leaf partition. PostgreSQL will not start at minimal unless
+# max_wal_senders is 0. Asynchronous reads go through io_workers (io_method worker; io_uring cancelled reads mid-query
+# on the 5.15 kernel, every month of logs since 2026-08-16); the pool is the real ceiling of in-flight reads, so
+# effective_io_concurrency follows it (above the pool it bought nothing: 3,175 ms against 3,167 ms on a cold 2.5 GB
+# leaf, 2026-08-16). The partitioned substrate locks hundreds of leaves, indexes and toast tables in one transaction;
+# max_locks_per_transaction sizes a shared table of that many slots per allowed connection.
 set -euo pipefail
 _tune_here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 [ -n "${LAPLACE_PGDATA:-}" ] || . "$_tune_here/laplace.env"
@@ -18,101 +48,232 @@ _tune_here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [ -z "${LAPLACE_CONNINFO:-}" ]; then
   LAPLACE_CONNINFO="host=/tmp port=5432 user=${LAPLACE_ROLE:-laplace} dbname=laplace"
 fi
+PROFILE=${LAPLACE_PG_PROFILE:-knowledge}
+case $PROFILE in knowledge|app) ;; *) echo "tune-pg: LAPLACE_PG_PROFILE is knowledge or app, not '$PROFILE'" >&2; exit 2 ;; esac
+PGDATA=${TUNE_PGDATA:-$LAPLACE_PGDATA}
 PGWAL=${PGWAL:-$LAPLACE_PGWAL}
 PGBIN=${PGBIN:-$LAPLACE_PG_DIR/bin}
 PGUSER=${PGUSER:-$LAPLACE_PGUSER}
 SERVICE=${SERVICE:-$LAPLACE_PGSERVICE}
-TUNE_CONN=$(printf '%s' "$LAPLACE_CONNINFO" | sed 's/dbname=[^ ]*/dbname=postgres/')
+TUNE_SOCKET=${TUNE_SOCKET:-/tmp}      # where root reaches the server as its own user (the application cluster: /var/run/postgresql)
+TUNE_CONN=${TUNE_CONN:-$(printf '%s' "$LAPLACE_CONNINFO" | sed 's/dbname=[^ ]*/dbname=postgres/')}
 case $TUNE_CONN in *dbname=*) ;; *) TUNE_CONN="$TUNE_CONN dbname=postgres" ;; esac
+TUNE_PORT=$(printf '%s' "$TUNE_CONN" | sed -n 's/.*port=\([0-9]*\).*/\1/p'); TUNE_PORT=${TUNE_PORT:-5432}
+TUNE_HOST=$(printf '%s' "$TUNE_CONN" | sed -n 's/.*host=\([^ ]*\).*/\1/p')
 
-# Memory follows the machine. nproc reports OMP_NUM_THREADS when a shell has set it.
-ram_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-cores=$(env -u OMP_NUM_THREADS -u MKL_NUM_THREADS nproc)
-# The log's bound is the volume it is on. max_wal_size is the checkpoint target, not a
-# directory quota: the log runs past it while a checkpoint catches up, and a target equal
-# to the volume filled it and stopped the server. Half the volume leaves a reserve the
-# size of the target. On 2026-10-03 the three-eighths target (24 GB) started a checkpoint
-# from WAL 35 times and from the timer never; distance sat at 13–21 GB, and after 18:29
-# the counters were 170 GB and 36 million full-page images with num_timed still 0.
-# A replication slot is held to the same bound. The block device, from the mount table
-# and sysfs: findmnt's SIZE and df both stat the mount, and the data directory is not
-# readable by the role that deploys.
-wal_bytes() {
-  # The mount holding $PGWAL is the one whose point is the longest prefix of it (the WAL's own volume when there is
-  # one, else the volume it shares with the data); its device by major:minor through sysfs, so a loop file, a bind
-  # mount or a root the table names /dev/root all resolve. No stat of the directory: the role that deploys cannot.
-  # On a shared volume the log is bounded at 32 GB of it, so a single-disk host keeps room for the data.
-  local line mp dev='' l=0 shared=1 bytes
+# ---------------------------------------------------------------------------------------------------- the facts
+# Each read from this machine; TUNE_FACT_* names one instead (--plan for another machine, and the tests).
+to_kb() {  # a size with a unit (34GB, 512MB, 1048576kB, 4096) in kB
+  local v=${1// /}; case $v in
+    *GB|*gb|*G|*g) echo $(( ${v%%[GgBb]*} * 1048576 )) ;;
+    *MB|*mb|*M|*m) echo $(( ${v%%[MmBb]*} * 1024 )) ;;
+    *kB|*KB|*kb|*K|*k) echo "${v%%[KkBb]*}" ;;
+    *TB|*tb|*T|*t) echo $(( ${v%%[TtBb]*} * 1073741824 )) ;;
+    *[0-9]) echo "$v" ;;
+    *) echo "tune-pg: not a size: '$1'" >&2; return 1 ;;
+  esac
+}
+fact_ram_kb() {
+  [ -z "${TUNE_FACT_RAM_KB:-}" ] || { echo "$TUNE_FACT_RAM_KB"; return; }
+  local kb lim; kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+  # a container or WSL distribution bounded by its cgroup has that much, whatever the machine has
+  for f in /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory/memory.limit_in_bytes; do
+    [ -r "$f" ] || continue; lim=$(cat "$f"); case $lim in max|'') continue ;; esac
+    [ "$((lim / 1024))" -lt "$kb" ] && kb=$((lim / 1024)); break
+  done
+  echo "$kb"
+}
+# nproc reports OMP_NUM_THREADS when a shell has set it
+fact_threads() { [ -z "${TUNE_FACT_THREADS:-}" ] || { echo "$TUNE_FACT_THREADS"; return; }; env -u OMP_NUM_THREADS -u MKL_NUM_THREADS nproc; }
+fact_cores() {  # the physical cores: one per distinct set of sibling threads
+  [ -z "${TUNE_FACT_CORES:-}" ] || { echo "$TUNE_FACT_CORES"; return; }
+  local n
+  n=$(cat /sys/devices/system/cpu/cpu[0-9]*/topology/core_cpus_list 2>/dev/null | sort -u | wc -l)
+  [ "$n" -gt 0 ] || n=$(cat /sys/devices/system/cpu/cpu[0-9]*/topology/thread_siblings_list 2>/dev/null | sort -u | wc -l)
+  [ "$n" -gt 0 ] || n=$(fact_threads)
+  echo "$n"
+}
+# the block device under a path, by major:minor through the mount table and sysfs: a loop file, a bind mount, a
+# mapper device or a root the table names /dev/root all resolve, and nothing stats a directory the role cannot read
+mount_of() {  # $1 path -> "maj:min mountpoint"
+  local line mp dev='' l=0
   while IFS= read -r line; do
     set -- $line; mp=$5
-    case $PGWAL in "$mp"|"$mp"/*) ;; *) [ "$mp" = / ] || continue ;; esac
-    if [ ${#mp} -gt $l ]; then l=${#mp}; dev=$3; if [ "$mp" = "$PGWAL" ]; then shared=0; else shared=1; fi; fi
+    case $1 in "$mp"|"$mp"/*) ;; *) [ "$mp" = / ] || continue ;; esac
+    if [ ${#mp} -gt $l ]; then l=${#mp}; dev=$3; fi
   done < /proc/self/mountinfo
+  [ -n "$dev" ] && echo "$dev $mp"
+}
+fact_rotational() {  # does the data's device rotate: through dm/loop/md to the disks beneath, any that rotates
+  [ -z "${TUNE_FACT_ROTATIONAL:-}" ] || { echo "$TUNE_FACT_ROTATIONAL"; return; }
+  local dev d q rot=0 seen
+  set -- $(mount_of "$PGDATA" 2>/dev/null || echo ""); dev=${1:-}
+  [ -n "$dev" ] && [ -d "/sys/dev/block/$dev" ] || { echo 0; return; }
+  seen="/sys/dev/block/$dev"; q="$seen/queue/rotational"
+  while [ -n "$seen" ]; do
+    set -- $seen; d=$1; seen=${seen#"$d"}; seen=${seen# }
+    [ -d "$d/slaves" ] && [ -n "$(ls "$d/slaves" 2>/dev/null)" ] && { for s in "$d"/slaves/*; do seen="$seen /sys/class/block/$(basename "$s")"; done; continue; }
+    [ -f "$d/../queue/rotational" ] && q="$d/../queue/rotational" || q="$d/queue/rotational"
+    [ -r "$q" ] && [ "$(cat "$q")" = 1 ] && rot=1
+  done
+  echo $rot
+}
+fact_wal_bytes() {  # the volume the log is on, and whether the log has it to itself: "bytes shared"
+  [ -z "${TUNE_FACT_WAL_BYTES:-}" ] || { echo "$TUNE_FACT_WAL_BYTES ${TUNE_FACT_WAL_SHARED:-0}"; return; }
+  local dev mp bytes shared
+  set -- $(mount_of "$PGWAL" 2>/dev/null || echo ""); dev=${1:-}; mp=${2:-}
   [ -n "$dev" ] || { echo "tune-pg: no mount holds $PGWAL" >&2; return 1; }
   [ -r "/sys/dev/block/$dev/size" ] || { echo "tune-pg: device $dev of $PGWAL has no size in sysfs" >&2; return 1; }
   bytes=$(( $(cat "/sys/dev/block/$dev/size") * 512 ))
-  [ "$shared" = 1 ] && [ "$bytes" -gt $((32 * 1024 * 1024 * 1024)) ] && bytes=$((32 * 1024 * 1024 * 1024))
-  echo "$bytes"
+  if [ "$mp" = "$PGWAL" ]; then shared=0; else shared=1; fi
+  echo "$bytes $shared"
 }
-wal_mb() { echo $(( $(wal_bytes) / 1048576 / 2 )); }
-# wal_compression zstd: on 23,450 of ConceptNet's B-tree images, level 3 wrote 3,781 bytes
-# a page against lz4's 4,711, at 57 us a page against 17.
-# wal_level minimal (SQL Server's simple recovery, not full): nothing reads this server's log
-# but its own crash recovery (no standby, no slot, no archive, no base backup). At minimal a
-# table truncated or made in a transaction is written without WAL, its indexes with it, and
-# synced at commit or PREPARE instead: laplace merge rewrites a leaf partition that way. From
-# 2026-10-03 18:29, 190 GB of log were written, 36.0 million of its records full-page images.
-# PostgreSQL reads wal_level at start only, and will not start at minimal unless
-# max_wal_senders is 0.
-declared() { cat <<SET
+fact_reserved_kb() { to_kb "${LAPLACE_PG_RESERVED:-0}"; }
+fact_buffers_max_kb() { [ -n "${LAPLACE_PG_BUFFERS_MAX:-}" ] && to_kb "$LAPLACE_PG_BUFFERS_MAX" || echo 0; }
+# the server is tuned from the machine that runs it: a client host (hart-prod's LAPLACE_CONNINFO names hart-cloud's
+# server) would hand it its own memory and cores
+tune_local_or_die() {
+  case ${TUNE_HOST:-} in ''|/*|localhost|127.*|::1) return 0 ;; esac
+  hostname -I 2>/dev/null | tr ' ' '\n' | grep -qx "$TUNE_HOST" && return 0
+  [ "$TUNE_HOST" = "$(hostname)" ] || [ "$TUNE_HOST" = "$(hostname -f 2>/dev/null)" ] && return 0
+  echo "tune-pg: $TUNE_HOST is not this machine: a server is tuned on the host that runs it (its memory, its cores, its volumes), not from a client" >&2
+  return 1
+}
+
+# ---------------------------------------------------------------------------------------------------- the rules
+max() { [ "$1" -gt "$2" ] && echo "$1" || echo "$2"; }
+min() { [ "$1" -lt "$2" ] && echo "$1" || echo "$2"; }
+clamp() { min "$(max "$1" "$2")" "$3"; }   # value lo hi
+plan() {  # every derived quantity as NAME=value lines; declared() formats them
+  local ram_kb threads cores reserved_kb usable_kb cap_kb rotational wal shared wal_bytes
+  local shared_kb ecs_kb private_kb maint_dom_kb exec_kb wal_mb min_wal_mb wal_buf_kb
+  local par gather avw iow mwp ingest serving reserved_conns conns backends per_kb work_kb temp_kb mwm_kb avwm_kb eic rpc locks
+  ram_kb=$(fact_ram_kb); threads=$(fact_threads); cores=$(fact_cores); reserved_kb=$(fact_reserved_kb); cap_kb=$(fact_buffers_max_kb)
+  rotational=$(fact_rotational); set -- $(fact_wal_bytes); wal_bytes=$1; shared=$2
+  [ "$cores" -ge 1 ] || cores=1; [ "$threads" -ge "$cores" ] || threads=$cores
+  # what the server may use: the memory less what others keep, never less than an eighth of it
+  usable_kb=$(max $((ram_kb - reserved_kb)) $((ram_kb / 8)))
+  shared_kb=$((usable_kb / 4)); [ "$cap_kb" -gt 0 ] && shared_kb=$(min "$shared_kb" "$cap_kb"); shared_kb=$(max "$shared_kb" 131072)
+  ecs_kb=$((usable_kb * 7 / 10))
+  private_kb=$((usable_kb / 4))
+  # the log: half of its own volume, a quarter of a shared one and 32 GB at most, a gigabyte at least
+  if [ "$shared" = 1 ]; then wal_mb=$(min $((wal_bytes / 1048576 / 4)) 32768); else wal_mb=$((wal_bytes / 1048576 / 2)); fi
+  wal_mb=$(max "$wal_mb" 1024)
+  min_wal_mb=$(clamp $((wal_mb / 8)) 80 4096)
+  wal_buf_kb=$(clamp $((shared_kb / 32)) 16384 $((wal_mb * 1024 / 16)))
+  # the processors: parallel query on the cores (a sibling thread is not another core), asynchronous reads on the threads
+  par=$cores; gather=$((cores / 2)); avw=$(max 3 $((cores / 2))); iow=$(clamp $((threads * 2 / 3)) 1 32); mwp=$((par + 4))
+  # the connection plan: who may be connected at once. knowledge: the ingest's fan (one coordinator, two a core, three
+  # observers: the monorepo's measured population), a serving connection a thread, the maintenance workers; app: the
+  # API's pool (eight a thread, sixteen at least), the maintenance workers. Three superuser connections are reserved.
+  case $PROFILE in
+    knowledge) ingest=$((1 + 2 * cores + 3)); serving=$threads; locks=1024 ;;
+    app)       ingest=0; serving=$(max 16 $((8 * threads))); locks=64 ;;
+  esac
+  reserved_conns=3; conns=$((ingest + serving + avw + reserved_conns))
+  # the private quarter: a quarter of it for maintenance (one explicit operation and the autovacuum workers between
+  # them), the rest for the executor, divided by every backend that may run a sort or a hash at once
+  maint_dom_kb=$((private_kb / 4)); mwm_kb=$(max $((maint_dom_kb / 2)) 65536); avwm_kb=$(max $((maint_dom_kb / 2 / avw)) 1024)
+  exec_kb=$((private_kb - maint_dom_kb)); backends=$((conns + par)); per_kb=$((exec_kb / backends))
+  work_kb=$(max $((per_kb / 2)) 4096); temp_kb=$(max $((per_kb / 2)) 8192)
+  if [ "$rotational" = 1 ]; then eic=2; rpc=4; else eic=$iow; rpc=1.1; fi
+  cat <<PLAN
+fact.memory_kb=$ram_kb
+fact.reserved_kb=$reserved_kb
+fact.threads=$threads
+fact.cores=$cores
+fact.wal_volume_bytes=$wal_bytes
+fact.wal_volume_shared=$shared
+fact.data_rotational=$rotational
+fact.profile=$PROFILE
+usable_kb=$usable_kb
+shared_kb=$shared_kb
+ecs_kb=$ecs_kb
+private_kb=$private_kb
+wal_mb=$wal_mb
+min_wal_mb=$min_wal_mb
+wal_buf_kb=$wal_buf_kb
+par=$par
+gather=$gather
+avw=$avw
+iow=$iow
+mwp=$mwp
+conns=$conns
+backends=$backends
+mwm_kb=$mwm_kb
+avwm_kb=$avwm_kb
+work_kb=$work_kb
+temp_kb=$temp_kb
+eic=$eic
+rpc=$rpc
+locks=$locks
+PLAN
+}
+mb() { echo "$(( $1 / 1024 ))MB"; }   # kB -> whole MB (every value here is a multiple of 8 kB blocks)
+declared() {
+  local plan; plan=$(plan); v(){ sed -n "s/^$1=//p" <<<"$plan"; }
+  cat <<SET
 wal_level                        minimal
 max_wal_senders                  0
-shared_buffers                   $((ram_kb / 4 / 1024 / 1024))GB
-effective_cache_size             $((ram_kb * 7 / 10 / 1024 / 1024))GB
-work_mem                         256MB
-maintenance_work_mem             8GB
+shared_buffers                   $(mb "$(v shared_kb)")
+effective_cache_size             $(mb "$(v ecs_kb)")
+work_mem                         $(mb "$(v work_kb)")
+maintenance_work_mem             $(mb "$(v mwm_kb)")
+autovacuum_work_mem              $(mb "$(v avwm_kb)")
+temp_buffers                     $(mb "$(v temp_kb)")
+hash_mem_multiplier              1.0
 huge_pages                       try
 io_method                        worker
-io_workers                       $((cores * 2 / 3))
-effective_io_concurrency         256
-maintenance_io_concurrency       256
-random_page_cost                 1.1
+io_workers                       $(v iow)
+effective_io_concurrency         $(v eic)
+maintenance_io_concurrency       $(v eic)
+random_page_cost                 $(v rpc)
 default_toast_compression        lz4
-max_wal_size                     $(wal_mb)MB
-max_slot_wal_keep_size           $(wal_mb)MB
-min_wal_size                     4GB
-wal_buffers                      256MB
+max_wal_size                     $(v wal_mb)MB
+max_slot_wal_keep_size           $(v wal_mb)MB
+min_wal_size                     $(v min_wal_mb)MB
+wal_buffers                      $(mb "$(v wal_buf_kb)")
 wal_compression                  zstd
 checkpoint_timeout               60min
 checkpoint_completion_target     0.9
 bgwriter_lru_maxpages            1000
-max_worker_processes             $((cores + 4))
-max_parallel_workers             $cores
-max_parallel_workers_per_gather  $((cores / 2))
-max_parallel_maintenance_workers $((cores / 2))
+max_worker_processes             $(v mwp)
+max_parallel_workers             $(v par)
+max_parallel_workers_per_gather  $(v gather)
+max_parallel_maintenance_workers $(v gather)
 jit                              off
 enable_parallel_append           on
 gin_pending_list_limit           32MB
-autovacuum_max_workers           $((cores / 2 < 3 ? 3 : cores / 2))
+autovacuum_max_workers           $(v avw)
 autovacuum_naptime               10s
 autovacuum_vacuum_cost_delay     0
 autovacuum_vacuum_cost_limit     2000
 autovacuum_vacuum_scale_factor   0.05
 autovacuum_analyze_scale_factor  0.02
 autovacuum_vacuum_insert_scale_factor 0.01
-autovacuum_work_mem              1GB
+max_locks_per_transaction        $(v locks)
 shared_preload_libraries         pg_stat_statements,auto_explain
 pg_stat_statements.track         all
 auto_explain.log_min_duration    5s
 track_io_timing                  on
 track_wal_io_timing              on
-temp_tablespaces                 pgtemp
 listen_addresses                 *
 ssl                              on
-port                             5432
-max_connections                  100
+port                             $TUNE_PORT
+max_connections                  $(v conns)
+superuser_reserved_connections   3
 max_prepared_transactions        32
 SET
+  [ "$PROFILE" = knowledge ] && echo "temp_tablespaces                 pgtemp"
+  return 0
+}
+
+tune_plan() {
+  local p; p=$(plan)
+  echo "tune-pg: the facts of $(hostname) for the $PROFILE profile"
+  sed -n 's/^fact\.//p' <<<"$p" | awk -F= '{printf "  %-24s %s\n", $1, $2}'
+  echo "tune-pg: the settings they give"
+  declared | awk '{printf "  %-40s %s\n", $1, $2}'
 }
 
 tune_ingesting() {
@@ -128,7 +289,7 @@ tune_psql() {
   chmod 644 "$f"
   printf '%s\n' "$1" >"$f"
   if [ "$(id -u)" = 0 ]; then
-    out=$(su "$PGUSER" -c "$PGBIN/psql -X -h /tmp -d postgres -v ON_ERROR_STOP=1 -At -F '|' -f $f" </dev/null) && rc=0 || rc=$?
+    out=$(su "$PGUSER" -c "$PGBIN/psql -X -h $TUNE_SOCKET -p $TUNE_PORT -d postgres -v ON_ERROR_STOP=1 -At -F '|' -f $f" </dev/null) && rc=0 || rc=$?
   else
     out=$(psql -X "$TUNE_CONN" -v ON_ERROR_STOP=1 -At -F '|' -f "$f") && rc=0 || rc=$?
   fi
@@ -190,6 +351,7 @@ SQL
 tune_apply() {
   declare -A want=()
   local name value match context source pending live literal n=0
+  tune_local_or_die
   while read -r name value; do [ -n "$name" ] && want[$name]=$value; done < <(declared)
   while IFS='|' read -r name match context source pending live; do
     [ -n "$name" ] || continue
@@ -266,8 +428,9 @@ tune_check() {
 tune_main() {
   case ${1:-} in
     --check) tune_check ;;
+    --plan) tune_plan ;;
     "") tune_apply; tune_restart; tune_check ;;
-    *) echo "usage: tune-pg.sh [--check]" >&2; return 2 ;;
+    *) echo "usage: tune-pg.sh [--check|--plan]" >&2; return 2 ;;
   esac
 }
 

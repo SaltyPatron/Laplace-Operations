@@ -84,9 +84,9 @@ EOF
   # worker on hart-cloud and systemd stopped the whole unit with it (2026-10-10). The listener stays up and reports the
   # job failed; the kernel prefers the job's processes over the listener.
   if [ -n "$unit" ]; then install -d "/etc/systemd/system/$unit.d"
-    printf '[Service]\nOOMPolicy=continue\nOOMScoreAdjust=-500\n' > "/etc/systemd/system/$unit.d/laplace.conf.new"
+    printf '[Service]\nOOMPolicy=continue\nOOMScoreAdjust=-500\nRestart=on-failure\nRestartSec=10\n' > "/etc/systemd/system/$unit.d/laplace.conf.new"
     if ! cmp -s "/etc/systemd/system/$unit.d/laplace.conf.new" "/etc/systemd/system/$unit.d/laplace.conf"; then
-      mv -f "/etc/systemd/system/$unit.d/laplace.conf.new" "/etc/systemd/system/$unit.d/laplace.conf"; systemctl daemon-reload; say "unit" "OOMPolicy=continue (takes effect at the unit's next start)"
+      mv -f "/etc/systemd/system/$unit.d/laplace.conf.new" "/etc/systemd/system/$unit.d/laplace.conf"; systemctl daemon-reload; say "unit" "OOMPolicy=continue, Restart=on-failure (takes effect at the unit's next start)"
     else rm -f "/etc/systemd/system/$unit.d/laplace.conf.new"; fi; fi
   rm -f /etc/sudoers.d/laplace-agent
   say "rights" "none: root is setup.sh's, run by a person; unit root's, 644"

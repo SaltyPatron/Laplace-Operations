@@ -20,6 +20,12 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd); . "$here/laplace.env"
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
 op=${SUDO_USER:-$(id -un)}; ophome=$(getent passwd "$op" | cut -d: -f6)
+# The machine's declaration, /etc/laplace/machine.env, is every user's to read: the runner's jobs, the server's unit and
+# the operator all take their names from it (laplace.env reads it first; the monorepo's site.sh reads it too). A
+# directory only root could enter left the runner on hart-prod with hart-server's defaults (2026-10-10: the API looked for
+# a socket in /tmp instead of the knowledge host over the tailnet). What is secret in it protects itself: pgpass and
+# backup.key are 600.
+install -d -m 755 /etc/laplace; [ ! -f /etc/laplace/machine.env ] || chmod 644 /etc/laplace/machine.env
 PGDATA=$LAPLACE_PGDATA; PGWAL=$LAPLACE_PGWAL; PGTEMP=$LAPLACE_PGTEMP; PGUSER=$LAPLACE_PGUSER; PGBIN=$LAPLACE_PG_DIR/bin; PREFIX=$LAPLACE_PREFIX; SERVICE=$LAPLACE_PGSERVICE
 as_pg(){ su "$PGUSER" -c "$*" </dev/null; }                                     # as the server's user; never reads our stdin
 as_op(){ su -s /bin/bash "$op" -c "$*" </dev/null; }                              # as whoever ran this (an agent has no shell of its own)
@@ -163,7 +169,7 @@ packages(){ part packages
 kernel(){ part kernel
   # huge pages: what the server says it needs, 3% over, from the shared_buffers declared above; takes effect at boot
   # and now, as far as free memory allows
-  sb=$(declared | awk '$1=="shared_buffers"{print $2}' | tr -d GB); declared=$((sb * 512 * 103 / 100 + 64))   # 2 MB pages for the buffers declared, 3% and the rest of shared memory over
+  sb=$(declared | awk '$1=="shared_buffers"{print $2}' | tr -d MB); declared=$((sb / 2 * 103 / 100 + 64))   # 2 MB pages for the buffers declared (MB), 3% and the rest of shared memory over
   need=$(q "SHOW shared_memory_size_in_huge_pages" 2>/dev/null || echo 0); [ "${need:-0}" -gt "$declared" ] || need=$declared
   want=$((need + need * 3 / 100))
   printf 'vm.nr_hugepages = %s\nkernel.kptr_restrict = 0\nkernel.perf_event_paranoid = 0\n' "$want" > /etc/sysctl.d/60-laplace.conf   # the profilers see the kernel's symbols
@@ -328,7 +334,7 @@ access(){ part access
   [ "$(q "SELECT count(*) FROM pg_roles WHERE rolname = '$LAPLACE_ROLE'")" = 1 ] || run "CREATE ROLE $LAPLACE_ROLE LOGIN SUPERUSER"
   # the role's password: one canonical copy, root's, in /etc/laplace; adopted from an operator's ~/.pgpass when it
   # is the one the server accepts, made when none is; then written into every operator's ~/.pgpass. Never printed.
-  install -d -m 700 /etc/laplace; canon=/etc/laplace/pgpass
+  install -d -m 755 /etc/laplace; canon=/etc/laplace/pgpass
   works(){ PGPASSWORD=$1 "$PGBIN/psql" -X "host=127.0.0.1 port=5432 user=$LAPLACE_ROLE dbname=postgres" -Atc 'SELECT 1' 2>/dev/null | grep -q 1; }
   pw=""; [ -s "$canon" ] && pw=$(sed -n "s/^[^:]*:[^:]*:[^:]*:$LAPLACE_ROLE:\(.*\)$/\1/p" "$canon" | head -1)
   if [ -z "$pw" ] || ! works "$pw"; then
@@ -403,7 +409,7 @@ appdb(){ part "application database"
   aq(){ su postgres -c "psql -X -p $port -Atc \"$1\""; }
   [ "$(aq "SELECT count(*) FROM pg_roles WHERE rolname = '$LAPLACE_ROLE'")" = 1 ] || aq "CREATE ROLE $LAPLACE_ROLE LOGIN CREATEDB" >/dev/null
   # the role's password for this cluster: one canonical copy, root's, as the 127.0.0.1 line of /etc/laplace/pgpass
-  install -d -m 700 /etc/laplace; local canon=/etc/laplace/pgpass pw
+  install -d -m 755 /etc/laplace; local canon=/etc/laplace/pgpass pw
   aworks(){ PGPASSWORD=$1 psql -X "host=127.0.0.1 port=$port user=$LAPLACE_ROLE dbname=postgres" -Atc 'SELECT 1' 2>/dev/null | grep -q 1; }
   pw=""; [ -s "$canon" ] && pw=$(sed -n "s/^127\.0\.0\.1:$port:[^:]*:$LAPLACE_ROLE:\(.*\)$/\1/p" "$canon" | head -1)
   if [ -z "$pw" ] || ! aworks "$pw"; then
@@ -412,12 +418,35 @@ appdb(){ part "application database"
     { [ ! -f "$canon" ] || grep -v "^127\.0\.0\.1:$port:[^:]*:$LAPLACE_ROLE:" "$canon" || true; printf '127.0.0.1:%s:*:%s:%s\n' "$port" "$LAPLACE_ROLE" "$pw"; } > "$canon.setup"
     umask 077; mv -f "$canon.setup" "$canon"; chmod 600 "$canon"; say "role $LAPLACE_ROLE" "password set, in $canon"
   else say "role $LAPLACE_ROLE" "password in $canon"; fi
+  # The knowledge this host serves is another machine's (LAPLACE_PGHOST over the tailnet): the role's line for it, in the
+  # canonical copy and in every operator's and the agent's ~/.pgpass, or the API (laplace-runner) cannot open the knowledge
+  # (2026-10-10: hart-prod held the application line alone; the API aborted at start). The role has one password for the
+  # whole installation (access, on the knowledge host): adopted from an operator's ~/.pgpass line for that host or for any
+  # host when the knowledge host accepts it; nothing is made here, because the knowledge host owns it.
+  local kh=${LAPLACE_PGHOST:-} kp=${LAPLACE_PGPORT:-5432} kpw="" kfrom=""
+  if [ -n "$kh" ] && ! hostname -I | tr ' ' '\n' | grep -qx "$kh"; then
+    kworks(){ PGPASSWORD=$1 timeout 15 psql -X "host=$kh port=$kp user=$LAPLACE_ROLE dbname=postgres connect_timeout=5 sslmode=require" -Atc 'SELECT 1' 2>/dev/null | grep -q 1; }
+    kpw=$(sed -n "s/^$kh:$kp:[^:]*:$LAPLACE_ROLE:\(.*\)$/\1/p" "$canon" 2>/dev/null | head -1)
+    if [ -z "$kpw" ] || ! kworks "$kpw"; then
+      kpw=""; for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [ -s "$h/.pgpass" ] || continue
+        for c in $(sed -n "s/^\(\*\|$kh\):\(\*\|$kp\):[^:]*:$LAPLACE_ROLE:\(.*\)$/\3/p" "$h/.pgpass"); do kworks "$c" && { kpw=$c; kfrom=$u; break 2; }; done; done
+      if [ -n "$kpw" ]; then
+        { [ ! -f "$canon" ] || grep -v "^$kh:$kp:[^:]*:$LAPLACE_ROLE:" "$canon" || true; printf '%s:%s:*:%s:%s\n' "$kh" "$kp" "$LAPLACE_ROLE" "$kpw"; } > "$canon.setup"
+        umask 077; mv -f "$canon.setup" "$canon"; chmod 600 "$canon"; say "knowledge $kh:$kp" "the role's line adopted from $kfrom, in $canon"
+      else say "knowledge $kh:$kp" "NO LINE THE KNOWLEDGE HOST ACCEPTS: as an operator, copy the role's line from the knowledge host (ssh <knowledge host> cat ~/.pgpass >> ~/.pgpass) and run again; or the knowledge host is stopped"; fi
+    else say "knowledge $kh:$kp" "the role's line in $canon"; fi
+  fi
   for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [ -d "$h" ] || continue
-    { [ ! -f "$h/.pgpass" ] || grep -v "^127\.0\.0\.1:$port:[^:]*:$LAPLACE_ROLE:" "$h/.pgpass" || true; grep "^127\.0\.0\.1:$port:" "$canon"; } > "$h/.pgpass.setup"
+    { [ ! -f "$h/.pgpass" ] || grep -v -e "^127\.0\.0\.1:$port:[^:]*:$LAPLACE_ROLE:" ${kh:+-e "^$kh:$kp:[^:]*:$LAPLACE_ROLE:"} "$h/.pgpass" || true; grep -e "^127\.0\.0\.1:$port:" ${kh:+-e "^$kh:$kp:"} "$canon"; } > "$h/.pgpass.setup"
     mv -f "$h/.pgpass.setup" "$h/.pgpass"; chown "$u" "$h/.pgpass"; chmod 600 "$h/.pgpass"; done
-  unset pw
+  unset pw kpw
   [ "$(aq "SELECT count(*) FROM pg_database WHERE datname = '$name'")" = 1 ] || { aq "CREATE DATABASE \"$name\" OWNER $LAPLACE_ROLE" >/dev/null; say "database $name" "made, owner $LAPLACE_ROLE"; }
   if command -v ufw >/dev/null && ufw status | grep -q "^Status: active"; then ufw status | grep -q "$port/tcp.*$LAPLACE_LAN" || { ufw allow from "$LAPLACE_LAN" to any port "$port" proto tcp >/dev/null; say "ufw" "$port/tcp from $LAPLACE_LAN"; }; fi
+  # its settings: tune-pg.sh's rules from this machine's memory, cores and disk, with the app profile (the API's pool,
+  # no ingest fan); the PostgreSQL project's cluster has its socket in /var/run/postgresql and its own unit
+  LAPLACE_PG_PROFILE=app TUNE_SOCKET=/var/run/postgresql TUNE_CONN="host=/var/run/postgresql port=$port user=postgres dbname=postgres" \
+    TUNE_PGDATA=$data PGWAL=$data/pg_wal PGBIN=/usr/lib/postgresql/$ver/bin PGUSER=postgres SERVICE=postgresql@$ver-$cl LAPLACE_CONNINFO="host=127.0.0.1 port=$port user=$LAPLACE_ROLE dbname=$name" \
+    bash "$here/tune-pg.sh" 2>&1 | sed 's/^/  /' || say "settings" "the application cluster does not match its declaration (above)"
   say "database $name" "$(aq "SELECT pg_size_pretty(pg_database_size('$name'))") on 127.0.0.1:$port and $LAPLACE_LAN"
 }
 # A host that is started for a job and pays by the minute (hart-cloud) stops itself when nothing has run on it for
@@ -436,6 +465,12 @@ busy=""
 pgrep -f 'Runner\.Worker' >/dev/null && busy="a runner job"
 pgrep -f 'laplace (ingest|tier0|highway|deploy)|/deploy\.sh|/build\.sh|/ingest\.sh|/data\.sh fetch|setup\.sh' >/dev/null && busy="\${busy:+\$busy, }an operation"
 [ "\$(who | wc -l)" = 0 ] || busy="\${busy:+\$busy, }a login session"
+# the delivery that started this host holds a lease (Laplace's knowledge-host job: instance metadata laplace-lease
+# "<run id> <expiry epoch>") until its job here has run, released by its release job or by the expiry: a job queued
+# behind a concurrency group or an approval is not running here yet, and the host would have stopped under it
+# (2026-10-10 05:04Z, run 38023100147)
+lease=\$(curl -sf -m 2 -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/laplace-lease 2>/dev/null || true)
+if [ -n "\$lease" ]; then set -- \$lease; [ "\${2:-0}" -gt "\$(date +%s)" ] && busy="\${busy:+\$busy, }a delivery's lease (run \${1:-?} until \$(date -u -d "@\$2" +%H:%MZ))"; fi
 stamp=/run/laplace-idle-since
 if [ -n "\$busy" ]; then rm -f "\$stamp"; exit 0; fi
 [ -f "\$stamp" ] || { date +%s > "\$stamp"; exit 0; }
@@ -465,7 +500,7 @@ backup(){ part backup
   local target=${LAPLACE_BACKUP_TARGET:-}; [ -n "$target" ] || { say "backup" "no landing declared (LAPLACE_BACKUP_TARGET): skipped"; return 0; }
   local pgbin=${LAPLACE_BACKUP_PGBIN:-$LAPLACE_PG_DIR/bin} port=${LAPLACE_BACKUP_PGPORT:-5432} keep=${LAPLACE_BACKUP_KEEP_DAYS:-30} dir=/var/backups/laplace
   install -d -m 750 -o "$PGUSER" -g "$PGUSER" "$dir"
-  install -d -m 700 /etc/laplace
+  install -d -m 755 /etc/laplace
   [ -s /etc/laplace/backup.key ] || { ssh-keygen -q -t ed25519 -N '' -C "laplace-backup@$(hostname)" -f /etc/laplace/backup.key; mv -f /etc/laplace/backup.key.pub /etc/laplace/backup.pub; say "key" "made: declare /etc/laplace/backup.pub in backup/landing.keys"; }
   [ -s /etc/laplace/backup.pub ] || mv -f /etc/laplace/backup.key.pub /etc/laplace/backup.pub 2>/dev/null || true
   chown "$PGUSER" /etc/laplace/backup.key /etc/laplace/backup.pub; chmod 600 /etc/laplace/backup.key; chmod 644 /etc/laplace/backup.pub
