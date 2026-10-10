@@ -64,6 +64,10 @@ What `setup.sh` makes on a fresh Ubuntu 22.04 host, so that nothing is done by h
 
 `setup.sh` runs to its end under `sudo` from a shell, or as a transient unit (`systemd-run --same-dir --setenv=HOME=/root --setenv=SUDO_USER=<operator> ./setup.sh ...`) when the shell may go away before the dependencies are built.
 
+### The application database, on a hosting host
+
+A host that serves the API but holds no knowledge (hart-prod) declares `LAPLACE_APP_DBNAME` in its `/etc/laplace/machine.env`, and `sudo ./setup.sh appdb` gives it PostgreSQL from the PostgreSQL project's own apt repository: a cluster named `app` on the data disk (`LAPLACE_APP_PGDATA`, default `/data/postgresql/app`), at `LAPLACE_APP_PGPORT` (default 5432), listening for `$LAPLACE_LAN`, with `$LAPLACE_ROLE` owning the declared database and a password of its own in `/etc/laplace/pgpass` (the `127.0.0.1` line) and every operator's `~/.pgpass`. This is the monorepo's `app` schema, accounts, sessions, keys and billing, which Laplace #1741 moved out of the knowledge database (`LAPLACE_APP_DB`); the knowledge host migrates it over the tailnet, so that host needs the same pgpass line for this host's tailnet address. No extension, no compiler: the knowledge never lives here. A host that declares no `LAPLACE_APP_DBNAME` skips the part.
+
 ### The shares
 
 ```sh

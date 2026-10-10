@@ -3,7 +3,7 @@
 #
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
-#                              site | agents | report
+#                              appdb | site | agents | report
 #   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
 #   sudo ./setup.sh shares     the SMB shares for the development machine (LAPLACE_SHARES); not part of all
 #   sudo LAPLACE_DROP=/data/pgdata ./setup.sh drop all
@@ -365,6 +365,59 @@ site_sources(){
          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
          say "source" "GitHub CLI"; }
 }
+# The application's own database, on a hosting host that declares one (LAPLACE_APP_DBNAME in its machine.env): the
+# monorepo's app schema (accounts, sessions, keys, billing; Laplace #1741), in PostgreSQL from the PostgreSQL
+# project's own apt repository, never the cluster this script builds for the knowledge: no extension, no compiler.
+# Its data is $LAPLACE_APP_PGDATA (the host's data disk), it listens for $LAPLACE_LAN so the knowledge host's
+# migrate reaches it, and $LAPLACE_ROLE owns it with a password of its own: canonical in /etc/laplace/pgpass as
+# a 127.0.0.1 line, written into every operator's ~/.pgpass, never printed. The knowledge host gets that line for
+# this host's tailnet address by the operator (OpenBao, kv/hosts/<host>/appdb, is where it is to live).
+appdb(){ part "application database"
+  local name=${LAPLACE_APP_DBNAME:-}; [ -n "$name" ] || { say "application database" "none declared (LAPLACE_APP_DBNAME): skipped"; return 0; }
+  local ver=${LAPLACE_APP_PGVERSION:-18} port=${LAPLACE_APP_PGPORT:-5432} data=${LAPLACE_APP_PGDATA:-/data/postgresql/app} cl=app
+  if [ ! -e /etc/apt/sources.list.d/pgdg.list ]; then
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+    echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+    apt-get update -q >/dev/null; say "source" "apt.postgresql.org"; fi
+  for p in postgresql-$ver postgresql-client-$ver; do dpkg-query -W -f '${Status}\n' "$p" 2>/dev/null | grep -q "install ok installed" \
+    || { DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$p" >/dev/null; say "installed" "$p"; }; done
+  # the package's own cluster, main, on the boot disk, is not the declared one: dropped while it holds nothing but the
+  # defaults; the declared cluster, app, lives on the data disk at the declared port
+  if pg_lsclusters -h | awk '{print $1" "$2}' | grep -qx "$ver main" && ! pg_lsclusters -h | awk '{print $1" "$2}' | grep -qx "$ver $cl"; then
+    mp=$(pg_lsclusters -h | awk -v v="$ver" '$1==v && $2=="main" {print $3}')
+    n=$(su postgres -c "psql -X -p $mp -Atc \"SELECT count(*) FROM pg_database WHERE datname NOT IN ('postgres','template0','template1')\"" 2>/dev/null || echo 0)
+    [ "$n" = 0 ] && { pg_dropcluster --stop "$ver" main; say "cluster main" "dropped: the package's own, empty"; } || say "cluster main" "KEPT: it holds $n database(s) that are not the defaults"; fi
+  if ! pg_lsclusters -h | awk '{print $1" "$2}' | grep -qx "$ver $cl"; then
+    install -d -m 700 -o postgres -g postgres "$(dirname "$data")" "$data"
+    pg_createcluster -d "$data" -p "$port" --start "$ver" "$cl" >/dev/null; say "cluster $cl" "made at $data, port $port"
+  else say "cluster $cl" "$(pg_lsclusters -h | awk -v v="$ver" -v c="$cl" '$1==v && $2==c {print $4", "$3}')"; fi
+  local conf=/etc/postgresql/$ver/$cl
+  grep -q "^listen_addresses = '\*'" "$conf/conf.d/laplace.conf" 2>/dev/null || { install -d "$conf/conf.d"; printf "listen_addresses = '*'\n" > "$conf/conf.d/laplace.conf"; say "listen_addresses" "*: the firewall and pg_hba decide"; }
+  printf '%s\n' "# Laplace (setup.sh appdb). Local: the server's own user and the operator over the socket; the network: $LAPLACE_ROLE from $LAPLACE_LAN, scram." \
+    "local   all   postgres                      peer" "local   all   $LAPLACE_ROLE                 scram-sha-256" \
+    "host    all   $LAPLACE_ROLE   127.0.0.1/32  scram-sha-256" "host    all   $LAPLACE_ROLE   $LAPLACE_LAN  scram-sha-256" > "$conf/pg_hba.conf.setup"
+  cmp -s "$conf/pg_hba.conf.setup" "$conf/pg_hba.conf" || { mv "$conf/pg_hba.conf.setup" "$conf/pg_hba.conf"; chown postgres:postgres "$conf/pg_hba.conf"; say "pg_hba.conf" "written"; }
+  rm -f "$conf/pg_hba.conf.setup"; pg_ctlcluster "$ver" "$cl" reload 2>/dev/null || pg_ctlcluster "$ver" "$cl" start
+  aq(){ su postgres -c "psql -X -p $port -Atc \"$1\""; }
+  [ "$(aq "SELECT count(*) FROM pg_roles WHERE rolname = '$LAPLACE_ROLE'")" = 1 ] || aq "CREATE ROLE $LAPLACE_ROLE LOGIN CREATEDB" >/dev/null
+  # the role's password for this cluster: one canonical copy, root's, as the 127.0.0.1 line of /etc/laplace/pgpass
+  install -d -m 700 /etc/laplace; local canon=/etc/laplace/pgpass pw
+  aworks(){ PGPASSWORD=$1 psql -X "host=127.0.0.1 port=$port user=$LAPLACE_ROLE dbname=postgres" -Atc 'SELECT 1' 2>/dev/null | grep -q 1; }
+  pw=""; [ -s "$canon" ] && pw=$(sed -n "s/^127\.0\.0\.1:$port:[^:]*:$LAPLACE_ROLE:\(.*\)$/\1/p" "$canon" | head -1)
+  if [ -z "$pw" ] || ! aworks "$pw"; then
+    [ -n "$pw" ] || pw=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-32)
+    aq "ALTER ROLE $LAPLACE_ROLE PASSWORD '$pw'" >/dev/null
+    { [ ! -f "$canon" ] || grep -v "^127\.0\.0\.1:$port:[^:]*:$LAPLACE_ROLE:" "$canon" || true; printf '127.0.0.1:%s:*:%s:%s\n' "$port" "$LAPLACE_ROLE" "$pw"; } > "$canon.setup"
+    umask 077; mv -f "$canon.setup" "$canon"; chmod 600 "$canon"; say "role $LAPLACE_ROLE" "password set, in $canon"
+  else say "role $LAPLACE_ROLE" "password in $canon"; fi
+  for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [ -d "$h" ] || continue
+    { [ ! -f "$h/.pgpass" ] || grep -v "^127\.0\.0\.1:$port:[^:]*:$LAPLACE_ROLE:" "$h/.pgpass" || true; grep "^127\.0\.0\.1:$port:" "$canon"; } > "$h/.pgpass.setup"
+    mv -f "$h/.pgpass.setup" "$h/.pgpass"; chown "$u" "$h/.pgpass"; chmod 600 "$h/.pgpass"; done
+  unset pw
+  [ "$(aq "SELECT count(*) FROM pg_database WHERE datname = '$name'")" = 1 ] || { aq "CREATE DATABASE \"$name\" OWNER $LAPLACE_ROLE" >/dev/null; say "database $name" "made, owner $LAPLACE_ROLE"; }
+  if command -v ufw >/dev/null && ufw status | grep -q "^Status: active"; then ufw status | grep -q "$port/tcp.*$LAPLACE_LAN" || { ufw allow from "$LAPLACE_LAN" to any port "$port" proto tcp >/dev/null; say "ufw" "$port/tcp from $LAPLACE_LAN"; }; fi
+  say "database $name" "$(aq "SELECT pg_size_pretty(pg_database_size('$name'))") on 127.0.0.1:$port and $LAPLACE_LAN"
+}
 site(){ part site
   site_sources
   missing=$(for p in $SITE_PACKAGES; do dpkg-query -W -f '${Status}\n' "$p" 2>/dev/null | grep -q "install ok installed" || echo "$p"; done)
@@ -482,7 +535,7 @@ parts=${*:-all}
 for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report|chess|shares) ;;
   *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report|chess|shares ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
-  all) volumes; packages; rights; kernel; deps; cluster; settings; access; site; agents; report ;;
+  all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; site; agents; report ;;
   *) "$p" ;;
 esac; done
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
