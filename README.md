@@ -158,6 +158,20 @@ build maps, the log's room on a shared drive), each with the measurement that se
 the settings derived from the machine the same way and checked by the same statement, so the Linux server and the
 Windows one each get their own numbers from one set of rules.
 
+A Windows machine declares what differs from HART-DESKTOP's defaults in `%ProgramData%\Laplace\machine.env`
+(`LAPLACE_MACHINE_ENV` names another file): the counterpart of `/etc/laplace/machine.env` and the same format, one
+`NAME=value` per line, `#` for a comment, `%NAME%` expanded. `laplace.env.ps1` reads it first, so every script and
+service on the machine sees one declaration; a value set in the environment still wins. The server's address and
+port are names too (`LAPLACE_PGHOST`, `LAPLACE_PGPORT`): the settings, the access rules, the firewall rule and the
+role's pgpass line follow them.
+
+```
+LAPLACE_SRC=E:\Repositories\Laplace
+LAPLACE_PGDATA=E:\Data\Laplace\pgdata
+LAPLACE_PGWAL=D:\Data\Laplace\pg_wal
+LAPLACE_PGPORT=5432
+```
+
 What differs is only what Windows forces. No volume is made: `volumes` reports each root's drive and makes its
 directory. The toolchain is installed by hand (Visual Studio, oneAPI, CMake, Git, uv) or by the manifest: `packages`
 says what is missing and installs MSYS2's packages. There is no kernel part (huge pages stay off until the backends'

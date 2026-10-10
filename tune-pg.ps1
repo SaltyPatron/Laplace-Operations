@@ -15,7 +15,7 @@
   drive), and the same rules give each its own numbers.
 #>
 param([switch]$Check)
-if (-not $env:LAPLACE_PGDATA) { . "$PSScriptRoot\laplace.env.ps1" }
+if (-not $env:LAPLACE_PGDATA -or -not $env:LAPLACE_PGPORT) { . "$PSScriptRoot\laplace.env.ps1" }
 $TunePsqlExe = Join-Path $env:LAPLACE_PG_DIR 'bin\psql.exe'
 $TuneConn = $env:LAPLACE_CONNINFO -replace 'dbname=\S+', 'dbname=postgres'
 if ($TuneConn -notmatch 'dbname=') { $TuneConn += ' dbname=postgres' }
@@ -92,7 +92,7 @@ function TuneDeclared {
         log_checkpoints                  = 'on'
         listen_addresses                 = '*'
         ssl                              = $(if (Test-Path (Join-Path $env:LAPLACE_PGDATA 'server.crt')) { 'on' } else { 'off' })
-        port                             = '5432'
+        port                             = $env:LAPLACE_PGPORT
         max_connections                  = '100'
         max_prepared_transactions        = '32'
     }
