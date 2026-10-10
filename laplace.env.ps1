@@ -32,6 +32,7 @@ Set-Default LAPLACE_PG_DIR  'D:\Libraries\postgresql\18.6'                  # Po
 Set-Default LAPLACE_PGDATA  'D:\Data\Laplace\pgdata'                        # the cluster: heap and indexes
 Set-Default LAPLACE_PGWAL   "$env:LAPLACE_PGDATA\pg_wal"                    # its write-ahead log; a path on another drive puts it there (initdb --waldir)
                                                                             # LAPLACE_PGTEMP, when set: its temporary files as the tablespace pgtemp, on another drive
+Set-Default LAPLACE_PG_WAL_DEDICATED '0'                                   # 1 only when the separate WAL drive holds no other workloads; a different drive alone is not dedicated
 Set-Default LAPLACE_PGSERVICE 'laplace-postgres'                            # the Windows service
 Set-Default LAPLACE_PGUSER  'NT AUTHORITY\NetworkService'                   # the account the service runs as (S-1-5-20): owns the data and the logs, reads the install
 Set-Default LAPLACE_ROLE    'laplace'                                       # the database role Laplace connects as

@@ -95,14 +95,16 @@ fact_cores() {  # the physical cores: one per distinct set of sibling threads
 }
 # the block device under a path, by major:minor through the mount table and sysfs: a loop file, a bind mount, a
 # mapper device or a root the table names /dev/root all resolve, and nothing stats a directory the role cannot read
-mount_of() {  # $1 path -> "maj:min mountpoint"
-  local line mp dev='' l=0
-  while IFS= read -r line; do
-    set -- $line; mp=$5
-    case $1 in "$mp"|"$mp"/*) ;; *) [ "$mp" = / ] || continue ;; esac
-    if [ ${#mp} -gt $l ]; then l=${#mp}; dev=$3; fi
-  done < /proc/self/mountinfo
-  [ -n "$dev" ] && echo "$dev $mp"
+mount_of() {  # $1 path -> "maj:min mountpoint"; optional mount table for detector tests
+  local path=$1 table=${2:-/proc/self/mountinfo} id parent dev root mp rest best_dev='' best_mp='' l=0
+  [[ "$path" = /* ]] || { echo 'tune-pg: mount path must be absolute' >&2; return 1; }
+  while IFS=' ' read -r id parent dev root mp rest; do
+    # mountinfo encodes spaces, tabs, newlines and backslashes as octal escapes.
+    printf -v mp '%b' "$mp"
+    case $path in "$mp"|"$mp"/*) ;; *) [ "$mp" = / ] || continue ;; esac
+    if [ ${#mp} -ge "$l" ]; then l=${#mp}; best_dev=$dev; best_mp=$mp; fi
+  done < "$table"
+  [ -n "$best_dev" ] && printf '%s %s\n' "$best_dev" "$best_mp"
 }
 fact_rotational() {  # does the data's device rotate: through dm/loop/md to the disks beneath, any that rotates
   [ -z "${TUNE_FACT_ROTATIONAL:-}" ] || { echo "$TUNE_FACT_ROTATIONAL"; return; }
@@ -121,7 +123,8 @@ fact_rotational() {  # does the data's device rotate: through dm/loop/md to the 
 fact_wal_bytes() {  # the volume the log is on, and whether the log has it to itself: "bytes shared"
   [ -z "${TUNE_FACT_WAL_BYTES:-}" ] || { echo "$TUNE_FACT_WAL_BYTES ${TUNE_FACT_WAL_SHARED:-0}"; return; }
   local dev mp bytes shared
-  set -- $(mount_of "$PGWAL" 2>/dev/null || echo ""); dev=${1:-}; mp=${2:-}
+  local mount; mount=$(mount_of "$PGWAL") || return 1
+  dev=${mount%% *}; mp=${mount#* }
   [ -n "$dev" ] || { echo "tune-pg: no mount holds $PGWAL" >&2; return 1; }
   [ -r "/sys/dev/block/$dev/size" ] || { echo "tune-pg: device $dev of $PGWAL has no size in sysfs" >&2; return 1; }
   bytes=$(( $(cat "/sys/dev/block/$dev/size") * 512 ))

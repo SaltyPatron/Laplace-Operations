@@ -342,8 +342,18 @@ service: the conductor starts it per match, only in chess-GPU mode.
 
 ## Repair
 
-Every script here is a declaration compared with the machine, so repair is running it again: `sudo ./setup.sh` after a
+These component repair commands do not yet constitute a transactional product installer or a complete rollback.
+The [system audit](docs/2026-10-10-system-audit.md#expanded-installation-delivery-and-resource-audit) records the
+remaining differences between entry points, machine configuration and live services.
+
+Use the relevant component operation: `sudo ./setup.sh` after a
 volume, package or access rule went missing; `./tune-pg.sh` after a server setting drifted (`deploy.sh` runs it, and
 the job fails when the live server does not match); `sudo ./setup.sh settings` when a pending restart needs root;
 `./deploy.sh` after a build or a database was cut off; `./ingest.sh` after a load was; `sudo ./agents.sh` after a runner was lost (its unit restarts on failure and survives a job's out-of-memory kill), or
 `sudo ./agents.sh remove REPO` and again to re-register one. What each did is under `$LAPLACE_WORK/logs`.
+
+Inspect PostgreSQL sizing with `./tune-pg.sh --plan` or `pwsh -File tune-pg.ps1 -Plan` before applying it.
+On Windows, a separate WAL drive is still treated as shared unless the machine declaration explicitly sets
+`LAPLACE_PG_WAL_DEDICATED=1`. Set that only for a drive reserved for WAL; the desktop's D: also holds dependencies
+and builds. The planner's arithmetic checks do not establish a bound on all simultaneous query operators or
+other processes' memory use.

@@ -52,7 +52,19 @@ function TuneFactWal {   # the drive the log is on, and whether the log has it t
     if ($env:TUNE_FACT_WAL_BYTES) { return @([int64]$env:TUNE_FACT_WAL_BYTES, [int]$(if ($env:TUNE_FACT_WAL_SHARED) { $env:TUNE_FACT_WAL_SHARED } else { 0 })) }
     $d = Get-PSDrive (TuneDrive $env:LAPLACE_PGWAL)
     $bytes = [int64]($d.Used + $d.Free)
-    $shared = if ((TuneDrive $env:LAPLACE_PGWAL) -ne (TuneDrive $env:LAPLACE_PGDATA)) { 0 } else { 1 }
+    # A different drive can still hold builds, dependencies and other data. Only an
+    # explicit machine declaration may spend half a drive on WAL; default to shared.
+    $shared = 1
+    switch ($env:LAPLACE_PG_WAL_DEDICATED) {
+        { $_ -in $null, '', '0' } { }
+        '1' {
+            if ((TuneDrive $env:LAPLACE_PGWAL) -eq (TuneDrive $env:LAPLACE_PGDATA)) {
+                throw 'tune-pg: a dedicated WAL drive cannot also hold PGDATA'
+            }
+            $shared = 0
+        }
+        default { throw 'tune-pg: LAPLACE_PG_WAL_DEDICATED must be 0 or 1' }
+    }
     @($bytes, $shared)
 }
 function TuneFactReservedKB { if ($env:LAPLACE_PG_RESERVED) { TuneKB $env:LAPLACE_PG_RESERVED } else { [int64]0 } }

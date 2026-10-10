@@ -14,6 +14,9 @@ jobs:
       - name: Verify Windows copy and failure propagation
         shell: pwsh
         run: pwsh -NoProfile -File tests/backup-continuity.ps1
+      - name: Verify Windows WAL storage classification
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/tune-pg-storage.ps1
   boundaries:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -25,6 +28,8 @@ jobs:
         shell: bash
         run: |
           export TMPDIR="$RUNNER_TEMP"
+          bash tests/tune-pg-storage.sh
+          bash tests/tune-pg-plan.sh
           bash tests/machine-config.sh
           bash tests/operation-lock.sh
           bash tests/deployment-artifacts.sh
