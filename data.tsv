@@ -1,7 +1,8 @@
 # Every data set the recipes read that a publisher serves, declared once: the set (its directory under $LAPLACE_DATA), how it
 # is fetched, its origin, and where under the set it lands. data.sh fetch pulls each from its origin at the latest, at the
 # machine's own network speed; Laplace-Engine/recipes/*/source names the roots the recipes read them from.
-#   mirror   the publisher's directory, as it serves it (wget -r): into is the set itself
+#   mirror   the publisher's directory, as it serves it (wget -r): into . keeps its path under the set; into a directory
+#            puts the directory's contents there
 #   file     one file: into is the path under the set it lands at (a directory when it ends with /: the origin's own name)
 #   listing  a GitHub contents listing (api.github.com/repos/O/R/contents/PATH): every file of it, into a directory
 #   release  the latest GitHub release (api.github.com/repos/O/R/releases/latest): the asset matching into's pattern;
@@ -10,7 +11,9 @@
 #   git      a repository cloned at the latest commit of its default branch, into a directory under the set
 #   archive  an archive from the publisher, kept under the set's .archive and opened into the set
 # set	kind	origin	into
-UCD	mirror	https://www.unicode.org/Public/UCD/latest/	.
+# Unicode 17.0.0, pinned: the version ICU 78 and tier 0 are built from (laplace.env). The recipes and the Engine read it at
+# Public/UCD/latest, the name the publisher's rolling directory has; what is there is 17.0.0, not whatever is latest today.
+UCD	mirror	https://www.unicode.org/Public/17.0.0/	Public/UCD/latest/
 UCD	extract	Public/UCD/latest/ucdxml/ucd.all.flat.zip	Public/UCD/latest/ucdxml/
 ISO639	file	https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3.tab	./
 ISO639	file	https://iso639-3.sil.org/sites/iso639-3/files/downloads/iso-639-3_Name_Index.tab	./

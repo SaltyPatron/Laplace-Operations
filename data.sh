@@ -19,8 +19,10 @@ urls(){ sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p"; }                          
 land(){ local set=$1 into=$2 name=$3; case $into in */) echo "$LAPLACE_DATA/$set/${into#./}$name" ;; .) echo "$LAPLACE_DATA/$set" ;; *) echo "$LAPLACE_DATA/$set/$into" ;; esac; }
 fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
   case $kind in
-    mirror) dest=$LAPLACE_DATA/$set; mkdir -p "$dest"
-            wget -q -r -np -nH -N -R 'index.html*' -P "$dest" "$origin" || [ $? = 8 ]   # 8: a file the server would not give; the rest came
+    mirror) if [ "$into" = . ]; then dest=$LAPLACE_DATA/$set; cut=0                   # the publisher's path kept under the set
+            else dest=$LAPLACE_DATA/$set/${into%/}; p=${origin#*://*/}; cut=$(printf '%s' "${p%/}" | tr -cd / | wc -c); cut=$((cut + 1)); fi   # the directory itself lands at into
+            mkdir -p "$dest"
+            wget -q -r -np -nH --cut-dirs="$cut" -N -R 'index.html*' -P "$dest" "$origin" || [ $? = 8 ]   # 8: a file the server would not give; the rest came
             printf '  %-28s %s files from %s\n' "$set" "$(find "$dest" -type f | wc -l)" "$origin" ;;
     file)   dest=$(land "$set" "$into" "${origin##*/}"); get "$origin" "$dest" "$([ -f "$dest" ] && echo "$dest")"
             printf '  %-28s %s\n' "$set" "${dest#"$LAPLACE_DATA"/}" ;;
