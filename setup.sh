@@ -6,6 +6,7 @@
 #                              appdb | backup | site | agents | idlestop | report
 #   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
 #   sudo ./setup.sh shares     the SMB shares for the development machine (LAPLACE_SHARES); not part of all
+#   sudo ./setup.sh landing    where other hosts' backups land (LAPLACE_LANDING, backup/landing.keys); not part of all
 #   sudo LAPLACE_DROP=/data/pgdata ./setup.sh drop all
 #                              the cluster dropped and made again, empty: never part of all, and named to be dropped
 #
@@ -593,6 +594,50 @@ shares(){ part shares
   say "smbd" "$(systemctl is-active smbd), $(ss -ltn | grep -q ':445 ' && echo 'listening on :445' || echo 'NOT LISTENING on :445')"
   say "shares" "$(echo "$LAPLACE_SHARES" | awk -v h="$(hostname)" 'NF {printf "\\\\%s\\%s  ", h, $1}')"
 }
+# Where other hosts' backups land (not part of all): a host that declares LAPLACE_LANDING takes them over ssh from
+# the hosts backup/landing.keys names, each under its own directory and write-only (rrsync -wo: a sender cannot read,
+# change or remove what is there, its own earlier dumps included, so a host that is taken over cannot destroy its
+# backups). The directory is on a volume of its own, never the system's: an array that is not mounted is refused, not
+# filled in beside the system. Retention is this host's (the sender has no say): a daily timer removes what is older
+# than LAPLACE_LANDING_KEEP days, and always keeps a host's newest LAPLACE_LANDING_MIN files whatever their age.
+landing(){ part landing
+  L=$LAPLACE_LANDING; U=$LAPLACE_LANDING_USER; keys=$here/backup/landing.keys
+  [ -n "$L" ] || { say "landing" "LAPLACE_LANDING is empty: nothing lands here"; return; }
+  command -v rrsync >/dev/null || { echo "rrsync is not installed: the rsync package brings it"; exit 1; }
+  up=$(dirname "$L"); [ -d "$up" ] || { echo "$up is not there: the volume backups land on is not mounted"; exit 1; }
+  [ "$(stat -c %d "$up")" != "$(stat -c %d /)" ] || { echo "$up is on the system's volume: the backup volume is not mounted there; nothing is written"; exit 1; }
+  id "$U" >/dev/null 2>&1 || { useradd --system --home-dir "$L" --no-create-home --shell /bin/sh "$U"; say "user" "made $U (no password; ssh by key, to rrsync only)"; }
+  passwd -l "$U" >/dev/null 2>&1 || true
+  install -d -o root -g root -m 0755 "$L" "$L/.ssh"
+  : > "$L/.ssh/authorized_keys.new"; n=0
+  while read -r host type key _; do case $host in ''|\#*) continue ;; esac
+    case $host in *[!A-Za-z0-9._-]*) echo "landing.keys: '$host' is not a host name"; exit 1 ;; esac
+    case $type in ssh-ed25519|sk-ssh-ed25519@openssh.com) ;; *) echo "landing.keys: $host's key is $type, not ed25519"; exit 1 ;; esac
+    install -d -o "$U" -g "$U" -m 0750 "$L/$host"
+    printf 'restrict,command="%s -wo %s" %s %s %s\n' "$(command -v rrsync)" "$L/$host" "$type" "$key" "$host" >> "$L/.ssh/authorized_keys.new"
+    n=$((n + 1)); say "$host" "lands in $L/$host ($(find "$L/$host" -type f 2>/dev/null | wc -l) files, $(du -sh "$L/$host" 2>/dev/null | cut -f1))"
+  done < "$keys"
+  chmod 0644 "$L/.ssh/authorized_keys.new"; mv -f "$L/.ssh/authorized_keys.new" "$L/.ssh/authorized_keys"
+  # a directory no key names any more is kept and said: what landed is not removed because a line was
+  for d in "$L"/*/; do [ -d "$d" ] || continue; h=$(basename "$d"); grep -q " $h\$" "$L/.ssh/authorized_keys" || say "$h" "no key in landing.keys any more: its directory is kept, nothing more lands"; done
+  cat > /usr/local/libexec/laplace-landing-prune <<PRUNE
+#!/bin/sh
+# Retention on the landing host (setup.sh landing): older than $LAPLACE_LANDING_KEEP days goes, a host's newest $LAPLACE_LANDING_MIN files stay.
+for d in "$L"/*/; do [ -d "\$d" ] || continue
+  find "\$d" -type f -printf '%T@ %p\n' | sort -rn | tail -n +$((LAPLACE_LANDING_MIN + 1)) | cut -d' ' -f2- | while IFS= read -r f; do
+    [ -n "\$(find "\$f" -mtime +$LAPLACE_LANDING_KEEP)" ] && { rm -f -- "\$f"; echo "removed \$f"; }; done
+  find "\$d" -mindepth 1 -type d -empty -delete
+done
+PRUNE
+  chmod 0755 /usr/local/libexec/laplace-landing-prune
+  printf '[Unit]\nDescription=Retention of the backups landed on this host (%s: %s days, the newest %s of a host always)\n\n[Service]\nType=oneshot\nExecStart=/usr/local/libexec/laplace-landing-prune\n' "$L" "$LAPLACE_LANDING_KEEP" "$LAPLACE_LANDING_MIN" > /etc/systemd/system/laplace-landing-prune.service
+  printf '[Unit]\nDescription=Daily retention of landed backups\n\n[Timer]\nOnCalendar=*-*-* 05:30:00\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n' > /etc/systemd/system/laplace-landing-prune.timer
+  systemctl daemon-reload; systemctl enable -q --now laplace-landing-prune.timer
+  say "accepts" "$n host(s) of backup/landing.keys, as $U, by key, to rrsync -wo only"
+  say "retention" "$LAPLACE_LANDING_KEEP days, the newest $LAPLACE_LANDING_MIN of a host always; $(systemctl is-active laplace-landing-prune.timer) daily at 05:30"
+  say "room" "$(df -h --output=avail,pcent "$L" | tail -1 | awk '{print $1" free, "$2" used"}') on $(df --output=target "$L" | tail -1)"
+}
+
 report(){ part report
   say "server" "$($PGBIN/postgres --version)   $(systemctl is-active "$SERVICE.service")"
   say "PostGIS" "$(q "SELECT default_version FROM pg_available_extensions WHERE name = 'postgis'")"
@@ -606,8 +651,8 @@ report(){ part report
 }
 
 parts=${*:-all}
-for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares) ;;
-  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares ...]"; exit 2 ;; esac; done
+for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing) ;;
+  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
   all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup; site; agents; idlestop; report ;;
   *) "$p" ;;

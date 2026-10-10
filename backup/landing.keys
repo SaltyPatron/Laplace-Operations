@@ -1,0 +1,6 @@
+# The hosts whose backups this deployment's landing host accepts (setup.sh landing), one a line:
+#   host   the public key that host's backup part made (its /etc/laplace/backup.pub)
+# A host lands only under <LAPLACE_LANDING>/<host>, write-only: it cannot read, change or remove what is there.
+# A public key is not a secret; the private half never leaves its host.
+hart-cloud  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE0UKx7/bgQgnjHmSOU6i+KOM+BGRWAwo1+HAzNCS8bg
+hart-prod   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHV3LvTA7jpohbx4NuJjkK17XscZQN7uPgxGsoP73R1+
