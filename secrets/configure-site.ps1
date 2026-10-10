@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9._-]*$')][string]$HostName,
     [Parameter(Mandatory)][string]$InstallPrefix,
     [string]$IdentityPath = 'kv/shared/laplace-auth',
+    [string]$McpTokenSource,
     [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9@._-]*$')][string]$SshTarget = $HostName,
     [string]$HostLock = '/run/lock/laplace/host-resource.lock',
     [switch]$UseSudo
@@ -42,6 +43,11 @@ foreach ($provider in 'google','microsoft') {
     }
 }
 if ($payload.files['identity.env'].Count -eq 0) { throw "No identity providers in $IdentityPath" }
+if ($McpTokenSource) {
+    $mcpToken = Invoke-Program bao @('kv','get','-field=mcp_token',$McpTokenSource)
+    if ($mcpToken.Trim() -notmatch '^[a-f0-9]{64}$') { throw 'MCP token record is invalid' }
+    $payload.files['mcp.env'] = @{ LAPLACE_MCP_TOKEN = $mcpToken.Trim() }
+}
 $remote = @'
 import fcntl,json,os,pathlib,shlex,sys,tempfile
 p=json.load(sys.stdin)
@@ -55,7 +61,7 @@ try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
 except BlockingIOError: raise SystemExit('Another deployment or ingest owns the host lock')
 updates=[]
 for name,values in p['files'].items():
-    if name not in ('operator.env','identity.env'): raise SystemExit('Unknown site credential file')
+    if name not in ('operator.env','identity.env','mcp.env'): raise SystemExit('Unknown site credential file')
     target=directory/name
     if target.is_symlink(): raise SystemExit('Credential file must not be a symbolic link')
     current={}

@@ -3,14 +3,14 @@
 Run these from this Operations checkout on HART-DESKTOP, using your existing GitHub CLI login:
 
 ```powershell
-./laplace.ps1 status
+./laplace.ps1 status -Target production -Wait
 ./laplace.ps1 verify -Target staging -Wait
 ./laplace.ps1 verify -Target production -Wait
 ./laplace.ps1 deploy -Wait
 ```
 
 `staging` selects hart-server; `production` selects hart-prod; `knowledge` selects hart-cloud when it is running.
-`status` lists workflow runs and their outcomes. `verify` checks the currently installed application.
+`status` inspects installed revisions, configuration and connectivity; `runs` lists workflow history. `verify` executes the installed application. With `-Wait`, status and verification receipts are downloaded under `$LAPLACE_WORK/operations/<run-id>`.
 `deploy` delivers `main` through the same chain used by a merge: build and run on hart-server, then start hart-cloud,
 build the production bundle, publish on hart-prod and verify it. The cloud lease is released afterward so the
 existing idle-stop mechanism can stop the VM. HART-DESKTOP remains the development and optional GPU machine.
@@ -53,3 +53,24 @@ python3 scripts/install-stockfish.py --configure --source-dir "$LAPLACE_STOCKFIS
 
 The command validates the official pinned checkout and executes a legal search before saving its paths. It preserves
 unrelated service settings and leaves the checkout in place.
+
+Production can select the existing hart-server knowledge database while keeping its application database local.
+`secrets/provision-knowledge.ps1` creates the non-superuser knowledge login and the consumer's OpenBao record;
+`sudo ./setup.sh knowledge-client` installs the existing host AppRole's credential refresh timer. Selecting a new
+knowledge source is explicit; the timer only refreshes the selected credential. It never moves account/session data.
+
+When MCP runs on the knowledge host, declare `LAPLACE_MCP_UPSTREAM` in the consumer's machine.env and run the
+site host installer. Distribute the existing MCP credential with:
+
+```powershell
+./secrets/configure-site.ps1 -HostName hart-prod -InstallPrefix /opt/laplace -UseSudo -McpTokenSource kv/hosts/hart-server/laplace-api
+./network/cloudflare-api.ps1 -Zone hartonomous.com -ApiHosts api.hartonomous.com,mcp.hartonomous.com
+```
+
+The Cloudflare command checks the host-specific API rule; `-Apply` converges it. Browser Integrity Check was returning
+403/error 1010 for legitimate Python clients before they reached Laplace. The rule disables that browser heuristic
+only on the two programmatic service hosts, preserving application authentication and other security rules.
+[Cloudflare documents this setting for API traffic](https://developers.cloudflare.com/waf/tools/browser-integrity-check/).
+The nginx template preserves HTTPS from the trusted local tunnel and the public host header, so OAuth callback URLs
+have the correct public origin. [ASP.NET proxy guidance](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/proxy-load-balancer?view=aspnetcore-10.0)
+explains why forwarded scheme and host affect redirects.
