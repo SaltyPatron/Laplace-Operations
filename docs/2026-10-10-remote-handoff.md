@@ -5,7 +5,7 @@
 The user clarified that hart-desktop will be the primary development machine.
 Development may continue on hart-server; it also serves as the dev/BAT/QA/staging
 deployment target. hart-cloud and hart-prod are production. The immediate request
-is to ensure work is on remote, not to remove development tools or working copies
+is to ensure Laplace work is on remote, not to remove development tools or working copies
 from hart-server. The server's GTX 1080 Ti remains off limits due to broken cooling.
 
 ## Remote preservation verified around 19:07 UTC
@@ -37,8 +37,8 @@ The registered worktrees of these repositories have no uncommitted source change
 Laplace-MCP has two untracked compiled ELF files, `native/lpm` and `native/liblpm.so`;
 they were left intact and were not added to source control. This statement does not
 cover ignored build files, credentials, raw conversation archives, or every other
-repository on the machine. Broader source-directory inventory is being checked
-separately. No working directory or archive was deleted.
+repository on the machine. The user explicitly excludes unrelated projects from
+this task. No working directory or archive was deleted.
 
 ## Completed infrastructure changes and verification limits
 
