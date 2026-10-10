@@ -5,19 +5,25 @@
 The user clarified that hart-desktop will be the primary development machine.
 Development may continue on hart-server; it also serves as the dev/BAT/QA/staging
 deployment target. hart-cloud and hart-prod are production. The immediate request
-is to account for work across the entire machine and verify its remote preservation, including home folders, temporary directories and agent worktrees. It does not authorize removing development tools or working copies
+is to account for Laplace work wherever it lives and verify its remote preservation,
+including home folders, temporary directories and agent worktrees. Unrelated
+projects are excluded. This does not authorize removing development tools or working copies
 from hart-server. The server's GTX 1080 Ti remains off limits due to broken cooling.
 
-## Scope correction and unfinished preservation — verified 20:12 UTC
+## Explicit scope and record of the mistaken expansion
 
-At 19:10:31 UTC the user said the agent was focused on Laplace and not the entire
-machine. At 19:10:36 the agent replied "Understood—Laplace only" and then persisted
-that reversed instruction. Operations PR70 propagated the error. That was an agent
-interpretation error, not an instruction from the user. The scope is the entire
-machine's work, including Claude/other agent worktrees, home folders, temporary
-directories and other storage locations. Existing originals must remain intact.
+The user's direct clarification is: "Your focus is Laplace, not my entire fucking
+machine". The subject is Laplace; the locations include agent worktrees, home
+folders, temporary directories and other places where Laplace work may exist.
+This does not authorize inventorying or exporting every unrelated project.
 
-The stopped broader pass is partial. Re-reading its saved reports at 20:12 UTC found:
+Operations PR73 incorrectly characterized whole-machine work as the user's explicit
+instruction. Scratch PR3 repeated that claim. Those changes were agent-authored
+misinterpretations, not a valid expansion of scope. This correction preserves their
+Git history and the existing source/recovery artifacts while replacing that operative
+instruction. The original conversation remains evidence of what was actually said.
+
+The stopped broader pass was outside the clarified scope; its partial output is recorded for accountability, not as work to resume. Re-reading its saved reports at 20:12 UTC found:
 
 | Evidence | Observed result | What it does not establish |
 | --- | --- | --- |
@@ -29,15 +35,15 @@ The stopped broader pass is partial. Re-reading its saved reports at 20:12 UTC f
 Those reports and bundles are under `/repos/build/audit-scratch` on hart-server.
 The broader bundles have not been uploaded. The earlier Laplace recovery refs and
 snapshots listed below are separately preserved remotely. No new bulk export was
-started to make this correction. Protected-directory coverage remains incomplete.
+started to make this correction. Do not resume unrelated-project export. Protected-directory coverage for Laplace work remains incomplete.
 
 ## Remaining work and acceptance criteria
 
-1. Reconcile discovered work against the actual remote objects/refs or protected
+1. Reconcile discovered Laplace work against the actual remote objects/refs or protected
    backup objects. Record the source location, exact content/revision, destination,
    verification result and outstanding gap. Cached refs and a local bundle are not
    sufficient evidence of remote preservation.
-2. Account separately for uncommitted/ignored source, broken Git pointers, agent
+2. Within Laplace scope, account separately for uncommitted/ignored source, broken Git pointers, agent
    worktrees, loose files, configuration and protected material. Do not silently
    classify everything outside Git as disposable or put credentials into source
    repositories. Discovery errors remain explicit coverage gaps.
@@ -86,15 +92,15 @@ The registered worktrees of these repositories have no uncommitted source change
 Laplace-MCP has two untracked compiled ELF files, `native/lpm` and `native/liblpm.so`;
 they were left intact and were not added to source control. This statement does not
 cover ignored build files, credentials, raw conversation archives, or every other
-repository on the machine. Earlier versions of this document incorrectly claimed
-the user excluded non-Laplace projects. The user's request covers the whole machine.
+repository on the machine. Non-Laplace projects are outside the user's clarified
+scope; Laplace work must still be checked wherever it lives.
 No working directory or archive was deleted by that preservation pass.
 
 ## Expanded home, temporary and archived work check
 
 The initial15-repository check did not cover all loose files and archived agent
-worktrees. The following results describe the Laplace subset that was inspected;
-they do not delimit the user's whole-machine request.
+worktrees. The following results describe the Laplace locations inspected so far;
+they do not prove every location containing Laplace work has been covered.
 
 The follow-up found191 candidate checkout locations across home/temp/source/build,
 runner and mounted archive locations. It checked146 readable Git object stores,
