@@ -7,7 +7,7 @@
 #                        afresh, the highway, the claims of $LAPLACE_DETERMINISM decomposed twice), the tier 0 installed
 #                        against the one this build makes, and the record laid beside every other machine's for the same
 #                        commits (HART-DESKTOP's, from fingerprint.ps1); published on the branch fingerprints
-#   ./verify.sh reads    the database: laplace status, and reads through the indexes (text, hop, translate, fills)
+#   ./verify.sh reads    the database: laplace status, and reads through the indexes (text, hop, translate)
 #
 # Exit 1 when something that must hold does not: two decompositions of one source differ, the installed tier 0 is not
 # this build's, a result differs from another machine's that had the same inputs (or its ICU or Unicode version does), the
@@ -98,14 +98,13 @@ reads(){
   block "$log/status.txt"
   empty=0; grep -q 'consensus  *[1-9]' "$log/status.txt" || empty=1        # a standing for every claim a witness's records say (provenance is containment: no attestation table)
   md "### Reads"; md "| read | exit | ms | first lines |"; md "|---|---|---|---|"
-  for r in "text|30|text hello" "hop|120|hop -n 5 dog" "translate|120|translate dog en fr" "fills|60|fills -n 5 the"; do
+  for r in "text|30|text hello" "hop|120|hop -n 5 dog" "translate|120|translate dog en fr"; do
     name=${r%%|*}; rest=${r#*|}; limit=${rest%%|*}; args=${rest#*|}
     # shellcheck disable=SC2086
     set -- $(read_one "$name" "$limit" $args); e=$1 ms=$2
     first=$(grep -v '^\s*$' "$log/$name.txt" | head -3 | cut -c1-90 | tr '|' '/' | sed 's/$/<br>/' | tr -d '\n')
     md "| laplace $args | $e | $ms | $first |"
-    case $name in fills) ;;                                      # fills is measured, not required (it can take minutes)
-      *) [ "$e" = 0 ] || bad "laplace $args exited $e" ;; esac
+    [ "$e" = 0 ] || bad "laplace $args exited $e"
   done
   [ "$empty" = 0 ] || md "- the database holds no standings yet: reads say nothing until a source is in"
 }
