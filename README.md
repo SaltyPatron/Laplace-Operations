@@ -54,6 +54,7 @@ sudo ./setup.sh                                    # once per machine: volumes, 
 ./tune-pg.sh --plan                                # the facts read from this machine and every setting they give; no connection
 tests/tune-pg-plan.sh                              # the rules against every host's measured facts, and the invariants they must keep
 sudo ./setup.sh settings                           # the same declaration, when a pending restart needs root
+sudo ./setup.sh machine                            # repair declaration permissions only; no provisioning
 sudo LAPLACE_DROP=$LAPLACE_PGDATA ./setup.sh drop all   # the cluster emptied and made again (never part of all)
 ```
 

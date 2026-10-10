@@ -18,8 +18,11 @@
 # repository, so the operator's gh credential (or LAPLACE_CHECKOUT_TOKEN) is put in those as the secret
 # LAPLACE_CHECKOUT. What was done is kept under $LAPLACE_WORK/logs/root.
 set -euo pipefail
-here=$(cd "$(dirname "$0")" && pwd); . "$here/laplace.env"
+here=$(cd "$(dirname "$0")" && pwd)
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
+. "$here/machine-config.sh"
+machine_config_permissions
+. "$here/laplace.env"
 op=${SUDO_USER:-$(id -un)}; user=$LAPLACE_AGENT_USER; group=$LAPLACE_GROUP; home=$LAPLACE_AGENT_HOME; owner=$LAPLACE_GITHUB
 mkdir -p "$LAPLACE_WORK/logs/root"; log=$LAPLACE_WORK/logs/root/agents-$(date -u +%Y%m%dT%H%M%SZ).log; exec > >(tee "$log") 2>&1
 say(){ printf '  %-46s %s\n' "$1" "$2"; }
