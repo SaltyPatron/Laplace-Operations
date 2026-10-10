@@ -67,6 +67,9 @@ $DepOptions = @{
     'json-c'  = @('-DBUILD_APPS=OFF')
     curl      = @('-DBUILD_CURL_EXE=OFF', '-DCURL_USE_SCHANNEL=ON', '-DCURL_USE_LIBPSL=OFF')   # TLS from Windows, not OpenSSL: PROJ fetches grids
     'win-iconv' = @('-DWIN_ICONV_BUILD_TEST=OFF')
+    # libtiff looks for a library named m and finds Intel's static libm in the compiler's directory; linked beside
+    # laplace-math it defines every function twice. The libm of a Laplace build is laplace-math: it is told so.
+    libtiff   = @("-DCMath_LIBRARY=$Math")
 }
 # Header-only rows: what is copied from the checkout into the prefix.
 $DepHeaders = @{ eigen = @(@{ From = 'Eigen'; To = 'include\eigen3\Eigen' }, @{ From = 'unsupported'; To = 'include\eigen3\unsupported' }); spectra = @(@{ From = 'include\Spectra'; To = 'include\Spectra' }) }
@@ -349,7 +352,8 @@ function deps {
                     try { foreach ($p in Get-ChildItem (Join-Path $PSScriptRoot 'patches\postgresql') -Filter '*.patch') { & git.exe apply --reverse --check $p.FullName 2>$null; if ($LASTEXITCODE) { Exec git.exe @('apply', $p.FullName) } } }
                     finally { Pop-Location }
                     $native = Join-Path (Join-Path $Build 'deps') 'pg-native.ini'
-                    & python.exe (Join-Path $PSScriptRoot 'toolchain\meson-native.py') msvc $Math | Set-Content $native
+                    # uv brings the Python: the machine declares uv (packages), not a python on the PATH
+                    & uv.exe run --no-project --quiet (Join-Path $PSScriptRoot 'toolchain\meson-native.py') msvc $Math | Set-Content $native
                     if ($LASTEXITCODE) { throw 'meson-native.py failed' }
                     $inc = ($libs | ForEach-Object { "$_\include" -replace '\\', '/' }) -join ','
                     $lib = ($libs | ForEach-Object { foreach ($l in 'lib', 'lib64') { if (Test-Path "$_\$l") { "$_\$l" -replace '\\', '/' } } }) -join ','
