@@ -6,9 +6,11 @@ fixture=$(mktemp -d "$TMPDIR/deployment-readback.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/bin" "$fixture/src/Laplace-postgres"
 cp "$root/verify.sh" "$fixture/verify.sh"
+cp "$root/operation-lock.sh" "$fixture/operation-lock.sh"
 printf "default_version = '1.12'\n" > "$fixture/src/Laplace-postgres/laplace.control"
 cat > "$fixture/laplace.env" <<'ENV'
 LAPLACE_WORK=$FIXTURE/work/$CASE
+LAPLACE_LOCKS=$FIXTURE
 LAPLACE_PROGRAM=$FIXTURE/bin/laplace
 LAPLACE_PG_DIR=$FIXTURE
 LAPLACE_SRC=$FIXTURE/src

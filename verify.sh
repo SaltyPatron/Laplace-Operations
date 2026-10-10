@@ -15,6 +15,9 @@
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/laplace.env"
+case ${1:-build} in
+  deployment|reads) . "$here/operation-lock.sh"; laplace_host_lock shared ;;
+esac
 L=${LAPLACE_PROGRAM:-$LAPLACE_BUILD/Laplace-Engine/icx-release/laplace}
 log=$LAPLACE_WORK/logs/verify/$(date -u +%Y%m%dT%H%M%SZ)-${1:-build}; mkdir -p "$log"
 summary=${GITHUB_STEP_SUMMARY:-}
