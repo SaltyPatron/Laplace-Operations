@@ -109,13 +109,15 @@ both(){ if [ "$1" = differs ] || [ "$2" = differs ]; then echo differs; elif [ "
 why(){ case $1 in differs) echo "(its inputs differ: not a difference of arithmetic)" ;; same) echo "(from the same inputs: the machines compute differently)" ;; *) echo "(the inputs are not said in both records)" ;; esac; }
 fails(){ [ "$1" != differs ]; }
 
-compare(){ f=$1; given=${2:-}; k=$(key "$f"); m=$(sed -n 's/^machine  *//p' "$f"); d=$(mktemp -d); rc=0
+compare(){ f=$1; given=${2:-}; k=$(key "$f"); m=$(sed -n 's/^machine  *//p' "$f"); d=$(mktemp -d); rc=0; incomplete=0
   url=https://github.com/$LAPLACE_GITHUB/Laplace-Operations.git; tok=${LAPLACE_FINGERPRINT_TOKEN:-}
   if [ -n "$given" ]; then mkdir -p "$d/$k"; cp "$given"/*.txt "$d/$k"/ 2>/dev/null || true   # compare FILE DIR: the records in DIR, in place of the branch's
-  elif [ -n "$tok" ]; then git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$tok" | base64 | tr -d '\n')" clone -q --depth 1 --branch fingerprints "$url" "$d" 2>/dev/null || true
-  else git clone -q --depth 1 --branch fingerprints "$url" "$d" 2>/dev/null || true; fi
+  elif [ -n "$tok" ]; then git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$tok" | base64 | tr -d '\n')" clone -q --depth 1 --branch fingerprints "$url" "$d" 2>/dev/null || { echo "INCOMPLETE: cannot retrieve fingerprint records"; rm -rf "$d"; return 2; }
+  else git clone -q --depth 1 --branch fingerprints "$url" "$d" 2>/dev/null || { echo "INCOMPLETE: cannot retrieve fingerprint records"; rm -rf "$d"; return 2; }; fi
   n=0
-  for o in "$d/$k"/*.txt; do [ -f "$o" ] || continue; om=$(basename "$o" .txt); [ "$om" = "$m" ] && continue; n=$((n + 1))
+  for o in "$d/$k"/*.txt; do [ -f "$o" ] || continue; om=$(fld "$o" machine); [ "$om" = "$m" ] && continue
+    if [ -z "$om" ] || [ "$(key "$o")" != "$k" ]; then echo "INCOMPLETE: record has no machine or names different commits"; incomplete=1; continue; fi
+    n=$((n + 1))
     echo "against $om ($(sed -n 's/^os  *//p' "$o"); made $(sed -n 's/^made  *//p' "$o"))"
     # the inputs first: what differs in a result is then said to follow from them, or to be the machines' arithmetic
     a=$(fld "$f" ucd); b=$(fld "$o" ucd); ucd=$(same "${a%% *}" "${b%% *}")      # the Unicode version: tier 0 and the flags are made from it, whatever else the directory holds
@@ -132,7 +134,9 @@ compare(){ f=$1; given=${2:-}; k=$(key "$f"); m=$(sed -n 's/^machine  *//p' "$f"
       in=$(both "$ucd" "$(same "$(dat "$f" "$s")" "$(dat "$o" "$s")")")
       case $(same "$a" "$b") in same) echo "  claims $s: same ($a)" ;; differs) if fails "$in"; then echo "  claims $s: DIFFERS: $a here, $b there   $(why "$in")"; rc=1; else echo "  claims $s: differs: $a here, $b there   $(why "$in")"; fi ;; *) echo "  claims $s: not decomposed there" ;; esac; done
   done
-  [ "$n" -gt 0 ] || echo "no other machine has a record for $k yet (on HART-DESKTOP: fingerprint.ps1 at these commits)"
+  if [ "$n" = 0 ]; then echo "INCOMPLETE: no other machine has a record for $k; cross-machine equivalence was not verified"; incomplete=1; fi
+  # A mismatch is a failure; absent comparison evidence is a distinct, non-passing result.
+  if [ "$rc" = 0 ] && [ "$incomplete" != 0 ]; then rc=2; fi
   rm -rf "$d"; return $rc; }
 
 case ${1:-} in

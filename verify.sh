@@ -45,7 +45,13 @@ build(){
   elif [ "$made" = "$installed" ]; then good "$LAPLACE_TIER0 is the tier 0 this build makes ($made)"
   else bad "$LAPLACE_TIER0 is $installed; this build makes $made: deploy.sh drop makes it again (with a reseed)"; fi
   md "### Against other machines, same commits"
-  if "$here/fingerprint.sh" compare "$log/record.txt" > "$log/compare.txt" 2>&1; then good "no result differs from another machine's from the same inputs"; else bad "a result differs from another machine's from the same inputs, or its ICU or Unicode version does"; fi
+  comparison=0
+  "$here/fingerprint.sh" compare "$log/record.txt" > "$log/compare.txt" 2>&1 || comparison=$?
+  case $comparison in
+    0) good "record comparison completed; see the field results below" ;;
+    2) bad "cross-machine comparison incomplete: required evidence is unavailable" ;;
+    *) bad "cross-machine comparison failed; see the field results below" ;;
+  esac
   block "$log/compare.txt"
   if "$here/fingerprint.sh" publish "$log/record.txt" > "$log/publish.txt" 2>&1; then md "- $(tail -1 "$log/publish.txt") on the branch fingerprints of Laplace-Operations"
   else md "- the record was not published: $(tail -1 "$log/publish.txt")"; fi

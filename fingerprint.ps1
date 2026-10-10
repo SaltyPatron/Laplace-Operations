@@ -187,7 +187,7 @@ try {
       switch (Same $a $b) { 'same' { "    claims $($p[1]): same ($a)" } 'differs' { if ($in -eq 'differs') { "    claims $($p[1]): differs: $a here, $b there   $(Why $in)" } else { "    claims $($p[1]): DIFFERS: $a here, $b there   $(Why $in)"; $differs = $true } } default { "    claims $($p[1]): not decomposed there" } }
     }
   }
-  if (-not $n) { "  no other machine has a record for $key yet" }
+  if (-not $n) { "INCOMPLETE: no other machine has a record for $key; cross-machine equivalence was not verified" }
   $dirty = [bool]($rec | Where-Object { $_ -match '\+dirty' })
   if ($dirty) { 'not published: a checkout has changes not committed' }
   elseif (-not $NoPublish) {
@@ -203,4 +203,5 @@ try {
     }
   }
   if ($differs -or ($rec | Where-Object { $_ -match '^determinism .* DIFFERS' })) { exit 1 }
+  if (-not $have -or -not $n) { exit 2 }
 } finally { Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue }

@@ -90,7 +90,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations, clean: false }
-      - name: does it work on another machine (the build, determinism, HART-DESKTOP's record)
+      - name: Verify local repeatability and compare build records
         env:
           LAPLACE_FINGERPRINT_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
         run: ./Laplace-Operations/verify.sh build
@@ -151,7 +151,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations, clean: false }
-      - name: does it work on another machine (this build's record beside hart-server's and HART-DESKTOP's)
+      - name: Verify local repeatability and compare build records
         env:
           LAPLACE_FINGERPRINT_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
         run: ./Laplace-Operations/verify.sh build
