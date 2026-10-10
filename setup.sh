@@ -6,7 +6,8 @@
 #                              appdb | backup | site | agents | idlestop | report
 #   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
 #   sudo ./setup.sh shares     the SMB shares for the development machine (LAPLACE_SHARES); not part of all
-#   sudo ./setup.sh landing    where other hosts' backups land (LAPLACE_LANDING, backup/landing.keys); not part of all
+#   sudo ./setup.sh landing    where other hosts' backups land (LAPLACE_LANDING, backup/landing.keys): part of all on the
+#                              host that has that volume, passed over on one that does not
 #   sudo LAPLACE_DROP=/data/pgdata ./setup.sh drop all
 #                              the cluster dropped and made again, empty: never part of all, and named to be dropped
 #
@@ -594,7 +595,7 @@ shares(){ part shares
   say "smbd" "$(systemctl is-active smbd), $(ss -ltn | grep -q ':445 ' && echo 'listening on :445' || echo 'NOT LISTENING on :445')"
   say "shares" "$(echo "$LAPLACE_SHARES" | awk -v h="$(hostname)" 'NF {printf "\\\\%s\\%s  ", h, $1}')"
 }
-# Where other hosts' backups land (not part of all): a host that declares LAPLACE_LANDING takes them over ssh from
+# Where other hosts' backups land (part of all where the volume is): the host with LAPLACE_LANDING's volume takes them over ssh from
 # the hosts backup/landing.keys names, each under its own directory and write-only (rrsync -wo: a sender cannot read,
 # change or remove what is there, its own earlier dumps included, so a host that is taken over cannot destroy its
 # backups). The directory is on a volume of its own, never the system's: an array that is not mounted is refused, not
@@ -604,8 +605,11 @@ landing(){ part landing
   L=$LAPLACE_LANDING; U=$LAPLACE_LANDING_USER; keys=$here/backup/landing.keys
   [ -n "$L" ] || { say "landing" "LAPLACE_LANDING is empty: nothing lands here"; return; }
   command -v rrsync >/dev/null || { echo "rrsync is not installed: the rsync package brings it"; exit 1; }
-  up=$(dirname "$L"); [ -d "$up" ] || { echo "$up is not there: the volume backups land on is not mounted"; exit 1; }
-  [ "$(stat -c %d "$up")" != "$(stat -c %d /)" ] || { echo "$up is on the system's volume: the backup volume is not mounted there; nothing is written"; exit 1; }
+  # asked for by name, a host without that volume is an error; as a part of all it is a host that is not the landing host
+  up=$(dirname "$L")
+  if [ ! -d "$up" ] || [ "$(stat -c %d "$up")" = "$(stat -c %d /)" ]; then
+    if [ "${landing_of_all:-}" = 1 ]; then say "landing" "not here: $up is no volume of its own on this host (the landing host is the one that has it)"; return; fi
+    echo "$up is not a mounted volume of its own: the backup volume is not there, and nothing is written beside the system"; exit 1; fi
   id "$U" >/dev/null 2>&1 || { useradd --system --home-dir "$L" --no-create-home --shell /bin/sh "$U"; say "user" "made $U (no password; ssh by key, to rrsync only)"; }
   passwd -l "$U" >/dev/null 2>&1 || true
   install -d -o root -g root -m 0755 "$L" "$L/.ssh"
@@ -654,7 +658,7 @@ parts=${*:-all}
 for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing) ;;
   *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
-  all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup; site; agents; idlestop; report ;;
+  all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup; landing_of_all=1; landing; landing_of_all=; site; agents; idlestop; report ;;
   *) "$p" ;;
 esac; done
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
