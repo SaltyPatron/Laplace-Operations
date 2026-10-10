@@ -65,6 +65,7 @@ $DepOptions = @{
     zstd      = @('-DZSTD_BUILD_PROGRAMS=OFF', '-DZSTD_BUILD_TESTS=OFF', '-DZSTD_BUILD_CONTRIB=OFF')
     libxml2   = @('-DLIBXML2_WITH_PROGRAMS=OFF', '-DLIBXML2_WITH_PYTHON=OFF', '-DLIBXML2_WITH_TESTS=OFF', '-DLIBXML2_WITH_ICONV=OFF', '-DLIBXML2_WITH_HTTP=OFF')
     'json-c'  = @('-DBUILD_APPS=OFF')
+    libtiff   = @("-DCMath_LIBRARY=$Math")   # its required CMath (libm) is laplace-math itself: Intel's libm, found otherwise, collides with it on atan2/exp/log/pow
     curl      = @('-DBUILD_CURL_EXE=OFF', '-DCURL_USE_SCHANNEL=ON', '-DCURL_USE_LIBPSL=OFF')   # TLS from Windows, not OpenSSL: PROJ fetches grids
     'win-iconv' = @('-DWIN_ICONV_BUILD_TEST=OFF')
 }
@@ -93,9 +94,18 @@ function MsysPath([string]$path) { '/' + ($path.Substring(0, 1).ToLowerInvariant
 function GitIn([string]$dir) { & git.exe -C $dir @args 2>&1 }   # not named Git: a function would shadow git.exe
 # the developer shell, once, when icx is not already on the PATH: Visual Studio's vcvars64, oneAPI, CMake, the tools
 function DevShell {
-    if (Get-Command icx.exe -ErrorAction SilentlyContinue) { return $true }
-    if (-not (Test-Path $DevShell)) { return $false }
-    . $DevShell *> $null
+    # icx alone on the PATH is not the developer shell (laplace.env.ps1 puts oneAPI's bin there for the engine's run-time
+    # DLLs): the MSVC environment, which vcvars marks with VSCMD_VER, is what a build needs
+    if (-not ($env:VSCMD_VER -and (Get-Command icx.exe -ErrorAction SilentlyContinue))) {
+        if (-not (Test-Path $DevShell)) { return $false }
+        . $DevShell *> $null
+    }
+    # the manifest's build tools first on the PATH, ahead of any same-named program the shell brought (Git's perl, whose
+    # modules are Unix's, configured OpenSSL and generated PostgreSQL's headers wrongly)
+    foreach ($t in @(Manifest | Where-Object { $_.kind -eq 'tool' -and $_.build -eq 'unpack' })) {
+        $p = Prefix $t; if ($t.name -eq 'strawberry-perl') { $p = Join-Path $p 'perl\bin' }
+        if ((Test-Path $p) -and (($env:PATH -split ';') -notcontains $p)) { $env:PATH = "$p;$env:PATH" }
+    }
     [bool](Get-Command icx.exe -ErrorAction SilentlyContinue)
 }
 function PgReady { & "$PgBin\pg_isready.exe" -h $PgHost -p $PgPort 2>$null | Out-Null; $LASTEXITCODE -eq 0 }
@@ -121,6 +131,23 @@ function PgWaitReady([int]$minutes) {
 function GrantPg {
     foreach ($d in @($PgData, $PgWal, $PgTemp, $PgLogs)) { if ($d -and (Test-Path $d)) { & icacls.exe $d /grant '*S-1-5-20:(OI)(CI)M' /T /Q | Out-Null; if ($LASTEXITCODE) { throw "icacls $d exited $LASTEXITCODE" } } }
     & icacls.exe $PgDir /grant '*S-1-5-20:(OI)(CI)RX' /T /Q | Out-Null; if ($LASTEXITCODE) { throw "icacls $PgDir exited $LASTEXITCODE" }
+}
+# The floating-point contract as one text (toolchain\determinism.tsv). A build records the contract it was made under
+# beside what it installed, and is made again when the contract has changed since: a build tree keeps the flags it was
+# configured with, so it is made fresh.
+function Contract { ((Get-Content (Join-Path $PSScriptRoot 'toolchain\determinism.tsv') | Where-Object { $_ -match '^[a-z]' }) -join "`n") }
+function ContractMark($r) { Join-Path (Prefix $r) ".contract-$($r.name)" }
+# The server stopped around a step that replaces files it holds open (its own binaries, the DLLs beside them): the
+# service, elevated, never under an ingest; a hand-started server is not touched and the step is refused.
+function WithServerStopped([string]$what, [scriptblock]$body) {
+    $svc = Get-Service -Name $PgService -ErrorAction SilentlyContinue
+    $running = [bool]($svc -and $svc.Status -eq 'Running')
+    if (-not $svc -and (Test-Path (Join-Path $PgData 'postmaster.pid'))) { throw "$what replaces files the hand-started server holds; stop it first" }
+    if ($running -and -not (Admin)) { throw "$what replaces files the running server holds; elevated, or stop $PgService first" }
+    if ($running -and (TuneIngesting)) { throw "$what needs the server stopped, and an ingest is running" }
+    if ($running) { Stop-Service -Name $PgService -Force; Say $what "$PgService stopped" }
+    try { & $body }
+    finally { if ($running) { Start-Service -Name $PgService; if (PgWaitReady 120) { Say $what "$PgService started" } else { Say $what "$PgService DID NOT START; see its log" } } }
 }
 # The dependency manifest (dependencies.tsv), this platform's rows, in file order; the row's prefix, and the file that
 # proves it installed (proof, relative to the prefix: the checkout for a row built into Laplace, PostgreSQL's prefix
@@ -228,7 +255,7 @@ function deps {
             # passed over when the machine's MSYS2 (LAPLACE_MSYS2) is already there. amalgamation: a source archive,
             # unpacked in the source store for the build below. Anything else is installed another way (uv tool).
             if (-not $r.origin.StartsWith('https://') -or $r.build -notin 'unpack', 'sfx', 'amalgamation') { continue }
-            if ($r.build -eq 'sfx' -and (Test-Path (Join-Path $Msys2 'usr$checkoutin$checkoutash.exe'))) { Say $what "MSYS2 is at $Msys2"; continue }
+            if ($r.build -eq 'sfx' -and (Test-Path (Join-Path $Msys2 'usr\bin\bash.exe'))) { Say $what "MSYS2 is at $Msys2"; continue }
             Attempt $what {
                 $store = Join-Path (Join-Path $DepSrc $r.name) $r.version
                 $prefix = if ($r.build -eq 'amalgamation') { Join-Path $store 'source' } else { Prefix $r }
@@ -287,13 +314,23 @@ function deps {
     if (-not (Test-Path $Math) -or $missing.Count) {
         if (-not (DevShell)) { Say 'builds' "NOT BUILT: no icx; the developer shell $DevShell is missing or does not provide it"; $failed.Add('deps: no icx'); return }
     }
-    if (Test-Path $Math) { Say 'laplace-math' $Math }
+    $mathMark = Join-Path (Split-Path $Math) '.contract'
+    if ((Test-Path $Math) -and (Test-Path $mathMark) -and (Get-Content $mathMark -Raw) -eq (Contract)) { Say 'laplace-math' $Math }
     else {
+        if (Test-Path $Math) { Say 'laplace-math' $(if (Test-Path $mathMark) { 'the contract changed since it was built: built again' } else { 'built before the contract was recorded: built again' }) }
+        if (-not (DevShell)) { Say 'laplace-math' "NOT BUILT: no icx; the developer shell $DevShell is missing or does not provide it"; $failed.Add('deps: no icx'); return }
         Attempt 'laplace-math' {
             $b = Split-Path $Math
-            Exec cmake.exe @('-S', (Join-Path $PSScriptRoot 'math'), '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DCORE_MATH=$env:LAPLACE_COREMATH")
-            Exec cmake.exe @('--build', $b)
+            if (Test-Path $b) { Remove-Item $b -Recurse -Force }
+            # the one build that needs no LAPLACE_MATH: the toolchain file reads the environment's in every compiler probe and
+            # would refuse it, since it is this library, so the variable is out of the environment while it builds
+            $saved = $env:LAPLACE_MATH; Remove-Item Env:LAPLACE_MATH
+            try {
+                Exec cmake.exe @('-S', (Join-Path $PSScriptRoot 'math'), '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DCORE_MATH=$env:LAPLACE_COREMATH")
+                Exec cmake.exe @('--build', $b)
+            } finally { $env:LAPLACE_MATH = $saved }
             if (-not (Test-Path $Math)) { throw "no library at $Math" }
+            Set-Content -Path $mathMark -Value (Contract) -NoNewline
             Say 'laplace-math' "built: $Math"
         }
     }
@@ -301,10 +338,16 @@ function deps {
         $what = "$($r.name) $($r.version)"
         $proof = Proof $r; $prefix = Prefix $r; $checkout = Checkout $r; $b = Join-Path (Join-Path $Build 'deps') $r.name
         if (-not $proof) { Say $what 'NO PROOF in dependencies.tsv: not built'; continue }
-        if (Test-Path $proof) { Say $what "installed at $prefix"; continue }
+        $mark = ContractMark $r; $compiled = $r.build -ne 'headers'
+        if (Test-Path $proof) {
+            if (-not $compiled -or ((Test-Path $mark) -and (Get-Content $mark -Raw) -eq (Contract))) { Say $what "installed at $prefix"; continue }
+            Say $what $(if (Test-Path $mark) { 'the contract changed since it was built: built again' } else { 'built before the contract was recorded: built again' })
+        }
         if (-not (Test-Path $checkout)) { Say $what "NOT BUILT: no source at $checkout"; continue }
+        if (-not (DevShell)) { Say $what "NOT BUILT: no icx; the developer shell $DevShell is missing or does not provide it"; $failed.Add('deps: no icx'); continue }
         $libs = @(DependsPrefixes $r)
         Attempt $what {
+            if (Test-Path $b) { Remove-Item $b -Recurse -Force }
             New-Item -ItemType Directory -Force $b | Out-Null
             switch ($r.build) {
                 'cmake' {
@@ -318,9 +361,13 @@ function deps {
                 'openssl' {
                     $zlib = $libs | Where-Object { $_ -match '\\zlib\\' } | Select-Object -First 1
                     if (-not $zlib) { throw 'openssl depends on zlib, which the manifest does not name' }
+                    # Strawberry Perl, the manifest's, by name: the first perl on the path may be Git's, whose modules are Unix's
+                    $perlRow = $rows | Where-Object name -eq 'strawberry-perl' | Select-Object -First 1
+                    $perl = if ($perlRow) { Join-Path (Prefix $perlRow) 'perl\bin\perl.exe' } else { 'perl.exe' }
+                    if (-not (Test-Path $perl)) { throw "no Strawberry Perl at $perl (dependencies.tsv)" }
                     Push-Location $b
                     try {
-                        if (-not (Test-Path 'configdata.pm')) { Exec perl.exe @((Join-Path $checkout 'Configure'), 'VC-WIN64A', 'CC=icx', "--prefix=$prefix", "--openssldir=$prefix\ssl", 'no-tests', 'shared', 'zlib', "--with-zlib-include=$zlib\include", "--with-zlib-lib=$zlib\lib\z.lib") }
+                        if (-not (Test-Path 'configdata.pm')) { Exec $perl @((Join-Path $checkout 'Configure'), 'VC-WIN64A', 'CC=icx', "--prefix=$prefix", "--openssldir=$prefix\ssl", 'no-tests', 'shared', 'zlib', "--with-zlib-include=$zlib\include", "--with-zlib-lib=$zlib\lib\z.lib") }
                         Exec nmake.exe @(); Exec nmake.exe @('install_sw')
                     } finally { Pop-Location }
                 }
@@ -347,16 +394,22 @@ function deps {
                     if ($LASTEXITCODE) { throw 'meson-native.py failed' }
                     $inc = ($libs | ForEach-Object { "$_\include" -replace '\\', '/' }) -join ','
                     $lib = ($libs | ForEach-Object { foreach ($l in 'lib', 'lib64') { if (Test-Path "$_\$l") { "$_\$l" -replace '\\', '/' } } }) -join ','
-                    if (-not (Test-Path (Join-Path $b 'build.ninja'))) { Exec meson.exe (@('setup', $b, $checkout, "--native-file=$native", "-Dprefix=$prefix", "-Dextra_include_dirs=$inc", "-Dextra_lib_dirs=$lib") + $PgMesonOptions) }
-                    Exec ninja.exe @('-C', $b); Exec ninja.exe @('-C', $b, 'install')
+                    # ICU's Windows release carries no pkg-config or CMake package: Meson's CMake probe finds it, and the rest, by prefix
+                    $cmakePrefix = ($libs -replace '\\', '/') -join ','
+                    if (-not (Test-Path (Join-Path $b 'build.ninja'))) { Exec meson.exe (@('setup', $b, $checkout, "--native-file=$native", "-Dprefix=$prefix", "-Dextra_include_dirs=$inc", "-Dextra_lib_dirs=$lib", "-Dcmake_prefix_path=$cmakePrefix") + $PgMesonOptions) }
+                    Exec ninja.exe @('-C', $b)
+                    WithServerStopped $what { Exec ninja.exe @('-C', $b, 'install') }
                 }
                 'configure' {
                     # PostGIS: toolchain\windows\postgis.sh in MSYS2's shell, started from the developer shell
-                    $bash = Join-Path $Msys2 'usr$checkoutin$checkoutash.exe'
+                    $bash = Join-Path $Msys2 'usr\bin\bash.exe'
                     if (-not (Test-Path $bash)) { throw "no MSYS2 at $Msys2 (LAPLACE_MSYS2)" }
                     $env:MSYSTEM = 'MSYS'; $env:MSYS2_PATH_TYPE = 'inherit'; $env:CHERE_INVOKING = '1'
-                    try { Exec $bash @('-l', '-c', (MsysPath (Join-Path $PSScriptRoot 'toolchain\windows\postgis.sh'))) }
-                    finally { Remove-Item Env:MSYSTEM, Env:MSYS2_PATH_TYPE, Env:CHERE_INVOKING -ErrorAction SilentlyContinue }
+                    $sh = MsysPath (Join-Path $PSScriptRoot 'toolchain\windows\postgis.sh')
+                    try {
+                        Exec $bash @('-l', '-c', "$sh configure build")
+                        WithServerStopped $what { Exec $bash @('-l', '-c', "$sh install") }   # the DLLs go beside postgres.exe
+                    } finally { Remove-Item Env:MSYSTEM, Env:MSYS2_PATH_TYPE, Env:CHERE_INVOKING -ErrorAction SilentlyContinue }
                 }
                 'headers' {
                     foreach ($h in $DepHeaders[$r.name]) {
@@ -365,7 +418,9 @@ function deps {
                     }
                 }
             }
-            if (Test-Path $proof) { Say $what "built and installed at $prefix" } else { throw "DID NOT INSTALL: no $proof; the build is $b" }
+            if (-not (Test-Path $proof)) { throw "DID NOT INSTALL: no $proof; the build is $b" }
+            if ($compiled) { Set-Content -Path $mark -Value (Contract) -NoNewline }
+            Say $what "built and installed at $prefix"
         }
     }
 }
@@ -387,7 +442,7 @@ function cluster {
         if (-not (Test-Path (Join-Path $PgData 'PG_VERSION'))) { return }
     } else {
         $checksums = (& "$PgBin\pg_controldata.exe" $PgData 2>$null | Where-Object { $_ -match 'checksum version:\s+(\d+)' } | ForEach-Object { $Matches[1] })
-        Say 'cluster' "$(Get-Content (Join-Path $PgData 'PG_VERSION')) in $PgData$(if ($checksums -eq '0') { '   NO DATA CHECKSUMS: Sequence 8 wants --data-checksums; drop makes the cluster again' })"
+        Say 'cluster' "$(Get-Content (Join-Path $PgData 'PG_VERSION')) in $PgData$(if ($checksums -eq '0') { '   no data checksums: enabled below (Sequence 8)' })"
     }
     Attempt 'rights' { GrantPg }
 
@@ -415,6 +470,10 @@ function cluster {
     # after an unclean stop the server replays its log before it listens
     if (-not (PgWaitReady 120)) { Say 'cluster' 'FAILED: not accepting connections after two hours; see the log'; $failed.Add('cluster: not ready'); return }
     Say 'cluster' "accepting connections on ${PgHost}:$PgPort ($(PgSql 'SELECT version()'))"
+    # data checksums (Sequence 8): a cluster made without them gets them in place, stopped, by pg_checksums
+    if ((PgSql 'SHOW data_checksums') -ne 'on') {
+        Attempt 'data checksums' { WithServerStopped 'data checksums' { Exec "$PgBin\pg_checksums.exe" @('--enable', '-D', $PgData) }; Say 'data checksums' "$(PgSql 'SHOW data_checksums') (pg_checksums --enable)" }
+    } else { Say 'data checksums' 'on' }
     if ($PgTemp) { Attempt 'tablespace pgtemp' { if ((PgSql "SELECT count(*) FROM pg_tablespace WHERE spcname = 'pgtemp'") -ne '1') { PgSql "CREATE TABLESPACE pgtemp LOCATION '$($PgTemp -replace '\\', '/')'" | Out-Null }; Say 'tablespace pgtemp' $PgTemp } }
     if (-not (Test-Path (Join-Path $PgData 'server.crt'))) {
         Attempt 'certificate' {
@@ -464,8 +523,10 @@ function settings {
         foreach ($line in (TunePsql "SELECT '  '||rpad(name, 46)||current_setting(name) FROM pg_settings WHERE name IN ('shared_buffers','effective_cache_size','work_mem','maintenance_work_mem','io_method','max_wal_size','wal_buffers','listen_addresses','ssl') ORDER BY name")) { $line }
     } finally { Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue }
 }
-# Who may connect, and how (setup.sh: access). The whole pg_hba.conf, not a line added to whatever is there: laplace
-# and postgres by scram on loopback, by scram over TLS from $PgLan, nothing else (no socket on Windows: no peer). The
+# Who may connect, and how (setup.sh: access). The whole pg_hba.conf, not a line added to whatever is there: the role
+# on loopback by SSPI under the pg_ident map (the host authenticates the identities LAPLACE_PG_IDENTITIES names, the
+# counterpart of Linux's peer socket: no password on this machine for the operator, IIS's pool or a service), postgres
+# by scram on loopback, both by scram over TLS from $PgLan, nothing else. The
 # role's password is one canonical copy, administrators only, adopted from the operator's pgpass when it is the one
 # the server accepts, made when none is, and written into the operator's %APPDATA%\postgresql\pgpass.conf, which libpq
 # reads for psql and the laplace program. Only this host's line for the role is replaced there: the operator's lines
@@ -514,9 +575,9 @@ function access {
     Attempt 'role postgres' { if ((PgSql "SELECT count(*) FROM pg_roles WHERE rolname = 'postgres'") -ne '1') { PgSql 'CREATE ROLE postgres LOGIN SUPERUSER' | Out-Null }; PgSql "ALTER ROLE postgres PASSWORD 'postgres'" | Out-Null; Say 'role postgres' "password postgres: locally and from $PgLan over TLS (setup.sh declares the same)" }
     Attempt 'pg_hba.conf' {
         $hba = @(
-            "# Laplace (setup.ps1). Loopback: laplace and postgres by scram. The network: scram over TLS from $PgLan. Nothing else.",
-            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', $PgRole,    '127.0.0.1/32', 'scram-sha-256'),
-            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', $PgRole,    '::1/128',      'scram-sha-256'),
+            "# Laplace (setup.ps1). Loopback: $PgRole by SSPI under the map (pg_ident.conf), postgres by scram. The network: scram over TLS from $PgLan. Nothing else.",
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', $PgRole,    '127.0.0.1/32', "sspi map=$PgRole include_realm=0"),
+            ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', $PgRole,    '::1/128',      "sspi map=$PgRole include_realm=0"),
             ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'hostssl',   'all', $PgRole,    $PgLan,         'scram-sha-256'),
             ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', 'postgres', '127.0.0.1/32', 'scram-sha-256'),
             ('{0,-10}{1,-6}{2,-10}{3,-20}{4}' -f 'host',      'all', 'postgres', '::1/128',      'scram-sha-256'),
@@ -529,6 +590,18 @@ function access {
         Set-Content -Path $file -Value ($hba + "`n") -Encoding ascii -NoNewline
         PgSql 'SELECT pg_reload_conf()' | Out-Null
         Say 'pg_hba.conf' 'written'
+    }
+    Attempt 'pg_ident.conf' {
+        # the map: each identity LAPLACE_PG_IDENTITIES names, as SSPI presents it with the realm stripped, is the role
+        $ident = @("# Laplace (setup.ps1). The identities this host authenticates as $PgRole (LAPLACE_PG_IDENTITIES).") +
+            @(($env:LAPLACE_PG_IDENTITIES -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ } | ForEach-Object { '{0,-10}{1,-24}{2}' -f $PgRole, ('"' + $_ + '"'), $PgRole })
+        $ident = $ident -join "`n"
+        $file = Join-Path $PgData 'pg_ident.conf'
+        if ((Test-Path $file) -and ((Get-Content $file -Raw) -replace "`r`n", "`n").TrimEnd() -eq $ident) { Say 'pg_ident.conf' 'as declared'; return }
+        if (Test-Path $file) { Copy-Item $file "$file.before" -Force }
+        Set-Content -Path $file -Value ($ident + "`n") -Encoding ascii -NoNewline
+        PgSql 'SELECT pg_reload_conf()' | Out-Null
+        Say 'pg_ident.conf' 'written'
     }
     Attempt 'firewall' {
         # any enabled inbound allow rule for the server's port admits it already (an earlier install's rule counts); one is made only when none exists

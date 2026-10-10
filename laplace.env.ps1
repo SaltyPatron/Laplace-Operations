@@ -36,6 +36,11 @@ Set-Default LAPLACE_PGSERVICE 'laplace-postgres'                            # th
 Set-Default LAPLACE_PGUSER  'NT AUTHORITY\NetworkService'                   # the account the service runs as (S-1-5-20): owns the data and the logs, reads the install
 Set-Default LAPLACE_ROLE    'laplace'                                       # the database role Laplace connects as
 Set-Default LAPLACE_LAN     '192.168.1.0/24'                                # the network the server is reachable from; hart-server is on it
+# The Windows identities this host authenticates as the role over loopback (SSPI, pg_ident map; setup.ps1 access): the
+# counterpart of Linux's peer socket. The operator; IIS's pool for the monorepo's site (deploy\windows\Install-LaplaceSite.ps1:
+# LaplacePool); the account the monorepo's managed services run as (scripts\win\ensure-managed-services.ps1: LocalService).
+# Realm-stripped names, as SSPI presents them (include_realm=0).
+Set-Default LAPLACE_PG_IDENTITIES "$env:USERNAME,LaplacePool,LOCAL SERVICE"
 Set-Default LAPLACE_LOCKS   "$env:LAPLACE_WORK\locks"                       # one deployment or ingest per database at a time: the locks
 Set-Default LAPLACE_PGHOST  '127.0.0.1'                                     # where this machine's own tools reach the server: loopback (Windows has no socket)
 Set-Default LAPLACE_PGPORT  '5432'                                          # the port the server listens on; the settings, the access rules and the firewall follow it
@@ -53,6 +58,12 @@ Set-Default LAPLACE_PEER_KEY "$env:USERPROFILE\.ssh\id_hartserver"
 Set-Default LAPLACE_PG_RESERVED    '34GB'   # memory the machine's other residents keep: the three llama-server services commit about 34 of 48 GB (2026-10-05)
 Set-Default LAPLACE_PG_BUFFERS_MAX '1GB'    # the largest shared memory this Windows build maps in every backend: at 4GB 826 backends in three hours could not (error 487); 1GB maps (2026-10-05)
 Set-Default LAPLACE_PGWAL_ROOM     '32GB'   # the log's bound when it shares its drive (D: holds the heap, the sources and the models); a dedicated drive gets half of itself
+Set-Default LAPLACE_PG_PRELOAD     'pg_stat_statements,auto_explain,laplace_substrate'   # the libraries the server loads at start: observability (tune-pg.sh), and the monorepo's substrate, which this server also serves (database laplace-mono)
+Set-Default LAPLACE_PG_LIBDIRS     'D:\Data\Laplace\deploy\lib'   # where the monorepo installs its extension DLLs (scripts\win\install-extensions.cmd); a preload library is declared only once its DLL is there
+# What an ingest decomposes at once (laplace ingest: LAPLACE_BATCH_MB, 1024 unless set): the batch's node table lives in
+# memory, and an XML source spends far more memory than its bytes. This machine has 13 GB left after the llama
+# services' 34 GB; FrameNet's 849 MB as one batch ran out of it (realloc: Not enough space, 2026-10-05). 256 MB fits.
+Set-Default LAPLACE_BATCH_MB       '256'
 
 # The desktop's own parts (setup.ps1 shares, services, backup; none is part of all): the deployment target's shares
 # this machine reaches by UNC path with a Credential Manager entry, the GPU services the operator starts and stops
@@ -83,4 +94,19 @@ Set-Default LAPLACE_ICU_DIR  "$env:LAPLACE_DEPS\icu78"                      # IC
 Set-Default LAPLACE_BLAKE3_DIR "$env:LAPLACE_DEPSRC\blake3\c"
 Set-Default LAPLACE_COREMATH   "$env:LAPLACE_DEPSRC\core-math"
 Set-Default LAPLACE_TREESITTER "$env:LAPLACE_DEPSRC\tree-sitter"
-Set-Default LAPLACE_MATH       "$env:LAPLACE_BUILD\..\laplace-math\icx-release\laplace-math.lib"
+Set-Default LAPLACE_ZLIB_DIR    "$env:LAPLACE_DEPS\zlib\1.3.2"              # Laplace-Engine on Windows: zlib's import library and headers (dependencies.tsv)
+Set-Default LAPLACE_EIGEN_DIR   "$env:LAPLACE_DEPSRC\eigen"                 # Laplace-Native's laplace_linalg: the checkouts at the manifest's pins
+Set-Default LAPLACE_SPECTRA_DIR "$env:LAPLACE_DEPSRC\spectra"
+Set-Default LAPLACE_MATH       "$env:LAPLACE_BUILD\..\laplace-math\icx-release\laplace-math.lib"   # setup.ps1 deps builds it first (math\CMakeLists.txt)
+
+# What the engine reads is '/'-separated on every platform (Laplace-Engine src/os.h): its paths, whatever a shell wrote
+foreach ($n in 'LAPLACE_DATA', 'LAPLACE_WORK', 'LAPLACE_TIER0', 'LAPLACE_HIGHWAY', 'LAPLACE_RECIPES', 'LAPLACE_FIRMWARE', 'LAPLACE_GRAMMARS', 'LAPLACE_UCD', 'LAPLACE_NATIVE') {
+    $v = [Environment]::GetEnvironmentVariable($n); if ($v) { [Environment]::SetEnvironmentVariable($n, ($v -replace '\\', '/')) }
+}
+
+# The engine's run-time libraries, on the PATH once (Toolchain 2.7: the one environment file sources oneAPI): MKL and
+# OpenMP from oneAPI's redistributable directories, libpq beside the server, ICU, zlib, and the engine itself.
+Set-Default LAPLACE_ONEAPI 'C:\Program Files (x86)\Intel\oneAPI'
+foreach ($d in @("$env:LAPLACE_BUILD\Laplace-Engine\icx-release", "$env:LAPLACE_PG_DIR\bin", "$env:LAPLACE_ICU_DIR\bin64", "$env:LAPLACE_ZLIB_DIR\bin", "$env:LAPLACE_ONEAPI\mkl\latest\bin", "$env:LAPLACE_ONEAPI\compiler\latest\bin")) {
+    if ((Test-Path $d) -and (($env:PATH -split ';') -notcontains $d)) { $env:PATH = "$d;$env:PATH" }
+}
