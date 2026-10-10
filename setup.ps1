@@ -35,7 +35,7 @@ $ErrorActionPreference = 'Stop'
 
 $Src = $env:LAPLACE_SRC; $Build = $env:LAPLACE_BUILD; $Work = $env:LAPLACE_WORK; $DepSrc = $env:LAPLACE_DEPSRC; $Deps = $env:LAPLACE_DEPS; $Data = $env:LAPLACE_DATA
 $PgDir = $env:LAPLACE_PG_DIR; $PgBin = Join-Path $PgDir 'bin'; $PgData = $env:LAPLACE_PGDATA; $PgWal = $env:LAPLACE_PGWAL; $PgTemp = $env:LAPLACE_PGTEMP
-$PgService = $env:LAPLACE_PGSERVICE; $PgAccount = $env:LAPLACE_PGUSER; $PgRole = $env:LAPLACE_ROLE; $PgLan = $env:LAPLACE_LAN; $Locks = $env:LAPLACE_LOCKS
+$PgHost = $env:LAPLACE_PGHOST; $PgPort = $env:LAPLACE_PGPORT; $PgService = $env:LAPLACE_PGSERVICE; $PgAccount = $env:LAPLACE_PGUSER; $PgRole = $env:LAPLACE_ROLE; $PgLan = $env:LAPLACE_LAN; $Locks = $env:LAPLACE_LOCKS
 $PgLogs = Join-Path $Work 'logs\postgres'
 $PgCanon = 'C:\ProgramData\Laplace\pgpass.conf'   # the role's password: one canonical copy, administrators only (setup.sh: /etc/laplace/pgpass)
 $Math = $env:LAPLACE_MATH; $Msys2 = $env:LAPLACE_MSYS2; $DevShell = $env:LAPLACE_DEVSHELL
@@ -98,16 +98,16 @@ function DevShell {
     . $DevShell *> $null
     [bool](Get-Command icx.exe -ErrorAction SilentlyContinue)
 }
-function PgReady { & "$PgBin\pg_isready.exe" -h 127.0.0.1 -p 5432 2>$null | Out-Null; $LASTEXITCODE -eq 0 }
+function PgReady { & "$PgBin\pg_isready.exe" -h $PgHost -p $PgPort 2>$null | Out-Null; $LASTEXITCODE -eq 0 }
 # one statement to the server, as a superuser: postgres (trust on a cluster initdb made; its declared password after
 # access), else the role with the canonical password
 function PgSql([string]$sql) {
     try {
         $env:PGPASSWORD = 'postgres'
-        $out = & "$PgBin\psql.exe" -X -h 127.0.0.1 -p 5432 -U postgres -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
+        $out = & "$PgBin\psql.exe" -X -h $PgHost -p $PgPort -U postgres -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
         if (-not $LASTEXITCODE) { return $out }
         Remove-Item Env:PGPASSWORD; $env:PGPASSFILE = $PgCanon
-        $out = & "$PgBin\psql.exe" -X -h 127.0.0.1 -p 5432 -U $PgRole -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
+        $out = & "$PgBin\psql.exe" -X -h $PgHost -p $PgPort -U $PgRole -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
         if ($LASTEXITCODE) { throw "psql: $($out -join ' ')" }
         $out
     } finally { Remove-Item Env:PGPASSWORD, Env:PGPASSFILE -ErrorAction SilentlyContinue }
@@ -414,7 +414,7 @@ function cluster {
     if ($svc.Status -ne 'Running') { Attempt "service $PgService start" { Start-Service -Name $PgService; Say "service $PgService" 'started' } }
     # after an unclean stop the server replays its log before it listens
     if (-not (PgWaitReady 120)) { Say 'cluster' 'FAILED: not accepting connections after two hours; see the log'; $failed.Add('cluster: not ready'); return }
-    Say 'cluster' "accepting connections on 127.0.0.1:5432 ($(PgSql 'SELECT version()'))"
+    Say 'cluster' "accepting connections on ${PgHost}:$PgPort ($(PgSql 'SELECT version()'))"
     if ($PgTemp) { Attempt 'tablespace pgtemp' { if ((PgSql "SELECT count(*) FROM pg_tablespace WHERE spcname = 'pgtemp'") -ne '1') { PgSql "CREATE TABLESPACE pgtemp LOCATION '$($PgTemp -replace '\\', '/')'" | Out-Null }; Say 'tablespace pgtemp' $PgTemp } }
     if (-not (Test-Path (Join-Path $PgData 'server.crt'))) {
         Attempt 'certificate' {
@@ -469,8 +469,8 @@ function settings {
 # role's password is one canonical copy, administrators only, adopted from the operator's pgpass when it is the one
 # the server accepts, made when none is, and written into the operator's %APPDATA%\postgresql\pgpass.conf, which libpq
 # reads for psql and the laplace program. Only this host's line for the role is replaced there: the operator's lines
-# for other hosts (hart-server's database) are theirs and stay. Never printed. The firewall admits 5432/tcp from $PgLan.
-function PgWorks([string]$pw) { $env:PGPASSWORD = $pw; $r = & "$PgBin\psql.exe" -X -h 127.0.0.1 -p 5432 -U $PgRole -d postgres -Atq -c 'SELECT 1' 2>$null; Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue; "$r" -eq '1' }
+# for other hosts (hart-server's database) are theirs and stay. Never printed. The firewall admits the server's port (LAPLACE_PGPORT) from $PgLan.
+function PgWorks([string]$pw) { $env:PGPASSWORD = $pw; $r = & "$PgBin\psql.exe" -X -h $PgHost -p $PgPort -U $PgRole -d postgres -Atq -c 'SELECT 1' 2>$null; Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue; "$r" -eq '1' }
 function PgPassOf([string]$file) { if (Test-Path $file) { foreach ($l in Get-Content $file) { $f = $l -split ':'; if ($f.Count -ge 5 -and $f[3] -eq $PgRole -and $f[0] -in '*', 'localhost', '127.0.0.1', '::1', $env:COMPUTERNAME) { return ($f[4..($f.Count - 1)] -join ':') } } }; $null }
 function access {
     Part 'access'
@@ -490,7 +490,7 @@ function access {
                 if (-not (PgWorks $peer)) { PgSql "ALTER ROLE $PgRole PASSWORD '$($peer -replace "'", "''")'" | Out-Null }
                 $pw = $peer; $how = "password the installation's, from $($env:LAPLACE_PEER)"
                 New-Item -ItemType Directory -Force (Split-Path $PgCanon) | Out-Null
-                Set-Content -Path $PgCanon -Value "*:5432:*:${PgRole}:$pw" -Encoding ascii -NoNewline
+                Set-Content -Path $PgCanon -Value "*:${PgPort}:*:${PgRole}:$pw" -Encoding ascii -NoNewline
                 & icacls.exe $PgCanon /inheritance:r /grant '*S-1-5-32-544:F' /Q | Out-Null
             } else { Say "role $PgRole" "$($env:LAPLACE_PEER) did not answer with a password for ${PgRole}: this machine's own is kept" }
         }
@@ -501,13 +501,13 @@ function access {
             if (-not $pw -and $keep) { $pw = $keep; PgSql "ALTER ROLE $PgRole PASSWORD '$($pw -replace "'", "''")'" | Out-Null; $how = "password from $PgCanon" }
             if (-not $pw) { $pw = [Convert]::ToBase64String((1..24 | ForEach-Object { Get-Random -Maximum 256 })) -replace '[/+=]', ''; $pw = $pw.Substring(0, [math]::Min(32, $pw.Length)); PgSql "ALTER ROLE $PgRole PASSWORD '$pw'" | Out-Null; $how = 'password made' }
             New-Item -ItemType Directory -Force (Split-Path $PgCanon) | Out-Null
-            Set-Content -Path $PgCanon -Value "*:5432:*:${PgRole}:$pw" -Encoding ascii -NoNewline
+            Set-Content -Path $PgCanon -Value "*:${PgPort}:*:${PgRole}:$pw" -Encoding ascii -NoNewline
             & icacls.exe $PgCanon /inheritance:r /grant '*S-1-5-32-544:F' /Q | Out-Null
         }
         # the operator's pgpass: this host's line for the role replaced, every other line kept
         New-Item -ItemType Directory -Force (Split-Path $operator) | Out-Null
         $rest = @(); if (Test-Path $operator) { $rest = @(Get-Content $operator | Where-Object { $f = $_ -split ':'; $f.Count -lt 5 -or $f[3] -ne $PgRole -or $f[0] -notin '*', 'localhost', '127.0.0.1', '::1', $env:COMPUTERNAME }) }
-        Set-Content -Path $operator -Value (@($rest) + "*:5432:*:${PgRole}:$pw") -Encoding ascii
+        Set-Content -Path $operator -Value (@($rest) + "*:${PgPort}:*:${PgRole}:$pw") -Encoding ascii
         $pw = $null
         Say "role $PgRole" "$how; written to $operator"
     }
@@ -531,10 +531,10 @@ function access {
         Say 'pg_hba.conf' 'written'
     }
     Attempt 'firewall' {
-        # any enabled inbound allow rule for 5432/tcp admits the port already (an earlier install's rule counts); one is made only when none exists
-        $have = @(Get-NetFirewallRule -Direction Inbound -Action Allow -Enabled True -ErrorAction SilentlyContinue | Where-Object { ($_ | Get-NetFirewallPortFilter).LocalPort -contains '5432' })
-        if ($have.Count) { Say 'firewall' "5432/tcp admitted by: $(($have | ForEach-Object DisplayName) -join ', ')" }
-        else { New-NetFirewallRule -DisplayName 'Laplace PostgreSQL' -Direction Inbound -Protocol TCP -LocalPort 5432 -RemoteAddress $PgLan -Action Allow -Profile Any | Out-Null; Say 'firewall' "5432/tcp from $PgLan allowed" }
+        # any enabled inbound allow rule for the server's port admits it already (an earlier install's rule counts); one is made only when none exists
+        $have = @(Get-NetFirewallRule -Direction Inbound -Action Allow -Enabled True -ErrorAction SilentlyContinue | Where-Object { ($_ | Get-NetFirewallPortFilter).LocalPort -contains $PgPort })
+        if ($have.Count) { Say 'firewall' "$PgPort/tcp admitted by: $(($have | ForEach-Object DisplayName) -join ', ')" }
+        else { New-NetFirewallRule -DisplayName 'Laplace PostgreSQL' -Direction Inbound -Protocol TCP -LocalPort $PgPort -RemoteAddress $PgLan -Action Allow -Profile Any | Out-Null; Say 'firewall' "$PgPort/tcp from $PgLan allowed" }
     }
     PgSql "SELECT '  '||rpad(type, 10)||rpad(array_to_string(user_name, ','), 10)||rpad(coalesce(address, '-'), 18)||auth_method||coalesce('   '||error, '') FROM pg_hba_file_rules ORDER BY rule_number"
 }
@@ -548,13 +548,13 @@ function report {
     if (-not (Test-Path "$PgBin\postgres.exe")) { Say 'server' "MISSING: no server at $PgBin (deps)"; return }
     Say 'server' "$(& "$PgBin\postgres.exe" --version)   $(if (PgReady) { 'accepting connections' } else { 'NOT ACCEPTING CONNECTIONS' })"
     if (-not (PgReady)) { return }
-    $conn = "host=127.0.0.1 port=5432 user=$PgRole dbname=postgres"
+    $conn = "host=$PgHost port=$PgPort user=$PgRole dbname=postgres"
     Say 'PostGIS' "$(& "$PgBin\psql.exe" -X $conn -Atq -c "SELECT coalesce(default_version, 'NOT INSTALLED') FROM pg_available_extensions WHERE name = 'postgis'" 2>&1 | Select-Object -Last 1)"
-    Say 'listening' ((Get-NetTCPConnection -LocalPort 5432 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { "$($_.LocalAddress):5432" } | Sort-Object -Unique) -join ' ')
+    Say 'listening' ((Get-NetTCPConnection -LocalPort $PgPort -State Listen -ErrorAction SilentlyContinue | ForEach-Object { "$($_.LocalAddress):$PgPort" } | Sort-Object -Unique) -join ' ')
     $net = ($PgLan -split '/')[0] -replace '\.\d+$', ''
     $addr = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -like "$net.*" } | Select-Object -First 1).IPAddress
     if ($addr) {
-        $r = & "$PgBin\psql.exe" -X "host=$addr port=5432 user=$PgRole dbname=postgres sslmode=require" -Atq -c "SELECT 'connected, TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')" 2>&1 | Select-Object -Last 1
+        $r = & "$PgBin\psql.exe" -X "host=$addr port=$PgPort user=$PgRole dbname=postgres sslmode=require" -Atq -c "SELECT 'connected, TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')" 2>&1 | Select-Object -Last 1
         Say "this database from $PgLan, as $PgRole" "$r"
     } else { Say "this database from $PgLan" 'this machine has no address on it' }
     $r = & "$PgBin\psql.exe" -X ($env:LAPLACE_CONNINFO -replace 'dbname=\S+', 'dbname=postgres') -Atq -c "SELECT 'connected to '||coalesce(host(inet_server_addr()), 'local')||' ('||split_part(version(), ',', 1)||') as '||current_user||', TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')" 2>&1 | Select-Object -Last 1

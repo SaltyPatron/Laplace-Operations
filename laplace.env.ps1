@@ -5,6 +5,21 @@
 # The compiler is the developer shell's (LAPLACE_DEVSHELL); this file sets no toolchain on the PATH.
 function Set-Default([string]$name, [string]$value) { if (-not [Environment]::GetEnvironmentVariable($name)) { [Environment]::SetEnvironmentVariable($name, $value) } }
 
+# Another machine declares what differs from HART-DESKTOP in %ProgramData%\Laplace\machine.env (LAPLACE_MACHINE_ENV
+# names another file): the counterpart of /etc/laplace/machine.env and the same format, one NAME=value per line, # for
+# a comment, %NAME% expanded. It is read first, so every tool and service on the machine sees one declaration without
+# anyone's shell environment; a value set in the environment still wins.
+$machineEnv = if ($env:LAPLACE_MACHINE_ENV) { $env:LAPLACE_MACHINE_ENV } else { Join-Path $env:ProgramData 'Laplace\machine.env' }
+if (Test-Path -LiteralPath $machineEnv) {
+    foreach ($line in Get-Content -LiteralPath $machineEnv) {
+        if ($line -match '^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$') {
+            $name = $Matches[1]; $value = $Matches[2]
+            if ($value.Length -ge 2 -and $value[0] -in '"', "'" -and $value[-1] -eq $value[0]) { $value = $value.Substring(1, $value.Length - 2) }
+            Set-Default $name ([Environment]::ExpandEnvironmentVariables($value))
+        }
+    }
+}
+
 Set-Default LAPLACE_SRC     'D:\Repositories\Laplace'                       # Laplace's repositories
 Set-Default LAPLACE_BUILD   'D:\Libraries\build\Laplace'                    # build trees
 Set-Default LAPLACE_WORK    'D:\Data\Laplace\work'                          # generated data and logs
@@ -22,7 +37,9 @@ Set-Default LAPLACE_PGUSER  'NT AUTHORITY\NetworkService'                   # th
 Set-Default LAPLACE_ROLE    'laplace'                                       # the database role Laplace connects as
 Set-Default LAPLACE_LAN     '192.168.1.0/24'                                # the network the server is reachable from; hart-server is on it
 Set-Default LAPLACE_LOCKS   "$env:LAPLACE_WORK\locks"                       # one deployment or ingest per database at a time: the locks
-Set-Default LAPLACE_CONNINFO "host=127.0.0.1 port=5432 user=$env:LAPLACE_ROLE dbname=laplace"   # libpq form; names the database. hart-server's: host=192.168.1.2 port=5432 user=laplace dbname=laplace sslmode=require
+Set-Default LAPLACE_PGHOST  '127.0.0.1'                                     # where this machine's own tools reach the server: loopback (Windows has no socket)
+Set-Default LAPLACE_PGPORT  '5432'                                          # the port the server listens on; the settings, the access rules and the firewall follow it
+Set-Default LAPLACE_CONNINFO "host=$env:LAPLACE_PGHOST port=$env:LAPLACE_PGPORT user=$env:LAPLACE_ROLE dbname=laplace"   # libpq form; names the database. hart-server's: host=192.168.1.2 port=5432 user=laplace dbname=laplace sslmode=require
 # The deployment target, whose operator holds the role's one password for the whole installation (setup.sh access writes
 # it into every operator's ~/.pgpass there): this machine's role takes it, so one pgpass line reaches both databases
 # and either machine is the other's client. Reached over the operator's SSH key. Unset: this machine makes its own.
