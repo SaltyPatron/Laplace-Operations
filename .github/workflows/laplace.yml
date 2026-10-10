@@ -50,6 +50,9 @@ jobs:
     timeout-minutes: 240
     outputs:
       ingest: ${{ steps.policy.outputs.ingest }}
+      native: ${{ steps.revisions.outputs.native }}
+      postgres: ${{ steps.revisions.outputs.postgres }}
+      engine: ${{ steps.revisions.outputs.engine }}
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations }
@@ -59,6 +62,18 @@ jobs:
         with: { repository: "${{ github.repository_owner }}/Laplace-postgres", ref: main, path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - uses: actions/checkout@v4
         with: { repository: "${{ github.repository_owner }}/Laplace-Engine", ref: main, path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - name: Record dependency revisions for production
+        id: revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for item in native:Laplace-Native postgres:Laplace-postgres engine:Laplace-Engine; do
+            key=${item%%:*}; repo=${item#*:}
+            sha=$(git -C "$repo" rev-parse --verify HEAD)
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+            echo "$key=$sha" >> "$GITHUB_OUTPUT"
+            echo "- $repo: $sha" >> "$GITHUB_STEP_SUMMARY"
+          done
       - name: the reseed policy
         id: policy
         env:
@@ -133,12 +148,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations }
+      - name: Require the dependency revisions checked in staging
+        shell: bash
+        env:
+          NATIVE: ${{ needs.deploy.outputs.native }}
+          POSTGRES: ${{ needs.deploy.outputs.postgres }}
+          ENGINE: ${{ needs.deploy.outputs.engine }}
+        run: |
+          set -euo pipefail
+          for sha in "$NATIVE" "$POSTGRES" "$ENGINE"; do
+            [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Missing or invalid staging revision'; exit 1; }
+          done
       - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-Native", ref: main, path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+        with: { repository: "${{ github.repository_owner }}/Laplace-Native", ref: "${{ needs.deploy.outputs.native }}", path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-postgres", ref: main, path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+        with: { repository: "${{ github.repository_owner }}/Laplace-postgres", ref: "${{ needs.deploy.outputs.postgres }}", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-Engine", ref: main, path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+        with: { repository: "${{ github.repository_owner }}/Laplace-Engine", ref: "${{ needs.deploy.outputs.engine }}", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - name: the build, the perf-caches, the database with its schema and extension, and its status
         run: |
           { echo "## hart-cloud: the deployment"; echo; echo "- $(lscpu | sed -n 's/^Model name: *//p')"
