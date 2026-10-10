@@ -80,6 +80,14 @@ EOF
   # its rights: none. An agent never has root: what needs root is setup.sh, run by a person (setup.sh rights says so for
   # every agent, and removes what said otherwise). Its unit is root's and read-only, so no member of the group edits it.
   unit=$(cat "$r/.service" 2>/dev/null); [ -n "$unit" ] && [ -f "/etc/systemd/system/$unit" ] && { chown root:root "/etc/systemd/system/$unit"; chmod 644 "/etc/systemd/system/$unit"; }
+  # A job that runs out of memory is that job's failure, not the listener's: the kernel's OOM killer took a benchmark
+  # worker on hart-cloud and systemd stopped the whole unit with it (2026-10-10). The listener stays up and reports the
+  # job failed; the kernel prefers the job's processes over the listener.
+  if [ -n "$unit" ]; then install -d "/etc/systemd/system/$unit.d"
+    printf '[Service]\nOOMPolicy=continue\nOOMScoreAdjust=-500\n' > "/etc/systemd/system/$unit.d/laplace.conf.new"
+    if ! cmp -s "/etc/systemd/system/$unit.d/laplace.conf.new" "/etc/systemd/system/$unit.d/laplace.conf"; then
+      mv -f "/etc/systemd/system/$unit.d/laplace.conf.new" "/etc/systemd/system/$unit.d/laplace.conf"; systemctl daemon-reload; say "unit" "OOMPolicy=continue (takes effect at the unit's next start)"
+    else rm -f "/etc/systemd/system/$unit.d/laplace.conf.new"; fi; fi
   rm -f /etc/sudoers.d/laplace-agent
   say "rights" "none: root is setup.sh's, run by a person; unit root's, 644"
   # the secret that reads the private repositories it checks out beside itself
