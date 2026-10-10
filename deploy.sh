@@ -13,6 +13,9 @@
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/laplace.env"
+. "$here/operation-lock.sh"
+laplace_host_lock exclusive
+
 # Never from old sources. A person's checkouts under $LAPLACE_SRC are kept current by nothing: a deployment from ones
 # days behind builds an old engine, reads old recipes (roots that are no longer where the data is) and writes a highway
 # with most of its types gone over the one the machine runs on. Each repository this builds from is brought to its

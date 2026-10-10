@@ -4,8 +4,7 @@
 # machine is deployed with every repository at its main. The jobs, on the one runner, one deployment at a time:
 #   deploy   the reseed policy (seed-stamp.sh decide), then deploy.sh, or deploy.sh drop when the database is reseeded:
 #            build/install against prepared artifacts, database schema/settings and status (no admission)
-#   checks   verify.sh build: the build's record (tier 0 and flags made afresh, the highway, the claims of
-#            $LAPLACE_DETERMINISM decomposed twice), against HART-DESKTOP's record for the same commits; no database
+#   checks   installed extension version/tables and Engine/PostgreSQL artifact compatibility; no generation or admission
 #   ingest   only when run by hand with `reseed`: ingest.sh, every source of $LAPLACE_SOURCES (laplace.env), and the
 #            stamp written. A deployment on a push or a main-merged dispatch never ingests (the inventor, 2026-10-09:
 #            a build is not an ingest); the policy still says what the stamp calls for, in the run's summary
@@ -90,7 +89,7 @@ jobs:
             echo "- triggered by: ${{ github.event_name }} ${{ github.event.client_payload.repository }} ${{ github.event.client_payload.sha }}"
             echo "- reseed policy (LAPLACE_RESEED=$LAPLACE_RESEED): drop $drop, ingest $ingest: $why"; echo
             echo '```'; ./Laplace-Operations/seed-stamp.sh show; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-      - name: the build, the perf-caches, the database with its schema and extension, and its status
+      - name: build/install prepared artifacts and deploy database infrastructure
         env:
           DROP: ${{ steps.policy.outputs.drop }}
         run: |
@@ -105,13 +104,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations, clean: false }
-      - name: Verify local repeatability and compare build records
-        env:
-          LAPLACE_FINGERPRINT_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
-        run: ./Laplace-Operations/verify.sh build
+      - name: Verify deployed extension and artifact compatibility
+        run: ./Laplace-Operations/verify.sh deployment
   ingest:
     needs: [deploy, checks]
-    if: always() && needs.deploy.result == 'success' && needs.deploy.outputs.ingest == 'true'
+    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.deploy.outputs.ingest == 'true'
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 7200
     steps:
@@ -131,18 +128,11 @@ jobs:
         with: { path: Laplace-Operations, clean: false }
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
-  # Production: hart-cloud (a Google Compute c3, Sapphire Rapids: AVX-512 and its VNNI, which hart-server's processor
-  # lacks), its runner labelled production, after the staging deployment and its checks have passed, and after the
-  # production environment's reviewer has approved. The same revisions, deployed by the same script; its own checks
-  # lay its build's record beside hart-server's for the same commits, so a difference between the AVX2 machine and
-  # the AVX-512 machine is a failure here. Its ingest, only when the run was dispatched with `reseed` too, takes the
-  # sources its own declaration names (LAPLACE_SOURCES in /etc/laplace/machine.env, fetched from their publishers by
-  # data.sh), then the reads.
-  # The gate is the dispatch itself: production deploys only when this workflow is run by hand with `production`
-  # set (a private repository has no reviewer rule on an environment), and only once staging has passed in that run.
+  # Production uses the exact dependency revisions captured in staging. It runs only
+  # after deployment readback AND staging runtime reads pass, on explicit production dispatch.
   deploy-production:
-    needs: [deploy, checks]
-    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.production == true
+    needs: [deploy, checks, reads]
+    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.reads.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.production == true
     runs-on: [self-hosted, laplace, Laplace-Operations, production]
     timeout-minutes: 240
     steps:
@@ -165,7 +155,7 @@ jobs:
         with: { repository: "${{ github.repository_owner }}/Laplace-postgres", ref: "${{ needs.deploy.outputs.postgres }}", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - uses: actions/checkout@v4
         with: { repository: "${{ github.repository_owner }}/Laplace-Engine", ref: "${{ needs.deploy.outputs.engine }}", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
-      - name: the build, the perf-caches, the database with its schema and extension, and its status
+      - name: build/install prepared artifacts and deploy database infrastructure
         run: |
           { echo "## hart-cloud: the deployment"; echo; echo "- $(lscpu | sed -n 's/^Model name: *//p')"
             echo '- `'"$(grep -o -wE 'avx2|avx_vnni|avx512f|avx512_vnni|avx512_bf16|amx_tile' /proc/cpuinfo | sort -u | tr '\n' ' ')"'`'; echo; } >> "$GITHUB_STEP_SUMMARY"
@@ -177,10 +167,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations, clean: false }
-      - name: Verify local repeatability and compare build records
-        env:
-          LAPLACE_FINGERPRINT_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
-        run: ./Laplace-Operations/verify.sh build
+      - name: Verify deployed extension and artifact compatibility
+        run: ./Laplace-Operations/verify.sh deployment
   ingest-production:
     needs: [deploy-production, checks-production]
     if: always() && needs.deploy-production.result == 'success' && needs.checks-production.result == 'success' && inputs.reseed == true

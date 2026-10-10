@@ -6,6 +6,7 @@ work=$(mktemp -d "$TMPDIR/deployment-artifacts.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin" "$work/locks" "$work/work" "$work/grammars"
 cp "$ROOT/deploy.sh" "$work/deploy.sh"
+cp "$ROOT/operation-lock.sh" "$work/operation-lock.sh"
 printf 'grammar\n' > "$work/grammars/fixture"
 cat > "$work/laplace.env" <<'ENV'
 export LAPLACE_CONNINFO='dbname=fixture'

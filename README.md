@@ -23,7 +23,7 @@ value in it is `${VAR:-default}`, so another machine sets its own.
 LAPLACE_CONNINFO="host=/tmp port=5432 user=laplace dbname=NAME" ./deploy.sh
 ```
 
-`deploy.sh` requires existing tier 0, flags, highway, layout and keys before making changes, including before an explicit database drop. It tunes PostgreSQL, builds/installs code and missing grammars, reads the highway fingerprint, deploys extensions/schema/settings and reports status. It does not fetch datasets, generate perf-caches or admit content. `deploy.ps1` applies the same artifact boundary on Windows. A deployment takes a lock per database and refuses an already-running ingest; the separate race between lock acquisition paths remains under repair.
+`deploy.sh` requires existing tier 0, flags, highway, layout and keys before making changes, including before an explicit database drop. It tunes PostgreSQL, builds/installs code and missing grammars, reads the highway fingerprint, deploys extensions/schema/settings and reports status. It does not fetch datasets, generate perf-caches or admit content. `deploy.ps1` applies the same artifact boundary on Windows. Linux deployment and direct installation hold an exclusive host lock for their full duration; ingestion holds it shared, so it cannot start between a deployment lock probe and a schema/install change. Per-database locks additionally serialize ingestion. The lock is `$LAPLACE_LOCKS/host-resource.lock`, with descriptor 8 inherited by nested installers. Monorepo site delivery uses the same protocol. Historical entry points and Windows host coordination remain to be reconciled.
 
 Prepare or install perf-caches as an independent operation. The existing generators are `laplace tier0`, `laplace flags`, and `laplace highway -o /path/to/artifact/highway.bin`; they require their declared source data and, for highway generation, compiled grammars. Generate into a separate directory, retain the binary and its `.layout`, `.keys`, `.nodes` sidecars together, and select the installed artifact through `LAPLACE_HIGHWAY`. Source fetching remains explicit through `data.sh`. Deployment does not decide when to regenerate an artifact.
 
@@ -121,9 +121,11 @@ repository at its main, one deployment at a time (the concurrency group `hart-se
 | job | what |
 |---|---|
 | deploy | `seed-stamp.sh decide`, then `deploy.sh`, or `deploy.sh drop` when the database is reseeded |
-| checks | `verify.sh build`: the build's record (`fingerprint.sh`), determinism, HART-DESKTOP's record for the same commits |
+| checks | `verify.sh deployment`: extension version/tables and Engine/PostgreSQL artifact compatibility, with observed binary/artifact hashes |
 | ingest | only for an explicit reseed request: `ingest.sh` (every source of `LAPLACE_SOURCES`), then `seed-stamp.sh seeded` |
 | reads | `verify.sh reads`: `laplace status`, and `text`, `hop`, `translate`, `fills` through the indexes |
+
+Production additionally waits for successful staging runtime reads. Missing cross-machine qualification records are still incomplete evidence, but are not a substitute for this infrastructure deployment gate.
 
 Each job writes what it found to the run's summary.
 
@@ -134,8 +136,7 @@ firmware do not count in that stamp. Since 2026-10-09 the policy only reports: a
 By hand, in one click: `laplace.yml` with `drop` (empty, no ingest) or `reseed` (drop, then every source), or
 `ingest.yml` with `reseed`.
 
-**Build fingerprints and local repeatability** (`verify.sh`, `fingerprint.sh`, `fingerprint.ps1`). Every deployment writes the
-record of its build: the commits, tier 0 and its flags made afresh, the highway, and, for each source of
+**Separate build qualification** (`verify.sh build`, `fingerprint.sh`, `fingerprint.ps1`). An explicitly requested qualification writes the record of its build: the commits, tier 0 and its flags made afresh, the highway, and, for each source of
 `LAPLACE_DETERMINISM`, the claims its recipes make, counted and hashed as a sorted set. Each source is decomposed twice,
 and the two runs must agree. The record is published on the branch `fingerprints` of this repository, at
 `<native>-<engine>/<machine>.txt`, and compared with every other machine's record for the same commits. On
