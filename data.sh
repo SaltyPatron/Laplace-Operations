@@ -66,7 +66,12 @@ case $op in
     bad=0
     for s in $(sets); do
       d=$(ls -d "$LAPLACE_DATA"/$s 2>/dev/null | tail -1 || true)
-      if [ -n "$d" ] && [ -n "$(ls -A "$d")" ]; then printf '  %-28s %s files\n' "${d##*/}" "$(find "$d" -type f | wc -l)"; else printf '  %-28s missing\n' "$s"; bad=$((bad + 1)); fi
+      if [ -n "$d" ] && [ -n "$(ls -A "$d")" ]; then printf '  %-28s %s files\n' "${d##*/}" "$(find "$d" -type f | wc -l)"
+        # what the set's directory holds beside what the declarations land there: an older sibling a root pattern may
+        # resolve to instead of the declared one; said, never removed (the operator decides what leaves a data directory)
+        extra=$(ls -A "$d" | grep -v '^\.' | while read -r e; do rows | awk -F'\t' -v s="${d##*/}" '$1==s || $1 ~ /\{edition\}/' | grep -qF -- "$e" || echo "$e"; done | tr '\n' ' ')
+        [ -z "$extra" ] || printf '  %-28s also holds: %s\n' "" "$extra"
+      else printf '  %-28s missing\n' "$s"; bad=$((bad + 1)); fi
     done
     echo "data: $(sets | wc -l) sets declared, $bad missing, under $LAPLACE_DATA"
     if [ -d "$recipes" ]; then echo "recipes' roots:"
