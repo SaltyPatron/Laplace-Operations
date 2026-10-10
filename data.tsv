@@ -71,3 +71,6 @@ Wiktionary	once	https://kaikki.org/dictionary/English/kaikki.org-dictionary-Engl
 # (the same decision), pinned at a commit, landing at UD-Docs/docs-pages-source where the recipe reads them
 UD-Treebanks	archive	https://lindat.mff.cuni.cz/repository/server/api/core/bitstreams/d91b1ffc-fc31-41a0-bd8f-3b876864a1d5/content	ud-treebanks-v2.18.tgz
 UD-Docs	git	https://github.com/UniversalDependencies/docs	docs-pages-source/@692cb759d65bb6d3448b1a284cddbbe8b28d2118
+# The benchmark fixtures the monorepo's suites read (benchmark-evidence.yml: moby_path): Moby-Dick from Project Gutenberg, eBook 2701, the
+# plain-text UTF-8 file as the publisher serves it (sha256 b5e88b71a1cda068…), landing at the path the workflow names
+test-data	file	https://www.gutenberg.org/cache/epub/2701/pg2701.txt	text/moby_dick.txt
