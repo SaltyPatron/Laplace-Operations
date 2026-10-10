@@ -2,14 +2,28 @@ machine     hart-server
 os          Linux 5.15.0-191-generic
 cpu         Intel(R) Core(TM) i7-6850K CPU @ 3.60GHz
 compiler    Intel(R) oneAPI DPC++/C++ Compiler 2026.1.1 (2026.1.1.20260724)
-made        2026-10-10T01:51:19Z
+made        2026-10-10T02:01:06Z
 native      1b9367c8055c
 engine      aa38df13d4a0
 postgres    0429d10a2b41
-operations  663e8521e323
+operations  ad8ab4212189
+ucd         17.0.0 129 af919ded2587cd9f
+icu         78.3 unicode 17.0
+resources   cili princeton-wordnet propbank verbnet framenet semlink predicate-matrix verbatlas universal-dependencies-tools
+data        iso-639 78 e203821f9ca4bdc2 ISO639
+data        open-english-wordnet 1 73b95a660094810f OpenEnglishWordNet-2025-plus
+data        cili 252 74a4ce01c5a7a34b CILI
+data        princeton-wordnet 185 9de7f9870ec0cc95 WordNet-3.0
+data        propbank 7569 72bed4c9b03acebf frames
+data        verbnet 331 82b9de7cc0366276 verbnet3.4
+data        framenet 14930 7aad583dd4a67eba framenet_v17
+data        semlink 17 e31cc88d9d232453 semlink-current-2636bf5a4ae9c93b669a1184a8aaae9ca21552d3
+data        predicate-matrix 2 0b9ed721486e0bc3 PredicateMatrix.v1.3
+data        verbatlas 17 8f19c994f84afb71 VerbAtlas-1.1.0
+data        universal-dependencies-tools 10 b1153e1081d59130 data
 tier0       f8b0882f3483f0db7f5191c230ae74ed42231ff1194a59f908658e234746b047
 flags       0cac44d487ef1edd538ae432a76d1bf5105e29a8e6c33df4a039c195d01bf2e1
-highway     ffd4b39bd5689be8d2927fad454db023f3cdf1a8e35837f6946b05e852d7ca74
+highway     b21daec61c10e5fa8f92d2f1f7f052c9c12d010628f305913d358f6c5f9afb6d
 claims      iso-639 137219 32648f5f5bf177c4
 determinism iso-639 same: twice 137219 claims, 32648f5f5bf177c4
 claims      open-english-wordnet 1390805 ea1472609027b87f
