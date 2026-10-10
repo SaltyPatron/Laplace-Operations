@@ -119,3 +119,18 @@ The MSBuild values are resolved during project evaluation, so IDE builds use the
 [Microsoft documents why these output properties must be set before their consumers](https://learn.microsoft.com/en-us/visualstudio/msbuild/customize-by-directory).
 The workspace identifier uses the same SHA-256 function in PowerShell and
 [MSBuild's stable hashing implementation](https://github.com/dotnet/msbuild/blob/main/src/Build/Evaluation/IntrinsicFunctions.cs).
+
+The LAN resolver uses the router's `.lan` records through AdGuard. Check or converge the cloud/hosting names from
+their actual Tailscale node addresses with:
+
+```powershell
+./network/openwrt-private-dns.ps1 -Router hart-router -TailnetHost hart-server -Nodes hart-prod,hart-cloud -LocalDomain lan
+# Add -Apply to converge the records, retain the prior DHCP configuration, and verify the result.
+```
+
+This supplies `hart-prod.lan` and `hart-cloud.lan` to the existing LAN DNS path. It does not power on the cloud VM.
+The router already routes Tailscale's address range through hart-server. A Tailscale client can separately resolve its
+fully qualified MagicDNS names using the local Quad100 resolver even with automatic DNS configuration disabled,
+as described in [Tailscale's DNS guidance](https://tailscale.com/docs/reference/faq/dns-resolv-conf).
+The updater uses OpenWrt's supported domain records, verified against its
+[24.10.2 dnsmasq implementation](https://github.com/openwrt/openwrt/blob/v24.10.2/package/network/services/dnsmasq/files/dnsmasq.init).
