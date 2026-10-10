@@ -2,11 +2,11 @@ machine     hart-server
 os          Linux 5.15.0-191-generic
 cpu         Intel(R) Core(TM) i7-6850K CPU @ 3.60GHz
 compiler    Intel(R) oneAPI DPC++/C++ Compiler 2026.1.1 (2026.1.1.20260724)
-made        2026-10-10T04:44:58Z
+made        2026-10-10T04:56:17Z
 native      1b9367c8055c
 engine      7459129e79c8
 postgres    0429d10a2b41
-operations  812fa0ace05e
+operations  ec46437c94d3
 ucd         17.0.0 117 bf03a7d518581b3a
 icu         78.3 unicode 17.0
 resources   cili princeton-wordnet propbank verbnet framenet semlink predicate-matrix verbatlas universal-dependencies-tools
