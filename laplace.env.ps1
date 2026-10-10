@@ -79,7 +79,9 @@ Set-Default LAPLACE_TIER0    "$env:LAPLACE_WORK\tier0\tier0.bin"            # la
 Set-Default LAPLACE_HIGHWAY  "$env:LAPLACE_WORK\tier0\tier0.highway"        # laplace highway writes it
 Set-Default LAPLACE_GRAMMARS "$env:LAPLACE_BUILD\grammars"                  # the tree-sitter grammars, built once
 Set-Default LAPLACE_UCD      "$env:LAPLACE_DATA\UCD"                        # the Unicode Character Database tier 0 is generated from
-Set-Default LAPLACE_ICU_DIR  "$env:LAPLACE_DEPS\icu78"                      # ICU 78: Unicode 17, the version tier 0 is built from
+# ICU: where setup.ps1 deps unpacks the manifest's icu row (<deps>\icu\<its version>), so the version is said once, in
+# dependencies.tsv. ICU 78 is Unicode 17, the version tier 0 is built from.
+Set-Default LAPLACE_ICU_DIR  (Join-Path "$env:LAPLACE_DEPS\icu" ((Get-Content "$PSScriptRoot\dependencies.tsv" | Where-Object { $_ -match "^icu`t" } | Select-Object -First 1) -split "`t")[1])
 Set-Default LAPLACE_BLAKE3_DIR "$env:LAPLACE_DEPSRC\blake3\c"
 Set-Default LAPLACE_COREMATH   "$env:LAPLACE_DEPSRC\core-math"
 Set-Default LAPLACE_TREESITTER "$env:LAPLACE_DEPSRC\tree-sitter"
