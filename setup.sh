@@ -392,7 +392,7 @@ appdb(){ part "application database"
     pg_createcluster -d "$data" -p "$port" --start "$ver" "$cl" >/dev/null; say "cluster $cl" "made at $data, port $port"
   else say "cluster $cl" "$(pg_lsclusters -h | awk -v v="$ver" -v c="$cl" '$1==v && $2==c {print $4", "$3}')"; fi
   local conf=/etc/postgresql/$ver/$cl
-  grep -q "^listen_addresses = '\*'" "$conf/conf.d/laplace.conf" 2>/dev/null || { install -d "$conf/conf.d"; printf "listen_addresses = '*'\n" > "$conf/conf.d/laplace.conf"; say "listen_addresses" "*: the firewall and pg_hba decide"; }
+  grep -q "^listen_addresses = '\*'" "$conf/conf.d/laplace.conf" 2>/dev/null || { install -d "$conf/conf.d"; printf "listen_addresses = '*'\n" > "$conf/conf.d/laplace.conf"; pg_ctlcluster "$ver" "$cl" restart; say "listen_addresses" "*: the firewall and pg_hba decide (restarted)"; }
   printf '%s\n' "# Laplace (setup.sh appdb). Local: the server's own user and the operator over the socket; the network: $LAPLACE_ROLE from $LAPLACE_LAN, scram." \
     "local   all   postgres                      peer" "local   all   $LAPLACE_ROLE                 scram-sha-256" \
     "host    all   $LAPLACE_ROLE   127.0.0.1/32  scram-sha-256" "host    all   $LAPLACE_ROLE   $LAPLACE_LAN  scram-sha-256" > "$conf/pg_hba.conf.setup"
