@@ -1,8 +1,10 @@
 # Laplace system audit — 2026-10-10
 
-This is an ongoing audit of the invention's implementation and operating environment. Findings below are evidence, not a replacement specification or a claim that the whole system has been audited.
+This is an ongoing infrastructure and deployment audit. The user explicitly clarified that the coding agent is not being asked to prove the invention. Findings below are evidence, not a replacement specification or a claim that the whole system has been audited.
 
 ## Scope and authority
+
+The active acceptance criteria are operational: correct dependencies and sequence, prepared artifacts, migrations before service activation, installed-version evidence, failure propagation, recovery and declared host roles. Design documents constrain these changes; research or semantic benchmarks are not substitutes for deployment acceptance.
 
 The user's objective is to recover a professional, dependable development environment and make progress on Laplace as a whole. Pipeline changes, cloud setup, documentation, research, implementation, and agent-history reconstruction belong to that same task. Subsequent corrections refine this scope; they do not discard earlier work.
 
@@ -169,3 +171,11 @@ Local validation parsed the workflow YAML and executed its actual capture/prefli
 Operations uses workflow group `hart-server-laplace` and deployment/ingestion file locks. The monorepo uses `laplace-site-hart-server`, `laplace-site-knowledge` and `laplace-site-hart-prod`; inspected `site.sh` uses the lock directory for restart triggers but has no corresponding deployment `flock`. Those mechanisms do not establish coordination between the repositories. This is a source-level finding, not an observed collision. Before introducing a common lock, trace shared binaries, PostgreSQL extension/schema changes and the full duration of ingestion so a partial lock does not leave the conflicting operation exposed.
 
 The research does not support treating additional checks as automatic improvement. Soares et al. report contradictory findings for PR lifetime and confidence, with differences in how CI adoption is measured. For Laplace, evaluate checks by the defects they detect, their duration, and whether they verify the declared behavior. Microsoft's [deployment guidance](https://learn.microsoft.com/en-us/azure/well-architected/operational-excellence/safe-deployments) separately distinguishes contract compatibility from behavioral correctness and highlights the complexity of stateful rollback. These support evaluating the existing checks individually; they do not supply Laplace's semantic acceptance criteria.
+
+## Follow-up — 2026-10-10 18:00 UTC and later
+
+- Monorepo #1768 merged as `35a7bda40290cdf953e6ef58d881205b443dfa5d` after full CI policy run 38073878207 passed. Hidden receipts are retained, app/browser migrations are packaged and run before hosting publication, caches are staged before publication, unreadable declarations fail, and the cloud lease waits for hosting. Merged with `[skip ci]`; a full deployment is not claimed.
+- The existing hart-prod API was repaired using its declared database configuration and nine existing application migrations, after retaining a database dump. `/health`, `/health/live`, `/openapi/v1.json` and `/v1/models` returned 200. Knowledge readiness timed out while hart-cloud was stopped. Installed source revision remains unknown.
+- hart-prod has no system MCP unit. `site-host.sh` deliberately omits that unit on hosts using a remote knowledge database. Do not describe the absent unit as a crashed service or blindly install it. Public MCP routing and the knowledge-host endpoint still need verification.
+- Engine #54 separates `.nodes` admission from deployment and adds a read-only highway fingerprint. Local clean icx build and six admission/artifact checks passed. Actual deployment into a newly created isolated database left zero entity rows with the real highway present; that test database was removed. The serving database was not loaded. PR CI and coordinated Operations rollout are tracked separately.
+- Operations scripts now consume prepared artifacts. Six shell boundary cases passed, including missing artifacts before an explicit drop; seven existing comparison regressions passed. Fingerprints read installed artifacts instead of old generation logs. Generation input provenance is unknown until a receipt binds the artifact to its sources. Windows execution and automated artifact promotion remain unverified.

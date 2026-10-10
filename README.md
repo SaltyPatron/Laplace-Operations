@@ -8,7 +8,7 @@ holds what installs, sets up, deploys, repairs and runs them (Operations in the 
 git clone https://github.com/SaltyPatron/Laplace-Operations /repos/src/Laplace-Operations
 cd /repos/src/Laplace-Operations
 sudo ./setup.sh           # the machine: volumes, packages, rights, kernel, dependencies, cluster, settings, access
-./deploy.sh               # the build, the perf-caches, the database with its schema and extension
+./deploy.sh               # build/install and database infrastructure; requires prepared perf-caches
 ./ingest.sh               # the sources, in recipes/order, into that database
 sudo ./agents.sh          # the repositories' agents on this machine
 ```
@@ -23,7 +23,13 @@ value in it is `${VAR:-default}`, so another machine sets its own.
 LAPLACE_CONNINFO="host=/tmp port=5432 user=laplace dbname=NAME" ./deploy.sh
 ```
 
-`deploy.sh` runs, in order: the build and install, the data sets (`data.sh fetch`, when a declared set is missing), tier 0 and its flags (each made only when missing), the highway (always: its slots are frozen by the manifest), the grammars (when `$LAPLACE_GRAMMARS` is empty), `laplace deploy` (the database, its extensions and settings, the schema and its indexes, the highway's records), and `laplace status`. It loads no data. It takes a lock per database, and leaves (exit 3) while an ingest of that database runs. Each step's output is kept under `$LAPLACE_WORK/logs/deploy`. `./deploy.sh drop` first drops the database through the role (`DROP DATABASE … WITH (FORCE)`, never root; never `postgres` or an empty name), then deploys it again, empty.
+`deploy.sh` requires existing tier 0, flags, highway, layout and keys before making changes, including before an explicit database drop. It tunes PostgreSQL, builds/installs code and missing grammars, reads the highway fingerprint, deploys extensions/schema/settings and reports status. It does not fetch datasets, generate perf-caches or admit content. `deploy.ps1` applies the same artifact boundary on Windows. A deployment takes a lock per database and refuses an already-running ingest; the separate race between lock acquisition paths remains under repair.
+
+Prepare or install perf-caches as an independent operation. The existing generators are `laplace tier0`, `laplace flags`, and `laplace highway -o /path/to/artifact/highway.bin`; they require their declared source data and, for highway generation, compiled grammars. Generate into a separate directory, retain the binary and its `.layout`, `.keys`, `.nodes` sidecars together, and select the installed artifact through `LAPLACE_HIGHWAY`. Source fetching remains explicit through `data.sh`. Deployment does not decide when to regenerate an artifact.
+
+`laplace ingest --highway --no-load` checks an existing sidecar without database access. `laplace ingest --highway` explicitly admits it to the declared database. Neither ordinary deployment nor ordinary source ingestion invokes this admission automatically. Existing content remains in existing databases; a new deployment stays empty until admission is requested. Automated artifact promotion and provenance receipts remain unfinished.
+
+Each deployment step writes under `$LAPLACE_WORK/logs/deploy`. `./deploy.sh drop` is an explicit destructive operation: it drops the named database through the role (`DROP DATABASE … WITH (FORCE)`, never `postgres` or an empty name), then recreates its infrastructure.
 
 ```sh
 ./data.sh fetch                                    # every data set data.tsv declares, from its publisher, at the latest
@@ -107,7 +113,7 @@ sudo ./agents.sh remove Laplace-Wiki               # unregister and remove one (
 
 ### The deployment target: every merge to main
 
-hart-server is the target every merge deploys to: the developer's gate for "does it work on another machine". A push to
+hart-server is the staging target for deployment rehearsal: build/install, schema changes, service operation and failure handling before production. A push to
 this repository's main, and a `repository_dispatch` (`main-merged`) that Laplace-Native, Laplace-postgres and
 Laplace-Engine send from their own `laplace.yml` once their CI passes on main, run `laplace.yml` here with every
 repository at its main, one deployment at a time (the concurrency group `hart-server-laplace`, which `ingest.yml` shares):
@@ -116,7 +122,7 @@ repository at its main, one deployment at a time (the concurrency group `hart-se
 |---|---|
 | deploy | `seed-stamp.sh decide`, then `deploy.sh`, or `deploy.sh drop` when the database is reseeded |
 | checks | `verify.sh build`: the build's record (`fingerprint.sh`), determinism, HART-DESKTOP's record for the same commits |
-| ingest | when the policy says so: `ingest.sh` (every source of `LAPLACE_SOURCES`), then `seed-stamp.sh seeded` |
+| ingest | only for an explicit reseed request: `ingest.sh` (every source of `LAPLACE_SOURCES`), then `seed-stamp.sh seeded` |
 | reads | `verify.sh reads`: `laplace status`, and `text`, `hop`, `translate`, `fills` through the indexes |
 
 Each job writes what it found to the run's summary.
@@ -124,10 +130,7 @@ Each job writes what it found to the run's summary.
 **The reseed policy** (`seed-stamp.sh`). A database carries, as its comment, the stamp of the code it was seeded from: a
 hash of the trees of Laplace-Native, Laplace-Engine (its source and recipes), Laplace-postgres and Operations'
 floating-point contract (`toolchain/`, `math/`, `patches/`, `dependencies.tsv`). Documentation, workflows, tests and the
-firmware do not count, since none of them changes what is recorded. When the stamp the code makes differs from the
-database's, or the database has none, the deployment drops the database and seeds it again from empty. The data on the
-target is expendable. Since 2026-10-09 the policy only reports: a deployment on a push or a main-merged dispatch never ingests, because a build is not an ingest; the stamp's verdict is in the run's summary, and the reseed is done by hand. A reseed that was cut
-off leaves the stamp `pending`, and the next deployment with the same stamp picks the ingest up again without a drop.
+firmware do not count in that stamp. Since 2026-10-09 the policy only reports: a push or main-merged dispatch does not authorize dropping or ingesting the database. Explicit `drop` recreates infrastructure without ingestion; explicit `reseed` drops and then ingests the configured sources. A pending stamp records interrupted ingestion; it does not authorize an ordinary deployment to resume it.
 By hand, in one click: `laplace.yml` with `drop` (empty, no ingest) or `reseed` (drop, then every source), or
 `ingest.yml` with `reseed`.
 

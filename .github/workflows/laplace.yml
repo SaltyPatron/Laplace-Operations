@@ -1,9 +1,9 @@
 # Laplace-Operations on its runner: hart-server, the deployment target every merge to main deploys to — the developer's
-# gate for "does it work on another machine". Run on a push to this repository's main, and on a repository_dispatch
+# staging deployment rehearsal. Run on a push to this repository's main, and on a repository_dispatch
 # (main-merged) that Laplace-Native, Laplace-postgres and Laplace-Engine send when their own CI passes on main, so the
 # machine is deployed with every repository at its main. The jobs, on the one runner, one deployment at a time:
 #   deploy   the reseed policy (seed-stamp.sh decide), then deploy.sh, or deploy.sh drop when the database is reseeded:
-#            the build, the perf-caches, the database with its schema and extension, its status (no data)
+#            build/install against prepared artifacts, database schema/settings and status (no admission)
 #   checks   verify.sh build: the build's record (tier 0 and flags made afresh, the highway, the claims of
 #            $LAPLACE_DETERMINISM decomposed twice), against HART-DESKTOP's record for the same commits; no database
 #   ingest   only when run by hand with `reseed`: ingest.sh, every source of $LAPLACE_SOURCES (laplace.env), and the
