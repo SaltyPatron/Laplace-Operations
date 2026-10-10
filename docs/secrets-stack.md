@@ -68,17 +68,35 @@ now fails if either HTTPS health check is unsuccessful.
 
 ## Application integration still required
 
-`setup-auth.sh` declares AppRoles for `hart-desktop`, `hart-laptop`, and
-`hart-server`, host-specific KV paths `kv/hosts/<host>/*`, and shared paths
-`kv/shared/*`. This is script evidence, not an authenticated inventory of live
-roles or populated secrets. Operations delivery documentation additionally names
-`host-hart-prod` and `host-hart-laptop`; reconcile actual role names and policies
-before configuring consumers. No local Bao token cache was found for ahart.
+Authenticated inventory on October 10 at approximately 18:42 UTC found AppRoles
+`hart-desktop`, `hart-laptop`, `hart-prod`, and `hart-server`. Their policy names
+are `host-<hostname>`; the policy name is not the AppRole name. No `hart-cloud`
+role appeared. The prod record `kv/hosts/hart-prod/appdb` exists with `host`,
+`port`, `database`, `role`, `password`, `cluster`, and `tailnet_address` fields.
+Host policies allow their own host records and reads of shared records.
+`secrets/inventory.sh` reports roles, field names and versions without values.
+Hart-prod can reach the Bao HTTPS health endpoint (HTTP 200).
 
-Operations `setup.sh access` and `appdb` still distribute database credentials
-through protected `pgpass` files. They do not yet retrieve them from OpenBao.
-Keep existing consumers working until scoped authentication, secret retrieval,
-renewal, restart behavior, and failure handling have been implemented and checked.
+`sudo ./setup.sh secrets-client` retrieves the declared application DB password
+using `/etc/laplace/approle.json`, verifies it against PostgreSQL, then updates the
+canonical and existing operator/runner `pgpass` files. Existing knowledge DB
+entries are preserved. It installs `laplace-appdb-secrets.timer` for refresh every
+15 minutes and two minutes after boot. Each invocation logs in with the host
+AppRole and revokes its short-lived session afterwards; no admin token is installed.
+Failures leave existing password files in place. This is credential distribution,
+not database password rotation: a Bao value must authenticate before publication.
+
+To enroll an existing role, an authenticated operator runs
+`bash secrets/enroll-host.sh hart-prod /protected/scratch/approle.json`, then
+installs that file root-owned mode 600 at `/etc/laplace/approle.json` on hart-prod.
+Enrollment refuses an existing output file; it does not replace roles or rotate
+already installed credentials implicitly. `LAPLACE_BAO_APPDB_HOST`,
+`LAPLACE_BAO_CREDENTIALS`, and `LAPLACE_APP_PGHOST` declare overrides where needed.
+
+Operations `setup.sh access` and `appdb` still provision database roles and maintain
+their existing protected-file behavior. `secrets-client` supplies subsequent
+app credential refresh. Knowledge DB credentials and OAuth/payment/API service
+secrets are not yet integrated. Windows consumers are not covered by this Bash setup.
 Never put secret values in `machine.env`, repository documentation or logs.
 
 `sudo ./setup.sh machine` repairs public declaration permissions only:
