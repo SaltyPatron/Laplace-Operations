@@ -6,8 +6,8 @@
   $LAPLACE_WORK\logs\root. Every name of this machine's is a variable of laplace.env.ps1, so another Windows machine
   declares its own.
 
-    pwsh -File setup.ps1                   everything below, in order (the parts that change the service, its rights,
-                                           its settings and its access need an elevated PowerShell and say so)
+    pwsh -File setup.ps1                   development inputs and manifest for the declared desktop checkout
+    pwsh -File setup.ps1 all               explicitly install the local PostgreSQL development server as well
     pwsh -File setup.ps1 deps report       one part, or several: volumes | packages | rights | deps | cluster | settings | access | report
     $env:LAPLACE_DROP = 'D:\Data\Laplace\pgdata'; pwsh -File setup.ps1 drop all
                                            the cluster dropped and made again, empty: never part of all, and named to be dropped
@@ -28,16 +28,21 @@
   developer shell is LAPLACE_DEVSHELL); privileged steps happen here and only here. HART-DESKTOP's one-time cleanup
   of what earlier set-ups left is toolchain\windows\retire.ps1, not this.
 #>
-param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('all'))
+param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('development'))
 $ErrorActionPreference = 'Stop'
+if ($Parts -contains 'development') {
+    if ($Parts.Count -ne 1) { throw 'Run the development profile separately from explicit database/service installation steps.' }
+    & pwsh -NoProfile -File "$PSScriptRoot/dev.ps1" -Operation prepare
+    exit $LASTEXITCODE
+}
 . "$PSScriptRoot\laplace.env.ps1"
 . "$PSScriptRoot\tune-pg.ps1"
 
 $Src = $env:LAPLACE_SRC; $Build = $env:LAPLACE_BUILD; $Work = $env:LAPLACE_WORK; $DepSrc = $env:LAPLACE_DEPSRC; $Deps = $env:LAPLACE_DEPS; $Data = $env:LAPLACE_DATA
 $PgDir = $env:LAPLACE_PG_DIR; $PgBin = Join-Path $PgDir 'bin'; $PgData = $env:LAPLACE_PGDATA; $PgWal = $env:LAPLACE_PGWAL; $PgTemp = $env:LAPLACE_PGTEMP
-$PgHost = $env:LAPLACE_PGHOST; $PgPort = $env:LAPLACE_PGPORT; $PgService = $env:LAPLACE_PGSERVICE; $PgAccount = $env:LAPLACE_PGUSER; $PgRole = $env:LAPLACE_ROLE; $PgLan = $env:LAPLACE_LAN; $Locks = $env:LAPLACE_LOCKS
+$PgHost = $env:LAPLACE_PGHOST; $PgPort = $env:LAPLACE_PGPORT; $PgService = $env:LAPLACE_PGSERVICE; $PgAccount = $env:LAPLACE_PG_SERVICE_ACCOUNT; $PgRole = $env:LAPLACE_ROLE; $PgLan = $env:LAPLACE_LAN; $Locks = $env:LAPLACE_LOCKS
 $PgLogs = Join-Path $Work 'logs\postgres'
-$PgCanon = 'C:\ProgramData\Laplace\pgpass.conf'   # the role's password: one canonical copy, administrators only (setup.sh: /etc/laplace/pgpass)
+$PgCanon = Join-Path $env:ProgramData 'Laplace\pgpass.conf'
 $Math = $env:LAPLACE_MATH; $DevShell = $env:LAPLACE_DEVSHELL
 $Toolchain = Join-Path $PSScriptRoot 'toolchain\laplace.cmake'
 
@@ -112,15 +117,15 @@ function PgReady { & "$PgBin\pg_isready.exe" -h $PgHost -p $PgPort 2>$null | Out
 # one statement to the server, as a superuser: postgres (trust on a cluster initdb made; its declared password after
 # access), else the role with the canonical password
 function PgSql([string]$sql) {
+    $previousPassword = $env:PGPASSWORD; $previousPassfile = $env:PGPASSFILE
     try {
-        $env:PGPASSWORD = 'postgres'
-        $out = & "$PgBin\psql.exe" -X -h $PgHost -p $PgPort -U postgres -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
+        $out = & "$PgBin\psql.exe" -X -w -h $PgHost -p $PgPort -U postgres -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
         if (-not $LASTEXITCODE) { return $out }
-        Remove-Item Env:PGPASSWORD; $env:PGPASSFILE = $PgCanon
-        $out = & "$PgBin\psql.exe" -X -h $PgHost -p $PgPort -U $PgRole -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
+        Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue; $env:PGPASSFILE = $PgCanon
+        $out = & "$PgBin\psql.exe" -X -w -h $PgHost -p $PgPort -U $PgRole -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
         if ($LASTEXITCODE) { throw "psql: $($out -join ' ')" }
         $out
-    } finally { Remove-Item Env:PGPASSWORD, Env:PGPASSFILE -ErrorAction SilentlyContinue }
+    } finally { $env:PGPASSWORD = $previousPassword; $env:PGPASSFILE = $previousPassfile }
 }
 function PgWaitReady([int]$minutes) {
     $deadline = (Get-Date).AddMinutes($minutes)
@@ -565,7 +570,11 @@ function settings {
 # the server accepts, made when none is, and written into the operator's %APPDATA%\postgresql\pgpass.conf, which libpq
 # reads for psql and the laplace program. Only this host's line for the role is replaced there: the operator's lines
 # for other hosts (hart-server's database) are theirs and stay. Never printed. The firewall admits the server's port (LAPLACE_PGPORT) from $PgLan.
-function PgWorks([string]$pw) { $env:PGPASSWORD = $pw; $r = & "$PgBin\psql.exe" -X -h $PgHost -p $PgPort -U $PgRole -d postgres -Atq -c 'SELECT 1' 2>$null; Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue; "$r" -eq '1' }
+function PgWorks([string]$pw) {
+    $previousPassword = $env:PGPASSWORD
+    try { $env:PGPASSWORD = $pw; $r = & "$PgBin\psql.exe" -X -w -h $PgHost -p $PgPort -U $PgRole -d postgres -Atq -c 'SELECT 1' 2>$null; "$r" -eq '1' }
+    finally { $env:PGPASSWORD = $previousPassword }
+}
 function PgPassOf([string]$file) { if (Test-Path $file) { foreach ($l in Get-Content $file) { $f = $l -split ':'; if ($f.Count -ge 5 -and $f[3] -eq $PgRole -and $f[0] -in '*', 'localhost', '127.0.0.1', '::1', $env:COMPUTERNAME) { return ($f[4..($f.Count - 1)] -join ':') } } }; $null }
 function access {
     Part 'access'
@@ -678,6 +687,13 @@ function report {
 # operator's Credential Manager entry for the host. Checked and reported, never made: no drive letter is mapped and no
 # credential is stored here, and the Explorer locations and mappings the operator made are theirs. A check that fails
 # says what to do. The password is never read, printed or written: cmdkey asks for it.
+function network {
+    Part 'network'
+    $argsForNetwork = @('-NoProfile', '-File', "$PSScriptRoot\network.ps1")
+    if ($Status) { $argsForNetwork += '-Check' }
+    & pwsh.exe @argsForNetwork
+    if ($LASTEXITCODE) { $failed.Add('network: DNS configuration or resolution failed') }
+}
 function shares {
     Part 'shares'
     $server = $env:LAPLACE_SHARE_HOST; $user = $env:LAPLACE_SHARE_USER
@@ -768,9 +784,10 @@ function firewall {
 function backup {
     Part 'backup'
     $task = $env:LAPLACE_BACKUP_TASK; $logs = $env:LAPLACE_BACKUP_LOGS
-    $argv = "--headless pwsh.exe -NoProfile -ExecutionPolicy Bypass -File $(Join-Path $PSScriptRoot 'backup\run.ps1')"
+    $argv = "--headless pwsh.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'backup\run.ps1')`""
     $conf = $null
-    try { $conf = Import-PowerShellDataFile $env:LAPLACE_BACKUP_JOBS }
+    . "$PSScriptRoot\backup\config.ps1"
+    try { $conf = Read-BackupConfiguration $env:LAPLACE_BACKUP_JOBS }
     catch { Say 'jobs' "FAILED: $($env:LAPLACE_BACKUP_JOBS): $($_.Exception.Message)"; $failed.Add("backup: $($env:LAPLACE_BACKUP_JOBS) does not read") }
     foreach ($s in @($conf.Sets)) { $held = @($s.Jobs | Where-Object { $_.n -like 'Models-*' }).Count; Say "set $($s.Name)" "$(@($s.Jobs).Count) jobs to $($s.Inbox)$(if ($held) { "; $held Models-* on hold without -Models" })" }
     $t = Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
@@ -817,13 +834,13 @@ function backup {
     }
 }
 
-$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'cluster', 'settings', 'access', 'report', 'shares', 'services', 'firewall', 'backup', 'status'
+$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'cluster', 'settings', 'access', 'report', 'network', 'shares', 'services', 'firewall', 'backup', 'status'
 foreach ($p in $Parts) { if ($known -notcontains $p) { "setup.ps1 [drop] [$(($known | Select-Object -Skip 1) -join '|') ...]"; Stop-Transcript | Out-Null; exit 2 } }
 # status: the desktop's own parts named with it (all three, when none is) report and change nothing
 $Status = $Parts -contains 'status'
 if ($Status) {
     $Parts = @($Parts | Where-Object { $_ -ne 'status' }); if (-not $Parts.Count) { $Parts = 'shares', 'services', 'firewall', 'backup' }
-    $other = @($Parts | Where-Object { $_ -notin 'shares', 'services', 'firewall', 'backup' })
+    $other = @($Parts | Where-Object { $_ -notin 'network', 'shares', 'services', 'firewall', 'backup' })
     if ($other.Count) { "setup.ps1 status reports shares, services, firewall and backup; $($other -join ', ') has none (report)"; Stop-Transcript | Out-Null; exit 2 }
 }
 try { foreach ($p in $Parts) { if ($p -eq 'all') { volumes; packages; rights; deps; cluster; settings; access; report } else { & $p } } }

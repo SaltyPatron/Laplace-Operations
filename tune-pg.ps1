@@ -52,7 +52,19 @@ function TuneFactWal {   # the drive the log is on, and whether the log has it t
     if ($env:TUNE_FACT_WAL_BYTES) { return @([int64]$env:TUNE_FACT_WAL_BYTES, [int]$(if ($env:TUNE_FACT_WAL_SHARED) { $env:TUNE_FACT_WAL_SHARED } else { 0 })) }
     $d = Get-PSDrive (TuneDrive $env:LAPLACE_PGWAL)
     $bytes = [int64]($d.Used + $d.Free)
-    $shared = if ((TuneDrive $env:LAPLACE_PGWAL) -ne (TuneDrive $env:LAPLACE_PGDATA)) { 0 } else { 1 }
+    # A different drive can still hold builds, dependencies and other data. Only an
+    # explicit machine declaration may spend half a drive on WAL; default to shared.
+    $shared = 1
+    switch ($env:LAPLACE_PG_WAL_DEDICATED) {
+        { $_ -in $null, '', '0' } { }
+        '1' {
+            if ((TuneDrive $env:LAPLACE_PGWAL) -eq (TuneDrive $env:LAPLACE_PGDATA)) {
+                throw 'tune-pg: a dedicated WAL drive cannot also hold PGDATA'
+            }
+            $shared = 0
+        }
+        default { throw 'tune-pg: LAPLACE_PG_WAL_DEDICATED must be 0 or 1' }
+    }
     @($bytes, $shared)
 }
 function TuneFactReservedKB { if ($env:LAPLACE_PG_RESERVED) { TuneKB $env:LAPLACE_PG_RESERVED } else { [int64]0 } }
@@ -251,7 +263,15 @@ ORDER BY 1;
 }
 function TuneReport { foreach ($line in (TunePsql (TuneReportSql))) { if (-not $line) { continue }; $f = $line -split '\|'; [pscustomobject]@{ name = $f[0]; match = $f[1]; context = $f[2]; source = $f[3]; pending = $f[4]; live = $f[5] } } }
 
+function TuneValidatePlan {
+    $p = TunePlan
+    if ($p.over_kb -gt 0) {
+        throw "tune-pg: OVER-COMMITTED by $($p.over_kb) kB; refusing database changes. Reconcile the declared resident memory and serving connections before applying."
+    }
+}
+
 function TuneApply {
+    TuneValidatePlan
     TuneLocalOrDie
     $want = TuneDeclared; $n = 0
     foreach ($r in TuneReport) {
@@ -306,8 +326,8 @@ function TuneCheck {
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
-    if ($Plan) { TuneShowPlan; exit 0 }
-    if ($Check) { if (TuneCheck) { exit 0 } else { exit 1 } }
+    if ($Plan) { TuneShowPlan; TuneValidatePlan; exit 0 }
+    if ($Check) { TuneValidatePlan; if (TuneCheck) { exit 0 } else { exit 1 } }
     TuneApply
     TuneRestart | Out-Null
     if (-not (TuneCheck)) { exit 1 }

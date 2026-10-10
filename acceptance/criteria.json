@@ -1,0 +1,430 @@
+{
+  "schema_version": 1,
+  "tracker": "https://github.com/SaltyPatron/Laplace-Operations/issues/2",
+  "scope": "Operational installation and infrastructure acceptance; not a replacement product specification.",
+  "criteria": [
+    {
+      "id": "CONFIG-001",
+      "owner": "Operations + Laplace",
+      "depends_on": [],
+      "outcome": "Every supported shell, IDE, setup, runner and service resolves the same named installation configuration.",
+      "acceptance": [
+        "Resolve a non-default Windows machine.env through PowerShell, CMD and MSBuild; compare paths and provenance.",
+        "Separate OS service identity, database identity and credential references; reject missing or conflicting required configuration."
+      ],
+      "checks": [
+        {
+          "id": "config-windows",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/windows-configuration.ps1"],
+          "timeout_seconds": 120,
+          "evidence": "Execute all three real entry points against one alternate-root fixture."
+        },
+        {
+          "id": "config-linux",
+          "platform": "linux",
+          "argv": null,
+          "evidence": "Compare service and operator resolution on a declared host."
+        }
+      ]
+    },
+    {
+      "id": "WORKSPACE-001",
+      "owner": "Operations + all active code repositories",
+      "depends_on": [
+        "CONFIG-001"
+      ],
+      "outcome": "Two worktrees build independently and neither clean operation changes an installed runtime or persistent data.",
+      "acceptance": [
+        "Build different revisions in two worktrees and verify distinct output trees and artifact identities.",
+        "Exercise clean with runtime/data sentinels present; preserve operator modifications and declared source roots."
+      ],
+      "checks": [
+        {
+          "id": "workspace-isolation",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/windows-workspace.ps1"],
+          "timeout_seconds": 300,
+          "evidence": "Two actual managed builds at distinct source revisions, independent output roots, and preservation of the other artifact plus runtime/data sentinels during clean."
+        }
+      ]
+    },
+    {
+      "id": "RELEASE-001",
+      "owner": "Operations + Laplace delivery",
+      "depends_on": [
+        "CONFIG-001"
+      ],
+      "outcome": "A release names its complete compatible source, dependency, native, database and prepared-artifact closure.",
+      "acceptance": [
+        "Use immutable dependency revisions from staging through promotion, including the triggering dependency SHA.",
+        "Read back matching installed identities; reject stale artifacts, incompatible PG ABI/schema and unsupported CPU baselines."
+      ],
+      "checks": [
+        {
+          "id": "release-promotion",
+          "platform": "any",
+          "argv": null,
+          "evidence": "A staged and promoted release with exact artifact digests plus rejection cases."
+        }
+      ]
+    },
+    {
+      "id": "INSTALL-001",
+      "owner": "Operations + Laplace installers",
+      "depends_on": [
+        "CONFIG-001",
+        "RELEASE-001"
+      ],
+      "outcome": "Install, repair and upgrade operate on one installation, with recoverable failure boundaries.",
+      "acceptance": [
+        "Install onto a clean declared host, rerun repair without damage, and upgrade from an existing release.",
+        "Inject publication/activation failure; recover a coherent release and state, not only its old binaries.",
+        "Remove owned services/binaries without deleting persistent knowledge, application data or shared infrastructure."
+      ],
+      "checks": [
+        {
+          "id": "installer-windows",
+          "platform": "windows",
+          "argv": null,
+          "evidence": "Real Windows installation/repair/upgrade/failure-recovery evidence."
+        },
+        {
+          "id": "installer-linux",
+          "platform": "linux",
+          "argv": null,
+          "evidence": "Real Linux installation/repair/upgrade/failure-recovery evidence."
+        }
+      ]
+    },
+    {
+      "id": "PIPELINE-001",
+      "owner": "Operations + Laplace workflows",
+      "depends_on": [
+        "INSTALL-001"
+      ],
+      "outcome": "CI and local maintenance invoke the same operation and target contract without relying on runner leftovers.",
+      "acceptance": [
+        "Run maintenance against the current layout on a replaced runner.",
+        "Explicitly resolve tier, machine, role and knowledge target; coordinate shared resources across repositories.",
+        "Demonstrate queue/supersession behavior for two differently parameterized operations."
+      ],
+      "checks": [
+        {
+          "id": "pipeline-clean-runner",
+          "platform": "any",
+          "argv": null,
+          "evidence": "Clean-runner delivery and maintenance, target resolution and concurrency evidence."
+        },
+        {
+          "id": "site-live-staging",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "staging", "-Wait"],
+          "timeout_seconds": 900,
+          "evidence": "Actual staging workflow execution through the human entry point; does not by itself prove replacement-runner installation."
+        },
+        {
+          "id": "site-live-production",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "production", "-Wait"],
+          "timeout_seconds": 900,
+          "evidence": "Actual installed production SQL/native verification and retained configuration/revision receipts through the human entry point."
+        }
+      ]
+    },
+    {
+      "id": "INGEST-001",
+      "owner": "Operations + Laplace ingestion",
+      "depends_on": [
+        "RELEASE-001",
+        "CONFIG-001"
+      ],
+      "outcome": "Ingestion is an explicit resumable operation against a selected release and knowledge substrate.",
+      "acceptance": [
+        "Ordinary build/deploy performs no unrequested source admission or database deletion.",
+        "Interrupt and resume a named ingest using the recorded input selection and checkpoint; reject incompatible artifacts."
+      ],
+      "checks": [
+        {
+          "id": "ingest-lifecycle",
+          "platform": "any",
+          "argv": null,
+          "evidence": "Deployment no-admission evidence and actual interrupted/resumed ingestion."
+        }
+      ]
+    },
+    {
+      "id": "STORAGE-LINUX-001",
+      "owner": "Operations",
+      "depends_on": [],
+      "outcome": "Linux storage discovery selects the device and mountpoint belonging to the requested path.",
+      "acceptance": [
+        "Nested mounts, escaped spaces, path boundaries and later unrelated rows resolve correctly."
+      ],
+      "checks": [
+        {
+          "id": "storage-linux",
+          "platform": "linux",
+          "argv": [
+            "bash",
+            "tests/tune-pg-storage.sh"
+          ],
+          "evidence": "Detector regression fixture; live mounting validation is recorded separately in the audit.",
+          "timeout_seconds": 90
+        }
+      ]
+    },
+    {
+      "id": "STORAGE-WINDOWS-001",
+      "owner": "Operations",
+      "depends_on": [],
+      "outcome": "A separate Windows drive is not assumed to be dedicated to PostgreSQL WAL.",
+      "acceptance": [
+        "Default separate-drive storage to shared; recognize explicit dedication and reject invalid/same-drive declarations."
+      ],
+      "checks": [
+        {
+          "id": "storage-windows",
+          "platform": "windows",
+          "argv": [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "tests/tune-pg-storage.ps1"
+          ],
+          "evidence": "Windows path/classification fixture with capacity lookup isolated.",
+          "timeout_seconds": 90
+        }
+      ]
+    },
+    {
+      "id": "RESOURCE-REFUSAL-001",
+      "owner": "Operations",
+      "depends_on": [],
+      "outcome": "A plan that declares its own memory overcommit cannot reach database reads/writes through the apply operation.",
+      "acceptance": [
+        "Demonstrate the known desktop overcommit failing before the database boundary on both platforms.",
+        "Admit a fitting fixture through the same guard. This does not establish a total workload-memory bound."
+      ],
+      "checks": [
+        {
+          "id": "resource-refusal-windows",
+          "platform": "windows",
+          "argv": [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "tests/tune-pg-rejection.ps1"
+          ],
+          "evidence": "Real apply entry point with database access replaced by a tripwire.",
+          "timeout_seconds": 90
+        },
+        {
+          "id": "resource-refusal-linux",
+          "platform": "linux",
+          "argv": [
+            "bash",
+            "tests/tune-pg-rejection.sh"
+          ],
+          "evidence": "Real apply entry point with database access replaced by a tripwire.",
+          "timeout_seconds": 90
+        }
+      ]
+    },
+    {
+      "id": "RESOURCE-BUDGET-001",
+      "owner": "Operations + Laplace resource planners",
+      "depends_on": [
+        "CONFIG-001",
+        "STORAGE-LINUX-001",
+        "STORAGE-WINDOWS-001",
+        "RESOURCE-REFUSAL-001"
+      ],
+      "outcome": "Configured budgets reconcile server memory, client pools, service concurrency and actual schedulable CPUs.",
+      "acceptance": [
+        "Compare all resource planners and live PG settings for desktop/server/prod with declared exceptions.",
+        "Measure concurrent services and query operators against host/cgroup limits; aggregate all pools by target cluster.",
+        "Identify the delivered implementation and artifact hash; compare the same artifact's supported lower-ISA and native AVX-512 paths on eligible hardware, including explicitly scheduled cloud work. Record selected dispatch, compiler/dependency fingerprints and golden-result equality. A skipped ISA test is not a pass; emulation can establish functional evidence but not native performance.",
+        "Compare independently compiled golden results under the documented floating-point contract; distinguish compile target, runtime dispatch and numerical reproducibility. Existing Laplace-Native multiversion dispatch must not be replaced by an inferred whole-build ISA contract."
+      ],
+      "checks": [
+        {
+          "id": "resource-host-budgets",
+          "platform": "any",
+          "argv": null,
+          "evidence": "Resolved plans, live settings and representative concurrent workload measurements."
+        }
+      ]
+    },
+    {
+      "id": "IDENTITY-001",
+      "owner": "Operations secrets + Laplace runtime",
+      "depends_on": [
+        "CONFIG-001"
+      ],
+      "outcome": "Operator, deployment and runtime identities have explicit least-privilege access through existing OpenBao and database policies.",
+      "acceptance": [
+        "Enroll the actual workload, refresh credentials without exposing them, and verify intended access plus denied unrelated access.",
+        "Demonstrate revocation/recovery; keep OpenBao/Vaultwarden placement and data intact."
+      ],
+      "checks": [
+        {
+          "id": "identity-enforcement",
+          "platform": "any",
+          "argv": null,
+          "evidence": "Positive/negative authorization and refresh/revocation tests using the intended workload identity."
+        }
+      ]
+    },
+    {
+      "id": "NETWORK-001",
+      "owner": "Operations network + hosting",
+      "depends_on": [
+        "CONFIG-001"
+      ],
+      "outcome": "Each supported client reaches its intended private/public service through verified DNS, routes and TLS.",
+      "acceptance": [
+        "Verify LAN and Tailscale resolution/routing from the actual client hosts; verify Cloudflare API and authenticated MCP behavior.",
+        "Demonstrate certificate renewal/distribution ownership rather than only current certificate validity."
+      ],
+      "checks": [
+        {
+          "id": "network-service-paths",
+          "platform": "any",
+          "argv": null,
+          "evidence": "Client-to-service probes plus renewal/distribution evidence."
+        }
+      ]
+    },
+    {
+      "id": "KNOWLEDGE-001",
+      "owner": "Laplace delivery + Operations",
+      "depends_on": [
+        "RELEASE-001",
+        "IDENTITY-001",
+        "NETWORK-001"
+      ],
+      "outcome": "hart-prod performs authenticated useful work against selected compatible hart-server knowledge while hart-cloud remains intentionally off.",
+      "acceptance": [
+        "Record the selected knowledge/artifact identity and verify API and MCP operations through public ingress.",
+        "Reject an incompatible target and reverse the selection cleanly; keep the application database separate.",
+        "Do not substitute replica freshness for intentional knowledge selection."
+      ],
+      "checks": [
+        {
+          "id": "cloud-off-serving",
+          "platform": "any",
+          "argv": ["pwsh", "-NoProfile", "-File", "acceptance/cloud-off-serving.ps1", "-ControlHost", "hart-server", "-Gcloud", "/home/ahart/google-cloud-sdk/bin/gcloud", "-Project", "project-f5812b96-f924-41a4-94c", "-Zone", "us-east1-b", "-CloudHost", "hart-cloud", "-ApplicationHost", "hart-prod", "-PublicBase", "https://api.hartonomous.com", "-PublicMcp", "https://mcp.hartonomous.com/mcp"],
+          "timeout_seconds": 150,
+          "evidence": "End-to-end operation receipts with cloud-off state and the actual selected target."
+        }
+      ]
+    },
+    {
+      "id": "RECOVERY-001",
+      "owner": "Operations backup + Laplace migrations",
+      "depends_on": [
+        "INSTALL-001",
+        "IDENTITY-001"
+      ],
+      "outcome": "Recovery of releases, application data, selected knowledge and infrastructure secrets is demonstrated separately.",
+      "acceptance": [
+        "Restore backups to an isolated target and perform application reads with compatible schema/native artifacts.",
+        "Record recovery point/time and failure handling; a copied file or readable dump listing is not a restore proof."
+      ],
+      "checks": [
+        {
+          "id": "recovery-rehearsal",
+          "platform": "any",
+          "argv": null,
+          "evidence": "Actual restore/recovery operation receipts without overwriting serving data."
+        }
+      ]
+    },
+    {
+      "id": "WIRE-001",
+      "owner": "Laplace native/client/database integration",
+      "depends_on": [
+        "KNOWLEDGE-001"
+      ],
+      "outcome": "Representative operations have measured and regression-checked external round trips and wire bytes.",
+      "acceptance": [
+        "Measure bytes, external round trips, latency, retries and connection establishment for cold/warm operations.",
+        "Define an evidence-based regression budget after baseline measurement; distinguish internal SPI work from network calls."
+      ],
+      "checks": [
+        {
+          "id": "wire-baseline-budget",
+          "platform": "any",
+          "argv": null,
+          "evidence": "Representative operation measurements followed by an executable regression budget."
+        }
+      ]
+    },
+    {
+      "id": "TRUST-001",
+      "owner": "Operations runners + all public repositories",
+      "depends_on": [
+        "IDENTITY-001"
+      ],
+      "outcome": "Untrusted builds cannot access installed runtime credentials or privileged internal resources.",
+      "acceptance": [
+        "Demonstrate isolation using a harmless denial probe from the untrusted build context.",
+        "Keep privileged installation in a separately authorized promotion context."
+      ],
+      "checks": [
+        {
+          "id": "runner-isolation",
+          "platform": "any",
+          "argv": null,
+          "evidence": "Harmless negative-access probes from the actual runner contexts."
+        }
+      ]
+    },
+    {
+      "id": "HOST-ROLE-001",
+      "owner": "Operations host configuration",
+      "depends_on": [
+        "CONFIG-001"
+      ],
+      "outcome": "Hardware eligibility, cloud lifecycle and service placement obey the user's declared machine roles.",
+      "acceptance": [
+        "Keep hart-server's damaged GPU ineligible without running a GPU workload.",
+        "Allow optional desktop GPU services through explicit configuration; CPU Laplace installation does not require them.",
+        "Cloud work explicitly acquires/releases its resource and does not become an undeclared always-on runtime dependency.",
+        "Resolve build host, release tier, serving host and selected knowledge target independently; the on-demand cloud role does not prohibit building production artifacts."
+      ],
+      "checks": [
+        {
+          "id": "host-role-enforcement",
+          "platform": "any",
+          "argv": null,
+          "evidence": "Role resolution and prohibited-operation rejection tests."
+        }
+      ]
+    },
+    {
+      "id": "BACKUP-COPY-001",
+      "owner": "Operations",
+      "depends_on": [],
+      "outcome": "Desktop copy-off propagates errors and verifies destination bytes from a fresh manifest.",
+      "acceptance": [
+        "Detect corruption, missing required inputs, partial manifests and copy failures; allow a successful repeated copy."
+      ],
+      "checks": [
+        {
+          "id": "backup-copy-windows",
+          "platform": "windows",
+          "argv": [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "tests/backup-continuity.ps1"
+          ],
+          "evidence": "Real local copy/readback regression fixture; not database or off-site recovery proof.",
+          "timeout_seconds": 90
+        }
+      ]
+    }
+  ]
+}

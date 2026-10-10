@@ -87,6 +87,7 @@ hostssl   all   $LAPLACE_ROLE  $LAPLACE_LAN       scram-sha-256
 host      all   $PGUSER        127.0.0.1/32       scram-sha-256
 host      all   $PGUSER        ::1/128            scram-sha-256
 hostssl   all   $PGUSER        $LAPLACE_LAN       scram-sha-256
+include_if_exists pg_hba.remote.conf
 hostnossl all   all            0.0.0.0/0          reject
 "
 # Who operates Laplace on this machine is the shared group: every member connects over the socket as $LAPLACE_ROLE,
@@ -728,6 +729,50 @@ TIMER
   say 'OpenBao appdb refresh' 'authentication verified; timer enabled; each invocation uses and revokes a scoped token'
 }
 
+knowledge-client(){ part 'OpenBao knowledge credentials'
+  local host=${LAPLACE_BAO_KNOWLEDGE_HOST:-$(hostname -s)}
+  local credentials=${LAPLACE_BAO_CREDENTIALS:-/etc/laplace/approle.json}
+  local address=${BAO_ADDR:-https://openbao.hartonomous.com}
+  local prefix=${LAPLACE_INSTALL_PREFIX:-/opt/laplace}
+  local machine=${LAPLACE_MACHINE_ENV:-/etc/laplace/machine.env}
+  local -a args=(--host "$host" --credentials "$credentials" --user "$LAPLACE_AGENT_USER"
+    --prefix "$prefix" --machine-file "$machine" --bao-address "$address"
+    --lock "${LAPLACE_HOST_LOCK:-/run/lock/laplace/host-resource.lock}")
+  python3 "$here/secrets/knowledge-sync.py" "${args[@]}"
+  install -d -m 755 /usr/local/libexec
+  install -m 755 "$here/secrets/knowledge-sync.py" /usr/local/libexec/laplace-knowledge-sync.py
+  {
+    printf '#!/bin/bash\nset -euo pipefail\nexec python3 /usr/local/libexec/laplace-knowledge-sync.py '
+    printf '%q ' "${args[@]}"
+    printf '\n'
+  } > /usr/local/libexec/laplace-knowledge-refresh
+  chmod 755 /usr/local/libexec/laplace-knowledge-refresh
+  cat > /etc/systemd/system/laplace-knowledge-refresh.service <<'UNIT'
+[Unit]
+Description=Refresh Laplace knowledge credential through OpenBao
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/laplace-knowledge-refresh
+NoNewPrivileges=true
+UMask=0077
+UNIT
+  cat > /etc/systemd/system/laplace-knowledge-refresh.timer <<'TIMER'
+[Unit]
+Description=Refresh Laplace knowledge credentials every fifteen minutes
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+[Install]
+WantedBy=timers.target
+TIMER
+  systemctl daemon-reload
+  systemctl enable --now laplace-knowledge-refresh.timer
+  say 'Knowledge credential refresh' 'database authentication and native receipt verified; existing AppRole session revoked'
+}
+
 report(){ part report
   say "server" "$($PGBIN/postgres --version)   $(systemctl is-active "$SERVICE.service")"
   say "PostGIS" "$(q "SELECT default_version FROM pg_available_extensions WHERE name = 'postgis'")"
@@ -741,7 +786,7 @@ report(){ part report
 }
 
 parts=${*:-all}
-for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client) ;;
+for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client|knowledge-client) ;;
   *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
   all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup; landing_of_all=1; landing; landing_of_all=; site; agents; idlestop; report ;;

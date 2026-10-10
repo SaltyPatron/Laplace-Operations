@@ -4,6 +4,51 @@ on:
 permissions:
   contents: read
 jobs:
+  configuration-index:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Verify source indexing and credential suppression
+        run: node audit/test-configuration-index.mjs
+  windows-backup:
+    runs-on: windows-2025
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify acceptance result failure boundaries
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/acceptance-runner.ps1
+      - name: Check out the application configuration contract
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: SaltyPatron/Laplace
+          ref: 3943f4fc6edae0c7fa2eb35c24eadc80d675b238
+          path: .acceptance/laplace
+          persist-credentials: false
+      - name: Use the application SDK for configuration evaluation
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify named Windows acceptance checks
+        shell: pwsh
+        env:
+          LAPLACE_ACCEPTANCE_SOURCE: ${{ github.workspace }}/.acceptance/laplace
+        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check config-windows,storage-windows,resource-refusal-windows,backup-copy-windows -Output "$env:RUNNER_TEMP/acceptance-windows.json"
+      - name: Preserve Windows acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: acceptance-windows-${{ github.sha }}
+          path: ${{ runner.temp }}/acceptance-windows.json
+          if-no-files-found: error
   boundaries:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -15,7 +60,9 @@ jobs:
         shell: bash
         run: |
           export TMPDIR="$RUNNER_TEMP"
+          bash tests/tune-pg-plan.sh
           bash tests/machine-config.sh
+          SETVARS_COMPLETED=1 OMP_NUM_THREADS=2 MKL_NUM_THREADS=3 bash -c '. ./laplace.env; test "$OMP_NUM_THREADS" = 2 && test "$MKL_NUM_THREADS" = 3'
           bash tests/operation-lock.sh
           bash tests/deployment-artifacts.sh
           bash tests/deployment-readback.sh
@@ -23,7 +70,22 @@ jobs:
           ruby tests/deployment-workflow.rb
           ruby tests/secrets-setup.rb
           bash tests/appdb-secrets.sh
+          python3 tests/knowledge-compatibility.py
+          python3 tests/dependency-revisions.py
           pwsh -NoProfile -File tests/deployment-artifacts.ps1
+      - name: Verify acceptance result failure boundaries
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/acceptance-runner.ps1
+      - name: Verify named Linux acceptance checks
+        shell: pwsh
+        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check storage-linux,resource-refusal-linux -Output "$env:RUNNER_TEMP/acceptance-linux.json"
+      - name: Preserve Linux acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: acceptance-linux-${{ github.sha }}
+          path: ${{ runner.temp }}/acceptance-linux.json
+          if-no-files-found: error
       - name: Install SQLite for backup recovery checks
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3
       - name: Check secrets backup failure and recovery behavior

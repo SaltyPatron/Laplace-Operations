@@ -1,5 +1,8 @@
 # Laplace-Operations
 
+For the current monorepo application's staging-to-production delivery and installed-runtime checks, use
+[Operating Laplace](docs/operating-laplace.md). The commands below describe the older split-repository deployment.
+
 The machine Laplace runs on, and Laplace on it, from nothing: one environment file, four scripts, and the agents. The
 code is in Laplace-Native, Laplace-postgres and Laplace-Engine, side by side under one source root; this repository
 holds what installs, sets up, deploys, repairs and runs them (Operations in the Wiki).
@@ -192,6 +195,34 @@ tier 0 under `$LAPLACE_WORK`; installed dependencies under `$LAPLACE_DEPS`; the 
 
 ## Windows (the development machine)
 
+`setup.ps1 network` reconciles Windows' LAN search domains and Tailscale DNS; `network.ps1 -Check` verifies
+resolution without changing it. Windows Tailscale writes bare peer names into its managed hosts-file section.
+LAN-only consumers use the explicit LAN name (`LAPLACE_SHARE_HOST=hart-server.lan`); remote consumers use the
+tailnet name. The check resolves all registered peers and internet DNS without starting offline machines. It
+does not establish that a peer's application is healthy or that the transport is direct.
+
+For Google Cloud's existing VM tags, `LAPLACE_GCP_PROJECT=PROJECT ./network-gcp.sh apply` declares only the
+encrypted Tailscale UDP 41641 ingress rule; `check` verifies it. Network, target tags and source ranges have
+`LAPLACE_GCP_NETWORK`, `LAPLACE_GCP_TAILSCALE_TAGS`, and `LAPLACE_GCP_TAILSCALE_SOURCES` overrides.
+Verify actual direct connectivity with `tailscale ping`; a firewall rule alone is not that evidence.
+
+Knowledge-cluster access also requires PostgreSQL authorization. `setup.sh access` preserves the optional
+`$LAPLACE_PGDATA/pg_hba.remote.conf` include for explicit remote database/role/client rules, independently of
+`LAPLACE_LAN` (which also controls LAN shares). For example, `hostssl laplace-mono laplace 100.124.95.17/32
+scram-sha-256` admits hart-prod to hart-server's monorepo substrate over TLS. Validate `pg_hba_file_rules`
+for errors and reload PostgreSQL after changing it. Do not substitute the modular `laplace` database for
+`laplace-mono`: their schemas and installed native interfaces differ. Selecting another knowledge substrate
+does not move the hosting application's separate `LAPLACE_APP_DB` accounts and billing database.
+
+The backup's `Laplace` set takes its repositories, generated work, and corpus inventory from the machine's
+`LAPLACE_SRC`, `LAPLACE_WORK`, and `LAPLACE_DATA`, including when they are on E:. `backup/copyoff.ps1 -Set Laplace
+-Plan` lists the resolved paths without copying. Required sources cannot silently disappear. Every copy uses a
+fresh manifest, Robocopy's incremental transfer, and destination SHA-256 verification; an old receipt never skips
+later source changes. Failures reach the scheduled task. `setup.ps1 backup` registers the current implementation;
+the task is invoked on demand, with no recurring trigger. Ingest is **inventory only**, and this copy-off is not a
+PostgreSQL backup or a versioned/offsite backup. Database recovery needs its own supported backup and restore path.
+Run `pwsh -File tests/backup-continuity.ps1` for local copy, corruption, unreadable-file and failure-propagation checks.
+
 ```powershell
 pwsh -File setup.ps1                  # the machine: volumes, packages, rights, dependencies, cluster, settings, access, report
 pwsh -File setup.ps1 deps report      # one part, or several
@@ -314,8 +345,23 @@ service: the conductor starts it per match, only in chess-GPU mode.
 
 ## Repair
 
-Every script here is a declaration compared with the machine, so repair is running it again: `sudo ./setup.sh` after a
+Operational completion is tracked in [the acceptance register](acceptance/README.md) and [issue #2](https://github.com/SaltyPatron/Laplace-Operations/issues/2).
+Named checks save revision- and host-specific receipts in CI; unimplemented outcomes stay incomplete.
+
+These component repair commands do not yet constitute a transactional product installer or a complete rollback.
+The [system audit](docs/2026-10-10-system-audit.md#expanded-installation-delivery-and-resource-audit) records the
+remaining differences between entry points, machine configuration and live services.
+
+Use the relevant component operation: `sudo ./setup.sh` after a
 volume, package or access rule went missing; `./tune-pg.sh` after a server setting drifted (`deploy.sh` runs it, and
 the job fails when the live server does not match); `sudo ./setup.sh settings` when a pending restart needs root;
 `./deploy.sh` after a build or a database was cut off; `./ingest.sh` after a load was; `sudo ./agents.sh` after a runner was lost (its unit restarts on failure and survives a job's out-of-memory kill), or
 `sudo ./agents.sh remove REPO` and again to re-register one. What each did is under `$LAPLACE_WORK/logs`.
+
+Inspect PostgreSQL sizing with `./tune-pg.sh --plan` or `pwsh -File tune-pg.ps1 -Plan` before applying it.
+On Windows, a separate WAL drive is still treated as shared unless the machine declaration explicitly sets
+`LAPLACE_PG_WAL_DEDICATED=1`. Set that only for a drive reserved for WAL; the desktop's D: also holds dependencies
+and builds. The planner's arithmetic checks do not establish a bound on all simultaneous query operators or
+other processes' memory use.
+When that arithmetic already reports overcommit, plan/check/apply now fail; apply refuses before contacting
+PostgreSQL. This catches a known-invalid plan without claiming that a fitting plan has passed a workload test.
