@@ -1,5 +1,8 @@
 # Laplace-Operations
 
+For the current monorepo application's staging-to-production delivery and installed-runtime checks, use
+[Operating Laplace](docs/operating-laplace.md). The commands below describe the older split-repository deployment.
+
 The machine Laplace runs on, and Laplace on it, from nothing: one environment file, four scripts, and the agents. The
 code is in Laplace-Native, Laplace-postgres and Laplace-Engine, side by side under one source root; this repository
 holds what installs, sets up, deploys, repairs and runs them (Operations in the Wiki).

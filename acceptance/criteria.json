@@ -113,6 +113,13 @@
           "platform": "any",
           "argv": null,
           "evidence": "Clean-runner delivery and maintenance, target resolution and concurrency evidence."
+        },
+        {
+          "id": "site-live-staging",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "staging", "-Wait"],
+          "timeout_seconds": 900,
+          "evidence": "Actual staging workflow execution through the human entry point; does not by itself prove replacement-runner installation."
         }
       ]
     },
