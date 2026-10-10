@@ -3,6 +3,94 @@
   "reviewed_utc": "2026-10-10",
   "purpose": "Source contract review connecting the complete index to installation and operating acceptance; does not replace the user's product requirements.",
   "scope": "All 20 GitHub repositories and 35 captured local family checkouts remain in the index. The contracts below explain cross-component behavior in the pinned sources; they do not assert installed runtime values.",
+  "research_basis": {
+    "reviewed_on": "2026-10-10",
+    "coverage": "Selected documents and implementation sections were read across all five requested repositories, plus Laplace-Native. This is not a claim to have read every page. Lexical indexing is not evidence of architectural comprehension. Historical experiments, desired contracts, inspected implementation and live validation remain distinct.",
+    "items": [
+      {
+        "topic": "Compile target, runtime ISA dispatch and exact results",
+        "source_finding": "The Wiki requires separate ISA kernels selected at runtime and cross-compiler golden-result checks. Laplace-Native already compiles AVX2, AVX-512 and VNNI translation units and dispatches using CPU/OS capabilities. Its tests skip unsupported ISA levels with exit 77 and optionally execute AVX-512 under SDE. The monorepo also has whole-engine target flags; inspecting that flag alone did not characterize the modular implementation.",
+        "consequence": "A Broadwell build machine can produce AVX-512 code. Native execution of that path needs eligible hardware; compiler host, runtime hardware, emulated correctness and native benchmark evidence are separate. Identify which implementation is actually installed before changing delivery.",
+        "criterion": "RESOURCE-BUDGET-001",
+        "validation_state": "Implementation inspected; no new native or emulated ISA execution or cross-compiler comparison performed in this review.",
+        "sources": [
+          "https://github.com/SaltyPatron/Laplace-Wiki/blob/1145467f6da11b13a5916f0c70d4282d555ab2d3/Sequence/Toolchain.md#L13",
+          "https://github.com/SaltyPatron/Laplace-Wiki/blob/1145467f6da11b13a5916f0c70d4282d555ab2d3/Sequence/Builds.md#L25",
+          "https://github.com/SaltyPatron/Laplace-Native/blob/1b9367c8055cdbd79beb1a8ba4c2d1aa322e4678/CMakeLists.txt#L50",
+          "https://github.com/SaltyPatron/Laplace-Native/blob/1b9367c8055cdbd79beb1a8ba4c2d1aa322e4678/src/cpu.c#L44",
+          "https://github.com/SaltyPatron/Laplace-Native/blob/1b9367c8055cdbd79beb1a8ba4c2d1aa322e4678/tests/CMakeLists.txt#L10",
+          "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/engine/CMakeLists.txt#L51",
+          "https://gcc.gnu.org/onlinedocs/gcc-15.1.0/gcc/x86-Options.html"
+        ]
+      },
+      {
+        "topic": "Content identity, execution grain and network work",
+        "source_finding": "Laplace describes client-computable canonical identities and native repeated algorithms over PostgreSQL set access. SQL/C# orchestrate. The Refactor execution-flow document likewise requires typed bulk execution without client round trips per record, but explicitly leaves implementation acceptance open. The Prototype README identifies a storage testbench, not the Engine; the Wiki records historical continuation experiments moving repeated work into a C extension.",
+        "consequence": "Measure external requests, transferred bytes, boundary crossings and useful work for ingest and reads. A function named Batch or native code issuing scalar SPI calls does not establish the required execution grain. Prototype measurements are prior evidence, not current deployment results; content convergence does not remove occurrence/provenance traffic.",
+        "validation_state": "Contracts and historical results inspected; present end-to-end network volume and execution grain remain to be measured.",
+        "sources": [
+          "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/docs/INVENTION.md#L155",
+          "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/docs/read-path.md#L180",
+          "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/docs/INVENTIONS.md#L41",
+          "https://github.com/SaltyPatron/Laplace-Refactor/blob/18e6f104efbc8ddc2a6c2fd6b1c3a93be8781b33/docs/architecture/POSTGRES_EXECUTION_FLOW.md#L48",
+          "https://github.com/SaltyPatron/Laplace-Prototype/blob/d488b3b097421a9aed8de713b7ae0485857631dd/README.md",
+          "https://github.com/SaltyPatron/Laplace-Wiki/blob/1145467f6da11b13a5916f0c70d4282d555ab2d3/Research/Prototype.md#L95",
+          "https://www.postgresql.org/docs/18/libpq-pipeline-mode.html"
+        ],
+        "external_research_limit": "PostgreSQL documents pipelining for small operations that cannot be made set operations or COPY. Pipeline mode disallows COPY and cannot remove a dependency that requires a client response. This supports checking execution grain, not blindly enabling a transport feature."
+      },
+      {
+        "topic": "Numerical research is evidence, not a new specification",
+        "source_finding": "Laplace-Research records numerical experiments on norm overshoot, libm last-bit differences, fixed-point alternatives and limits of norm-based repeat classification. The Wiki build contract and Native CORE-MATH linkage address deterministic results. The research notes label experiments and assumptions; their proposals do not automatically override the invention.",
+        "consequence": "Preserve golden identity/coordinate/trajectory results across compiler and dispatch changes. Distinguish an experiment proposing a representation from the representation actually authorized and implemented. Wider ISA and an MKL setting alone do not prove deterministic output.",
+        "criterion": "RESOURCE-BUDGET-001",
+        "validation_state": "Relevant research sections and implementation inspected; experiments were not rerun.",
+        "sources": [
+          "https://github.com/SaltyPatron/Laplace-Research/blob/b6eb6407ed75f2a4db9d9bd2e8cb8c9a9fae2689/numerics/NOTES.md#L16",
+          "https://github.com/SaltyPatron/Laplace-Research/blob/b6eb6407ed75f2a4db9d9bd2e8cb8c9a9fae2689/numerics/NOTES.md#L60",
+          "https://github.com/SaltyPatron/Laplace-Native/blob/1b9367c8055cdbd79beb1a8ba4c2d1aa322e4678/CMakeLists.txt#L14",
+          "https://www.intel.com/content/www/us/en/developer/archive/training/conditional-numerical-reproducibility-cnr.html"
+        ],
+        "external_research_limit": "Intel's archived CNR guidance imposes code-path/thread conditions; stronger strict-mode guarantees apply only to named routines and conditions. It is not proof of application-wide or arbitrary-library reproducibility."
+      },
+      {
+        "topic": "Knowledge selection, authority and workload identity",
+        "source_finding": "The Wiki separates knowledge, authority and compute, distinguishes knowledge-package authority manifests from cache profiles, and requires enforcement before coupling and at later action boundaries. Architecture separates content storage from conventional operational state such as auth/billing. OpenBao AppRole supports machine/service authentication with policies and login constraints; an operator login does not establish a runtime identity.",
+        "consequence": "Retain the existing Bao/Vaultwarden placement. Verify the application's own credential acquisition, renewal and permitted/denied access. Selecting a compatible knowledge target with cloud off is distinct from recovering application transactions. More compute does not confer additional knowledge authority.",
+        "criterion": "IDENTITY-001",
+        "validation_state": "Requirements and official authentication mechanism inspected; workload enrollment, renewals and live authorization remain unverified in this review.",
+        "sources": [
+          "https://github.com/SaltyPatron/Laplace-Wiki/blob/1145467f6da11b13a5916f0c70d4282d555ab2d3/Architecture.md#L27",
+          "https://github.com/SaltyPatron/Laplace-Wiki/blob/1145467f6da11b13a5916f0c70d4282d555ab2d3/Sequence/Authority.md#L23",
+          "https://openbao.org/docs/auth/approle/",
+          "https://openbao.org/docs/concepts/policies/"
+        ]
+      },
+      {
+        "topic": "Installed paths, resources and network reachability",
+        "source_finding": "The Wiki gives example filesystem layouts, assigns installation/build/deployment mechanisms to Operations, and requires one named environment. It distinguishes service headroom from deliberate benchmark saturation. MagicDNS supplies device-name resolution; name resolution alone does not establish successful application access.",
+        "consequence": "Resolve an operator-selected installation's paths consistently through setup, build, services and clients; do not turn example mount names into mandatory mounts. Budget concurrently active services and PostgreSQL operators together. Probe DNS, routes, TLS and authorization from each actual client context.",
+        "validation_state": "Source contracts inspected. Cross-shell path agreement, aggregate host budgets and all end-to-end service paths are not established by this review.",
+        "sources": [
+          "https://github.com/SaltyPatron/Laplace-Wiki/blob/1145467f6da11b13a5916f0c70d4282d555ab2d3/Operations/Setup.md#L38",
+          "https://github.com/SaltyPatron/Laplace-Wiki/blob/1145467f6da11b13a5916f0c70d4282d555ab2d3/Sequence/Toolchain.md#L23",
+          "https://github.com/SaltyPatron/Laplace-Wiki/blob/1145467f6da11b13a5916f0c70d4282d555ab2d3/Sequence/Envelope.md#L37",
+          "https://tailscale.com/docs/features/magicdns",
+          "https://www.postgresql.org/docs/18/runtime-config-resource.html#GUC-WORK-MEM"
+        ]
+      },
+      {
+        "topic": "Withdrawn delivery assumptions",
+        "source_finding": "GitHub documents runner labels as case-insensitive. The previously alleged laplace/Laplace label mismatch was not a scheduling defect. The user's on-demand cloud role does not prohibit producing release artifacts there.",
+        "action_taken": "Restored the uncommitted monorepo edits to .github/workflows/laplace.yml, deploy/linux/site.sh, tests/site-workflow.rb and tests/site-application-migrations.sh. Corrected CLOUD-ROLE-IN-WORKFLOW in this report. No delivery rewrite was committed or deployed.",
+        "criterion": "HOST-ROLE-001",
+        "validation_state": "git diff --quiet confirmed all four delivery files match worktree HEAD 58cab06ee7b460949cb2164cb29b7e24df50c8a5. Other pre-existing Windows configuration edits were preserved.",
+        "sources": [
+          "https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/apply-labels"
+        ]
+      }
+    ]
+  },
   "contracts": [
     {
       "area": "Windows Operations installation",
@@ -618,7 +706,7 @@
         "group": "hart-server-laplace",
         "cancel-in-progress": false
       },
-      "meaning": "Operations resolves three dependency repositories at main in staging and passes their resolved SHAs to production. The triggering dispatch SHA is printed but is not used as the dependency checkout ref. Later jobs use clean:false and reuse prior state. The workflow's production input describes hart-cloud, which conflicts with the user-declared dev/benchmark role. No queue:max is declared, so cancel-in-progress:false preserves the running job but does not preserve every pending request.",
+      "meaning": "Operations resolves three dependency repositories at main in staging and passes their resolved SHAs to production. The triggering dispatch SHA is printed but is not used as the dependency checkout ref. Later jobs use clean:false and reuse prior state. The production input names hart-cloud; that alone does not establish a conflict with its on-demand development/proving role. Build execution, release tier, serving host and selected knowledge target require separate tracing. No queue:max is declared, so cancel-in-progress:false preserves the running job but does not preserve every pending request.",
       "evidence": [
         {
           "repository": "Laplace-Operations",
@@ -1096,9 +1184,9 @@
     {
       "id": "CLOUD-ROLE-IN-WORKFLOW",
       "criterion": "HOST-ROLE-001",
-      "status": "verified source finding; remediation remains open",
-      "finding": "The Operations production input describes hart-cloud as production; the user explicitly designates it as an optional dev/AVX-512 benchmark host.",
-      "acceptance": "Resolve tier and host independently; demonstrate serving on the intended host with hart-cloud off.",
+      "status": "prior role-conflict conclusion withdrawn; source wording verified; deployment behavior remains unverified",
+      "finding": "The Operations production input describes hart-cloud as production. The user designates hart-cloud as an on-demand development and proving server, including AVX-512 work, and has not prohibited building production artifacts there. Treating those statements as a categorical conflict conflated build location, release tier and runtime placement.",
+      "acceptance": "Trace build execution, artifact identity, release tier, serving host and knowledge target independently. Demonstrate serving against the selected compatible knowledge target with hart-cloud intentionally off. Do not remove a cloud build/release stage merely because its input is named production.",
       "evidence": [
         {
           "repository": "Laplace-Operations",

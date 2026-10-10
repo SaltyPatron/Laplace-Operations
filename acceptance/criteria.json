@@ -228,7 +228,8 @@
       "acceptance": [
         "Compare all resource planners and live PG settings for desktop/server/prod with declared exceptions.",
         "Measure concurrent services and query operators against host/cgroup limits; aggregate all pools by target cluster.",
-        "Verify ISA dispatch on eligible hardware, including explicitly scheduled cloud AVX-512 work."
+        "Identify the delivered implementation and artifact hash; compare the same artifact's supported lower-ISA and native AVX-512 paths on eligible hardware, including explicitly scheduled cloud work. Record selected dispatch, compiler/dependency fingerprints and golden-result equality. A skipped ISA test is not a pass; emulation can establish functional evidence but not native performance.",
+        "Compare independently compiled golden results under the documented floating-point contract; distinguish compile target, runtime dispatch and numerical reproducibility. Existing Laplace-Native multiversion dispatch must not be replaced by an inferred whole-build ISA contract."
       ],
       "checks": [
         {
@@ -373,7 +374,8 @@
       "acceptance": [
         "Keep hart-server's damaged GPU ineligible without running a GPU workload.",
         "Allow optional desktop GPU services through explicit configuration; CPU Laplace installation does not require them.",
-        "Cloud work explicitly acquires/releases its resource and does not become an undeclared always-on runtime dependency."
+        "Cloud work explicitly acquires/releases its resource and does not become an undeclared always-on runtime dependency.",
+        "Resolve build host, release tier, serving host and selected knowledge target independently; the on-demand cloud role does not prohibit building production artifacts."
       ],
       "checks": [
         {
