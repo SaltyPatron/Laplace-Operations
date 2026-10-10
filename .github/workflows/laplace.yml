@@ -39,6 +39,7 @@ on:
 concurrency:
   group: hart-server-laplace
   cancel-in-progress: false
+  queue: max
 env:
   LAPLACE_SRC: ${{ github.workspace }}
   LAPLACE_CONNINFO: ""   # the database is laplace.env's, never a copy a runner kept from when it was registered
