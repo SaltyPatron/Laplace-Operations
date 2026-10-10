@@ -41,8 +41,17 @@ processes that actually share installation/database resources.
 The separate Native/Engine/Postgres deployment remains an active, distinct installation path. Operations resolves
 immutable dependency commits before checkout and preserves a component dispatch's exact commit after checking that
 it belongs to main history. Normal deployment does not drop databases or ingest content. Explicit ingestion has its
-own operation. Its existing optional cloud path still needs the lifecycle/target corrections tracked in acceptance;
-it is not the public application's production publisher.
+own operation. `./laplace.ps1 components -Target knowledge -Wait` verifies staging, acquires an independent cloud
+lease, starts the declared worker, and deploys the same component revisions there. Required compatibility checks
+precede final SQL readback. Cleanup releases only that run's lease; the installed idle timer stops the worker after
+all leases and active work end. This component path is separate from public application publication.
+
+Cloud installation uses `cloud/configure-ci.ps1` to publish the declared project, worker, zone and identity variables.
+`cloud/configure-identity.ps1 -Repository <owner/repository>` reads GitHub's actual OIDC subject format and binds only
+the named branch (main by default). `-ControlHost` and `-Gcloud` select an existing authenticated control installation.
+Newer repositories include immutable owner/repository IDs in their subjects; constructing an old name-only subject
+would grant an identity the workflow never presents.
+[GitHub documents the subject formats](https://docs.github.com/en/actions/reference/security/oidc).
 
 ## Resource and CPU configuration
 

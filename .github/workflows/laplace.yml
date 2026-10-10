@@ -143,8 +143,8 @@ jobs:
       - name: the database holds the stamp it was seeded from
         run: ./Laplace-Operations/seed-stamp.sh seeded
   reads:
-    needs: [deploy, ingest]
-    if: always() && needs.deploy.result == 'success' && needs.ingest.result != 'failure' && needs.ingest.result != 'cancelled'
+    needs: [deploy, checks, ingest]
+    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.ingest.result != 'failure' && needs.ingest.result != 'cancelled'
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 30
     steps:
@@ -152,7 +152,7 @@ jobs:
         with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
-  # Production uses the exact dependency revisions captured in staging. It runs only
+  # Cloud verification uses the exact dependency revisions captured in staging. It runs only
   # after deployment readback AND staging runtime reads pass, on explicit cloud dispatch.
   cloud-acquire:
     needs: [deploy, checks, reads]
@@ -192,6 +192,7 @@ jobs:
           ./Laplace-Operations/deploy.sh
   checks-cloud:
     needs: deploy-cloud
+    if: always() && needs.deploy-cloud.result == 'success'
     runs-on: [self-hosted, laplace, Laplace-Operations, knowledge]
     timeout-minutes: 60
     steps:
@@ -210,8 +211,8 @@ jobs:
       - name: the ingest of this machine's sources, its status, and its measurements
         run: ./Laplace-Operations/ingest.sh
   reads-cloud:
-    needs: [deploy-cloud, ingest-cloud]
-    if: always() && needs.deploy-cloud.result == 'success' && needs.ingest-cloud.result != 'failure' && needs.ingest-cloud.result != 'cancelled'
+    needs: [deploy-cloud, checks-cloud, ingest-cloud]
+    if: always() && needs.deploy-cloud.result == 'success' && needs.checks-cloud.result == 'success' && needs.ingest-cloud.result != 'failure' && needs.ingest-cloud.result != 'cancelled'
     runs-on: [self-hosted, laplace, Laplace-Operations, knowledge]
     timeout-minutes: 30
     steps:
