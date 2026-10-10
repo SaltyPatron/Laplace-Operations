@@ -44,7 +44,7 @@ Wordnet	archive	https://wordnetcode.princeton.edu/3.0/WordNet-3.0.tar.gz	.
 FrameNet	archive	https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/framenet_v17.zip	.
 VerbAtlas-1.1	archive	https://verbatlas.org/downloads/VerbAtlas-1.1.0.zip	.
 # Tatoeba's weekly exports: the publisher keeps only the current week, so these are the latest by nature; the record (fingerprint.sh
-# inputs) says which week a host holds. users_sentences is not among the exports it publishes today.
+# inputs) says which week a host holds. users_sentences is published as a plain .csv, not an archive.
 Tatoeba	archive	https://downloads.tatoeba.org/exports/links.tar.bz2	.
 Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences.tar.bz2	.
 Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences_CC0.tar.bz2	.
@@ -53,6 +53,7 @@ Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences_with_audio.tar.b
 Tatoeba	archive	https://downloads.tatoeba.org/exports/tags.tar.bz2	.
 Tatoeba	archive	https://downloads.tatoeba.org/exports/transcriptions.tar.bz2	.
 Tatoeba	archive	https://downloads.tatoeba.org/exports/user_languages.tar.bz2	.
+Tatoeba	file	https://downloads.tatoeba.org/exports/users_sentences.csv	./
 # Wiktextract's raw dump of the English Wiktionary (kaikki.org): one current file, replaced in place by the publisher (2.8 GB); the
 # record says which dump a host holds. The recipe matches raw-wiktextract-data*.
 Wiktionary	file	https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz	./
