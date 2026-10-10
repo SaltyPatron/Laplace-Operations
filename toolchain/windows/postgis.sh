@@ -91,6 +91,8 @@ patches() {
 configure() {
   shims
   patches
+  # a checkout of the pinned commit carries configure.ac, not configure: its own autogen.sh makes it, once
+  [ -x "$SRC/configure" ] || ( cd "$SRC" && ./autogen.sh )
   mkdir -p "$B" && cd "$B"
   # _cv_*: the probes for math errno and signed zeros run programs the contract makes behave as PostGIS wants.
   _cv_nomatherrno=no _cv_nosignedzeros=no \
@@ -105,6 +107,9 @@ configure() {
     --with-xml2config="$XML/bin/xml2-config" --with-jsondir="$JSONC" \
     --without-protobuf --without-raster --without-address-standardizer --without-interrupt-tests \
     --host=x86_64-w64-mingw32 --build=x86_64-w64-mingw32
+  # the sources include ../postgis_config.h relative to themselves, an in-tree build's: the headers configure made
+  # here go beside the sources, so a stale one from an earlier configure cannot shadow them
+  for f in postgis_config.h postgis_revision.h; do if [ -f "$B/$f" ]; then cp "$B/$f" "$SRC/$f"; fi; done
 }
 
 # PostgreSQL's Windows port headers are on the include path only here: configure's probes break with them.
@@ -118,13 +123,21 @@ pmake() {
 
 build() {
   cd "$B"
+  # postgis_revision.h is the top-level make's (utils/repo_revision.pl); the sources include it through postgis_config.h
+  make postgis_revision.h
+  for f in postgis_config.h postgis_revision.h; do if [ -f "$B/$f" ]; then cp "$B/$f" "$SRC/$f"; fi; done
   make -C liblwgeom liblwgeom.la
   make -C deps/flatgeobuf CXX="icx-cc -fms-runtime-lib=dll -std=c++17 -x c++"
   # libtool names the MSVC-format archive lwgeom.lib; PGXS links it by its MinGW name.
   cp liblwgeom/.libs/lwgeom.lib liblwgeom/.libs/liblwgeom.a
-  # Directory by directory: the top level stops at the first that fails, and utils (scripts Laplace does not use)
-  # builds raster's upgrade scripts even without raster.
-  for d in libpgcommon postgis topology extensions; do pmake -j"$(nproc)" -C $d all; done
+  # Directory by directory: the top level stops at the first that fails, utils (scripts Laplace does not use) builds
+  # raster's upgrade scripts even without raster, and so does extensions as a whole: only the two extensions built.
+  for d in libpgcommon postgis topology; do pmake -j"$(nproc)" -C $d all; done
+  pmake -C extensions postgis_extension_helper.sql                     # the parent's generated helper the extensions include
+  # the postgis extension's whole target also makes the upgrade scripts, which want raster's: the control file and the
+  # install script are what CREATE EXTENSION reads
+  pmake -C extensions/postgis postgis.control "sql/postgis--$(ver postgis).sql"
+  pmake -j"$(nproc)" -C extensions/postgis_topology all
   # libtool's launcher wrappers for the loader programs fail to link (it builds them without LDFLAGS); the programs
   # themselves are in loader/.libs.
   pmake -j"$(nproc)" -k -C loader all || true
@@ -135,7 +148,8 @@ build() {
 
 install() {
   cd "$B"
-  for d in postgis topology extensions; do pmake -C $d install; done
+  for d in postgis topology extensions/postgis_topology; do pmake -C $d install; done
+  cp extensions/postgis/postgis.control "extensions/postgis/sql/postgis--$(ver postgis).sql" "$PG/share/extension/"
   cp loader/.libs/shp2pgsql.exe loader/.libs/pgsql2shp.exe "$PG/bin/"
   # The DLLs PostGIS loads, beside postgres.exe: Windows finds a backend module's dependencies there.
   for f in "$GEOS/bin/geos.dll" "$GEOS/bin/geos_c.dll" "$PROJ/bin/proj_9.dll" "$JSONC/bin/json-c.dll" \
