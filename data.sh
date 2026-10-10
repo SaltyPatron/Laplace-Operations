@@ -77,7 +77,7 @@ case $op in
         # what the set's directory holds beside what the declarations land there: an older sibling a root pattern may
         # resolve to instead of the declared one; said, never removed (the operator decides what leaves a data directory)
         if [ -f "$d/.landed" ] && ! grep -qx '\*' "$d/.landed"; then
-          extra=$(ls -A "$d" | grep -v '^\.' | grep -vxF -f "$d/.landed" | tr '\n' ' ')
+          extra=$({ ls -A "$d" | grep -v '^\.' | grep -vxF -f "$d/.landed" || true; } | tr '\n' ' ')   # nothing extra is the good case, not a failure
           [ -z "$extra" ] || printf '  %-28s also holds: %s\n' "" "$extra"; fi
       else printf '  %-28s missing\n' "$s"; bad=$((bad + 1)); fi
     done
