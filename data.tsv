@@ -8,6 +8,7 @@
 #   release  the latest GitHub release (api.github.com/repos/O/R/releases/latest): the asset matching into's pattern;
 #            {edition} in the set's name is the asset's name after the pattern's literal prefix, before its extension
 #   extract  an archive the set already holds (origin: its path under the set), opened into a directory under the set
+#   once     a publisher's single current file (a dump replaced in place): fetched only when nothing matching into's pattern is held
 #   git      a repository into a directory under the set: at the commit after @ in into (pinned: every host the same), or at the
 #            latest of its default branch when there is none
 #   archive  an archive from the publisher, kept under the set's .archive and opened into the set (into: a directory under the
@@ -54,9 +55,11 @@ Tatoeba	archive	https://downloads.tatoeba.org/exports/tags.tar.bz2	.
 Tatoeba	archive	https://downloads.tatoeba.org/exports/transcriptions.tar.bz2	.
 Tatoeba	archive	https://downloads.tatoeba.org/exports/user_languages.tar.bz2	.
 Tatoeba	file	https://downloads.tatoeba.org/exports/users_sentences.csv	./
-# Wiktextract's raw dump of the English Wiktionary (kaikki.org): one current file, replaced in place by the publisher (2.8 GB); the
-# record says which dump a host holds. The recipe matches raw-wiktextract-data*.
-Wiktionary	file	https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz	./
+# Wiktextract at kaikki.org: the raw dump of every language (2.8 GB) and the English dictionary (2.9 GB), each one current file the
+# publisher replaces in place. Taken once: a host that holds a dump keeps it (staging holds 2026-08-28 and an April English file), a
+# host with none takes the current one; the record says which. The recipes match raw-wiktextract-data* and kaikki.org-dictionary-*.jsonl.
+Wiktionary	once	https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz	raw-wiktextract-data*.jsonl.gz
+Wiktionary	once	https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl	kaikki.org-dictionary-English*.jsonl
 # Universal Dependencies 2.18, pinned: the release LINDAT/CLARIAH holds (hdl.handle.net/11234/1-6149), the treebanks and the documentation
 UD-Treebanks	archive	https://lindat.mff.cuni.cz/repository/server/api/core/bitstreams/d91b1ffc-fc31-41a0-bd8f-3b876864a1d5/content	ud-treebanks-v2.18.tgz
 UD-Docs	archive	https://lindat.mff.cuni.cz/repository/server/api/core/bitstreams/48a1c529-e985-4282-ae32-7feee27ca141/content	ud-documentation-v2.18.tgz
