@@ -55,6 +55,7 @@ sudo ./setup.sh                                    # once per machine: volumes, 
 tests/tune-pg-plan.sh                              # the rules against every host's measured facts, and the invariants they must keep
 sudo ./setup.sh settings                           # the same declaration, when a pending restart needs root
 sudo ./setup.sh machine                            # repair declaration permissions only; no provisioning
+sudo ./setup.sh secrets-stack                      # hart-server's existing Vaultwarden/OpenBao services; explicit only
 sudo LAPLACE_DROP=$LAPLACE_PGDATA ./setup.sh drop all   # the cluster emptied and made again (never part of all)
 ```
 
