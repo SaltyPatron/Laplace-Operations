@@ -68,6 +68,10 @@ What `setup.sh` makes on a fresh Ubuntu 22.04 host, so that nothing is done by h
 
 A host that serves the API but holds no knowledge (hart-prod) declares `LAPLACE_APP_DBNAME` in its `/etc/laplace/machine.env`, and `sudo ./setup.sh appdb` gives it PostgreSQL from the PostgreSQL project's own apt repository: a cluster named `app` on the data disk (`LAPLACE_APP_PGDATA`, default `/data/postgresql/app`), at `LAPLACE_APP_PGPORT` (default 5432), listening for `$LAPLACE_LAN`, with `$LAPLACE_ROLE` owning the declared database and a password of its own in `/etc/laplace/pgpass` (the `127.0.0.1` line) and every operator's `~/.pgpass`. This is the monorepo's `app` schema, accounts, sessions, keys and billing, which Laplace #1741 moved out of the knowledge database (`LAPLACE_APP_DB`); the knowledge host migrates it over the tailnet, so that host needs the same pgpass line for this host's tailnet address. No extension, no compiler: the knowledge never lives here. A host that declares no `LAPLACE_APP_DBNAME` skips the part.
 
+### A host that stops itself
+
+A host that is started for a job and pays by the minute (hart-cloud) declares `LAPLACE_IDLE_STOP_MINUTES` in its `/etc/laplace/machine.env`, and `sudo ./setup.sh idlestop` installs a five-minute timer that powers the host off once nothing has run on it for that long: no runner job, no ingest, deploy or build, no login session. On Compute Engine that is a stop; the disk stays and the pipeline's knowledge-host job starts the instance again through workload identity when the next delivery needs it. Hosts without the declaration skip the part.
+
 ### The shares
 
 ```sh

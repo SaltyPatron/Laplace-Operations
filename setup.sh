@@ -3,7 +3,7 @@
 #
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
-#                              appdb | site | agents | report
+#                              appdb | site | agents | idlestop | report
 #   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
 #   sudo ./setup.sh shares     the SMB shares for the development machine (LAPLACE_SHARES); not part of all
 #   sudo LAPLACE_DROP=/data/pgdata ./setup.sh drop all
@@ -419,6 +419,36 @@ appdb(){ part "application database"
   if command -v ufw >/dev/null && ufw status | grep -q "^Status: active"; then ufw status | grep -q "$port/tcp.*$LAPLACE_LAN" || { ufw allow from "$LAPLACE_LAN" to any port "$port" proto tcp >/dev/null; say "ufw" "$port/tcp from $LAPLACE_LAN"; }; fi
   say "database $name" "$(aq "SELECT pg_size_pretty(pg_database_size('$name'))") on 127.0.0.1:$port and $LAPLACE_LAN"
 }
+# A host that is started for a job and pays by the minute (hart-cloud) stops itself when nothing has run on it for
+# LAPLACE_IDLE_STOP_MINUTES (its machine.env): no runner job (a Runner.Worker process), no ingest, deploy or build, no
+# login session, and the machine up for at least that long. Powering off a Compute Engine instance from inside is the
+# same as stopping it: the disk stays, the pipeline starts it again for the next job. Hosts without the declaration
+# skip the part.
+idlestop(){ part "idle stop"
+  local m=${LAPLACE_IDLE_STOP_MINUTES:-}; [ -n "$m" ] || { say "idle stop" "none declared (LAPLACE_IDLE_STOP_MINUTES): skipped"; return 0; }
+  cat > /usr/local/sbin/laplace-idle-stop <<EOS
+#!/bin/bash
+# Laplace (setup.sh idlestop): stop this host when it has been idle for $m minutes. Declared, not hand-made.
+minutes=$m
+up=\$(awk '{print int(\$1/60)}' /proc/uptime); [ "\$up" -ge "\$minutes" ] || exit 0
+busy=""
+pgrep -f 'Runner\.Worker' >/dev/null && busy="a runner job"
+pgrep -f 'laplace (ingest|tier0|highway|deploy)|/deploy\.sh|/build\.sh|/ingest\.sh|/data\.sh fetch|setup\.sh' >/dev/null && busy="\${busy:+\$busy, }an operation"
+[ "\$(who | wc -l)" = 0 ] || busy="\${busy:+\$busy, }a login session"
+stamp=/run/laplace-idle-since
+if [ -n "\$busy" ]; then rm -f "\$stamp"; exit 0; fi
+[ -f "\$stamp" ] || { date +%s > "\$stamp"; exit 0; }
+idle=\$(( (\$(date +%s) - \$(cat "\$stamp")) / 60 ))
+[ "\$idle" -ge "\$minutes" ] || exit 0
+logger -t laplace-idle-stop "idle for \$idle minutes (declared \$minutes): stopping the host"
+systemctl poweroff
+EOS
+  chmod 755 /usr/local/sbin/laplace-idle-stop
+  printf '[Unit]\nDescription=Laplace: stop this host when idle for %s minutes\n[Service]\nType=oneshot\nExecStart=/usr/local/sbin/laplace-idle-stop\n' "$m" > /etc/systemd/system/laplace-idle-stop.service
+  printf '[Unit]\nDescription=Laplace: idle check every five minutes\n[Timer]\nOnBootSec=5min\nOnUnitActiveSec=5min\n[Install]\nWantedBy=timers.target\n' > /etc/systemd/system/laplace-idle-stop.timer
+  systemctl daemon-reload; systemctl enable -q --now laplace-idle-stop.timer
+  say "idle stop" "after $m idle minutes; $(systemctl is-active laplace-idle-stop.timer); next $(systemctl show -p NextElapseUSecRealtime --value laplace-idle-stop.timer)"
+}
 site(){ part site
   site_sources
   missing=$(for p in $SITE_PACKAGES; do dpkg-query -W -f '${Status}\n' "$p" 2>/dev/null | grep -q "install ok installed" || echo "$p"; done)
@@ -536,7 +566,7 @@ parts=${*:-all}
 for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report|chess|shares) ;;
   *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|site|agents|report|chess|shares ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
-  all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; site; agents; report ;;
+  all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; site; agents; idlestop; report ;;
   *) "$p" ;;
 esac; done
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
