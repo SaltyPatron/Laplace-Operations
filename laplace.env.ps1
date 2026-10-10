@@ -68,8 +68,8 @@ Set-Default LAPLACE_BACKUP_JOBS  "$PSScriptRoot\backup\jobs.psd1"           # wh
 
 # The toolchain: the developer shell (Visual Studio's vcvars64, oneAPI, CMake, the manifest's build tools) and the
 # MSYS2 that builds PostGIS (toolchain\windows\postgis.sh).
-Set-Default LAPLACE_DEVSHELL 'D:\Libraries\load-env.ps1'
-Set-Default LAPLACE_MSYS2    'D:\Libraries\msys64'
+Set-Default LAPLACE_DEVSHELL "$PSScriptRoot\toolchain\windows\devshell.ps1"   # finds them on the machine; never written by hand
+# LAPLACE_MSYS2: an MSYS2 the machine already has. Unset, it is where setup.ps1 deps unpacks the manifest's msys2 row.
 
 Set-Default LAPLACE_NATIVE   "$env:LAPLACE_SRC\Laplace-Native"
 Set-Default LAPLACE_OPERATIONS "$env:LAPLACE_SRC\Laplace-Operations"

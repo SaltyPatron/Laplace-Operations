@@ -38,7 +38,7 @@ $PgDir = $env:LAPLACE_PG_DIR; $PgBin = Join-Path $PgDir 'bin'; $PgData = $env:LA
 $PgHost = $env:LAPLACE_PGHOST; $PgPort = $env:LAPLACE_PGPORT; $PgService = $env:LAPLACE_PGSERVICE; $PgAccount = $env:LAPLACE_PGUSER; $PgRole = $env:LAPLACE_ROLE; $PgLan = $env:LAPLACE_LAN; $Locks = $env:LAPLACE_LOCKS
 $PgLogs = Join-Path $Work 'logs\postgres'
 $PgCanon = 'C:\ProgramData\Laplace\pgpass.conf'   # the role's password: one canonical copy, administrators only (setup.sh: /etc/laplace/pgpass)
-$Math = $env:LAPLACE_MATH; $Msys2 = $env:LAPLACE_MSYS2; $DevShell = $env:LAPLACE_DEVSHELL
+$Math = $env:LAPLACE_MATH; $DevShell = $env:LAPLACE_DEVSHELL
 $Toolchain = Join-Path $PSScriptRoot 'toolchain\laplace.cmake'
 
 $logDir = Join-Path $Work 'logs\root'
@@ -93,9 +93,8 @@ function MsysPath([string]$path) { '/' + ($path.Substring(0, 1).ToLowerInvariant
 function GitIn([string]$dir) { & git.exe -C $dir @args 2>&1 }   # not named Git: a function would shadow git.exe
 # the developer shell, once, when icx is not already on the PATH: Visual Studio's vcvars64, oneAPI, CMake, the tools
 function DevShell {
-    if (Get-Command icx.exe -ErrorAction SilentlyContinue) { return $true }
-    if (-not (Test-Path $DevShell)) { return $false }
-    . $DevShell *> $null
+    if (-not (Test-Path $DevShell)) { return [bool](Get-Command icx.exe -ErrorAction SilentlyContinue) }
+    . $DevShell *> $null                                                    # again each time: the tools deps unpacked since are put on the PATH
     [bool](Get-Command icx.exe -ErrorAction SilentlyContinue)
 }
 function PgReady { & "$PgBin\pg_isready.exe" -h $PgHost -p $PgPort 2>$null | Out-Null; $LASTEXITCODE -eq 0 }
@@ -142,6 +141,8 @@ function Prefix($r) {
 }
 function Proof($r) { if ($r.proof) { Join-Path (Prefix $r) $r.proof } }
 function Checkout($r) { if ($r.kind -eq 'release' -and $r.build -eq 'amalgamation') { Join-Path (Join-Path (Join-Path $DepSrc $r.name) $r.version) 'source' } else { Join-Path $DepSrc $r.name } }
+# MSYS2: the machine's own when it names one (LAPLACE_MSYS2), else where the manifest's msys2 row is unpacked (deps)
+$Msys2 = if ($env:LAPLACE_MSYS2) { $env:LAPLACE_MSYS2 } else { $m = Manifest | Where-Object build -eq 'sfx' | Select-Object -First 1; if ($m) { Prefix $m } }
 function DependsPrefixes($r) { foreach ($d in ($r.depends -split ',')) { if ($d) { $row = Manifest | Where-Object name -eq $d | Select-Object -First 1; if ($row -and $row.kind -ne 'tool') { Prefix $row } } } }
 
 # ------------------------------------------------------------------------------------------------------ the parts
@@ -168,7 +169,7 @@ function volumes {
 function packages {
     Part 'packages'
     if (Test-Path $DevShell) { Say 'developer shell' "$DevShell$(if (DevShell) { '' } else { '   icx NOT FOUND after loading it' })" }
-    else { Say 'developer shell' "MISSING: $DevShell (LAPLACE_DEVSHELL): Visual Studio's vcvars64 and oneAPI's oneapi-vars, by hand" }
+    else { Say 'developer shell' "MISSING: $DevShell (LAPLACE_DEVSHELL): the repository's is toolchain\windows\devshell.ps1" }
     foreach ($t in $Tools.Keys) {
         $c = Get-Command "$t.exe" -ErrorAction SilentlyContinue
         if (-not $c) { Say $t "MISSING: $($Tools[$t])"; continue }
@@ -178,7 +179,7 @@ function packages {
         if ($t -eq 'cmake' -and [version]($v -replace '-.*$') -lt [version]'3.25') { Say $t "$v at $($c.Source): TOO OLD, 3.25 or newer (4.x for icx 2026)" } else { Say $t "$v   $($c.Source)" }
     }
     $pacman = Join-Path $Msys2 'usr\bin\pacman.exe'
-    if (-not (Test-Path $pacman)) { Say 'MSYS2' "MISSING: no pacman at $Msys2 (LAPLACE_MSYS2): the manifest's msys2 archive, unpacked, then pacman -Syu"; return }
+    if (-not (Test-Path $pacman)) { Say 'MSYS2' "not unpacked yet at ${Msys2}: deps unpacks the manifest's msys2 row there, and this part then installs its packages"; return }
     $missing = @(foreach ($p in $Msys2Packages) { & $pacman -Q $p 2>$null | Out-Null; if ($LASTEXITCODE) { $p } })
     if ($missing.Count) { Attempt 'MSYS2 packages' { Exec $pacman (@('-S', '--needed', '--noconfirm') + $missing); Say 'MSYS2 packages' "installed $($missing -join ' ')" } }
     else { Say 'MSYS2 packages' "all $($Msys2Packages.Count) present at $Msys2" }
@@ -228,7 +229,7 @@ function deps {
             # passed over when the machine's MSYS2 (LAPLACE_MSYS2) is already there. amalgamation: a source archive,
             # unpacked in the source store for the build below. Anything else is installed another way (uv tool).
             if (-not $r.origin.StartsWith('https://') -or $r.build -notin 'unpack', 'sfx', 'amalgamation') { continue }
-            if ($r.build -eq 'sfx' -and (Test-Path (Join-Path $Msys2 'usr$checkoutin$checkoutash.exe'))) { Say $what "MSYS2 is at $Msys2"; continue }
+            if ($r.build -eq 'sfx' -and (Test-Path (Join-Path $Msys2 'usr\bin\bash.exe'))) { Say $what "MSYS2 is at $Msys2"; continue }
             Attempt $what {
                 $store = Join-Path (Join-Path $DepSrc $r.name) $r.version
                 $prefix = if ($r.build -eq 'amalgamation') { Join-Path $store 'source' } else { Prefix $r }
@@ -352,7 +353,7 @@ function deps {
                 }
                 'configure' {
                     # PostGIS: toolchain\windows\postgis.sh in MSYS2's shell, started from the developer shell
-                    $bash = Join-Path $Msys2 'usr$checkoutin$checkoutash.exe'
+                    $bash = Join-Path $Msys2 'usr\bin\bash.exe'
                     if (-not (Test-Path $bash)) { throw "no MSYS2 at $Msys2 (LAPLACE_MSYS2)" }
                     $env:MSYSTEM = 'MSYS'; $env:MSYS2_PATH_TYPE = 'inherit'; $env:CHERE_INVOKING = '1'
                     try { Exec $bash @('-l', '-c', (MsysPath (Join-Path $PSScriptRoot 'toolchain\windows\postgis.sh'))) }
