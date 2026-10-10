@@ -30,6 +30,14 @@ build(){
   md "### Determinism: the same source decomposed twice"
   while read -r v line; do if [ "$v" = ok ]; then good "$line"; else bad "$line (SaltyPatron/Laplace-Engine#36)"; fi; done < "$log/determinism.txt"
   grep -q '^claims .* failed' "$log/record.txt" && bad "a source's claims could not be decomposed: $(grep '^claims .* failed' "$log/record.txt" | head -1)"
+  # What the results are made from. Tier 0 is generated from the Unicode data and text is decomposed by ICU: the two
+  # must be of one Unicode version, or what this machine names is not what a machine with matching ones names.
+  md "### What it is made from"
+  uv=$(sed -n 's/^ucd  *\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' "$log/record.txt"); iv=$(sed -n 's/^icu  .* unicode  *\([0-9][0-9.]*\).*/\1/p' "$log/record.txt")
+  if [ -z "$uv" ] || [ -z "$iv" ]; then bad "the record does not say its Unicode data ($(sed -n 's/^ucd  *//p' "$log/record.txt")) or its ICU ($(sed -n 's/^icu  *//p' "$log/record.txt"))"
+  elif [ "$uv" = "$iv" ]; then good "the Unicode data under $LAPLACE_UCD is $(sed -n 's/^ucd  *\([^ ]*\).*/\1/p' "$log/record.txt"), the version ICU $(sed -n 's/^icu  *\([^ ]*\).*/\1/p' "$log/record.txt") is of"
+  else bad "the Unicode data under $LAPLACE_UCD is $(sed -n 's/^ucd  *\([^ ]*\).*/\1/p' "$log/record.txt"); ICU $(sed -n 's/^icu  *\([^ ]*\).*/\1/p' "$log/record.txt") is of Unicode $iv: tier 0 and the decomposition of text are of two versions (data.tsv says which the Unicode data is fetched at)"; fi
+  sed -n 's/^data  *\([^ ]*\)  *none.*/\1/p' "$log/record.txt" | while read -r s; do md "- $s is at none of its roots on this machine: what it says is in no result here"; done
   md "### Tier 0 installed"
   made=$(sed -n 's/^tier0  *//p' "$log/record.txt"); installed=$("$L" text a 2>/dev/null | sed -n 's/^tier 0  *\([0-9a-f]\{64\}\).*/\1/p')
   if [ -z "$made" ]; then bad "tier 0 was not made afresh (see $log)"

@@ -6,6 +6,8 @@
 #   ./fingerprint.sh record FILE    the record of the build under $LAPLACE_BUILD for the code under $LAPLACE_SRC
 #   ./fingerprint.sh publish FILE   put it on the branch `fingerprints` of Laplace-Operations, at <native>-<engine>/<machine>.txt
 #   ./fingerprint.sh compare FILE   lay it beside every other machine's record for the same commits (exit 1 on a difference)
+#   ./fingerprint.sh compare FILE DIR   the same, against the records (*.txt) in DIR in place of the branch's
+#   ./fingerprint.sh inputs         what this machine's results are made from: the lines of the record that say its data
 #
 # The record: the commits, the compiler and the processor (said, never compared), then what must be the same on every
 # machine: tier 0 and its flags, made afresh into a scratch directory from $LAPLACE_UCD; the highway the last
@@ -23,6 +25,34 @@ dirty(){ [ -z "$(git -c safe.directory='*' -C "$LAPLACE_SRC/$1" status --porcela
 fp(){ sed -n 's/^fingerprint.* \([0-9a-f]\{64\}\).*/\1/p' | head -1; }
 key(){ echo "$(sed -n 's/^native  *\([^ +]*\).*/\1/p' "$1")-$(sed -n 's/^engine  *\([^ +]*\).*/\1/p' "$1")"; }
 
+# What the results are made from, so that two records which differ can be told apart by their inputs before their
+# arithmetic: the Unicode data tier 0, its flags and the unicode source are read from (its version, as DerivedAge.txt
+# names it, and its files but the charts), the ICU text is decomposed with and the Unicode version that ICU is of, and
+# the directory each source is read from whose results are in the record: the sources of $LAPLACE_DETERMINISM, and the
+# resources the highway was generated from (as its log names them). A source's directory is its first root that
+# exists; of a pattern, the newest: as the engine resolves it. A tree is said as its files and one hash: of
+# "path<TAB>bytes<TAB>sha256" for every file, in byte order of the paths.
+tree(){ ( cd "$1" && shift && find . -type f "$@" | LC_ALL=C sort | while IFS= read -r f; do
+    printf '%s\t%s\t%s\n' "${f#./}" "$(wc -c < "$f" | tr -d ' ')" "$(sha256sum < "$f" | cut -c1-64)"; done ); }
+said(){ t=$(mktemp); cat > "$t"; echo "$(wc -l < "$t" | tr -d ' ') $(sha256sum < "$t" | cut -c1-16)"; rm -f "$t"; }
+inputs(){
+  u=$LAPLACE_UCD/Public/UCD/latest                                         # where tier0.c, flags.c and the unicode recipe read it
+  if [ -d "$u" ]; then v=$(sed -n '1s/^# DerivedAge-\([0-9.]*\)\.txt.*/\1/p' "$u/ucd/DerivedAge.txt" 2>/dev/null)
+    echo "ucd         ${v:-unknown} $(tree "$u" -not -path './charts/*' | said)"
+  else echo "ucd         none"; fi
+  i=$LAPLACE_ICU_DIR/include/unicode
+  echo "icu         $(sed -n 's/^#define U_ICU_VERSION "\(.*\)".*/\1/p' "$i/uvernum.h" 2>/dev/null | head -1) unicode $(sed -n 's/^#define U_UNICODE_VERSION "\(.*\)".*/\1/p' "$i/uchar.h" 2>/dev/null | head -1)"
+  res=$(resources | tr '\n' ' '); echo "resources   ${res% }"
+  seen=" "
+  for s in $LAPLACE_DETERMINISM $res; do case $seen in *" $s "*) continue ;; esac; seen="$seen$s "; d=
+    for root in $(sed -n 's/^root  *//p' "$LAPLACE_SRC/Laplace-Engine/recipes/$s/source" 2>/dev/null); do
+      [ -n "$d" ] && break; for c in $(eval echo "$root"); do [ -d "$c" ] && d=$c; done; done
+    if [ -n "$d" ]; then echo "data        $s $(tree "$d" | said) ${d##*/}"; else echo "data        $s none"; fi
+  done; }
+# the resources the last deployment's highway was read from: each line of its log between the title and the slots
+resources(){ h=$(ls -d "$LAPLACE_WORK"/logs/deploy/*/ 2>/dev/null | sort | tail -1); [ -n "$h" ] && [ -f "$h/highway.log" ] || return 0
+  sed -n '/^laplace highway/,/^  slots:/p' "$h/highway.log" | sed -n 's/^  \([a-z][a-z0-9-]*\)  *[0-9n].*/\1/p'; }
+
 record(){ out=$1; [ -x "$L" ] || { echo "no laplace at $L: deploy.sh builds it"; exit 1; }
   scratch=$(mktemp -d); trap 'rm -rf "$scratch"' EXIT
   { echo "machine     $(hostname)"
@@ -32,6 +62,7 @@ record(){ out=$1; [ -x "$L" ] || { echo "no laplace at $L: deploy.sh builds it";
     echo "made        $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     for r in Laplace-Native Laplace-Engine Laplace-postgres Laplace-Operations; do
       printf '%-11s %s%s\n' "$(echo "$r" | sed 's/Laplace-//' | tr 'A-Z' 'a-z')" "$(commit "$r")" "$(dirty "$r")"; done
+    inputs
     echo "tier0       $("$L" tier0 -o "$scratch/tier0.bin" 2>&1 | fp)"
     echo "flags       $(LAPLACE_TIER0=$scratch/tier0.bin "$L" flags -o "$scratch/tier0.flags" 2>&1 | fp)"
     h=$(ls -d "$LAPLACE_WORK"/logs/deploy/*/ 2>/dev/null | sort | tail -1)
@@ -63,25 +94,43 @@ publish(){ f=$1; k=$(key "$f"); m=$(sed -n 's/^machine  *//p' "$f"); d=$(mktemp 
     g -C "$d" pull -q --rebase origin fingerprints || true; done
   echo "not published"; rm -rf "$d"; return 1; }
 
-compare(){ f=$1; k=$(key "$f"); m=$(sed -n 's/^machine  *//p' "$f"); d=$(mktemp -d); rc=0
+# Laying two records side by side. fld: one field of a record; dat: a source's data as "files hash" (or none);
+# same: two values as same, differs, or unknown (one is not said: a record from before the inputs were); both: two such
+# answers as one (any differs: differs; else any unknown: unknown); why: what a result's difference then is.
+fld(){ sed -n "s/^$2  *//p" "$1" | head -1; }
+dat(){ sed -n "s/^data  *$2  *\([0-9][0-9]* [0-9a-f][0-9a-f]*\).*/\1/p; s/^data  *$2  *none.*/none/p" "$1" | head -1; }
+same(){ if [ -z "$1" ] || [ -z "$2" ]; then echo unknown; elif [ "$1" = "$2" ]; then echo same; else echo differs; fi; }
+both(){ if [ "$1" = differs ] || [ "$2" = differs ]; then echo differs; elif [ "$1" = unknown ] || [ "$2" = unknown ]; then echo unknown; else echo same; fi; }
+why(){ case $1 in differs) echo "(its inputs differ: not a difference of arithmetic)" ;; same) echo "(from the same inputs: the machines compute differently)" ;; *) echo "(the inputs are not said in both records)" ;; esac; }
+
+compare(){ f=$1; given=${2:-}; k=$(key "$f"); m=$(sed -n 's/^machine  *//p' "$f"); d=$(mktemp -d); rc=0
   url=https://github.com/$LAPLACE_GITHUB/Laplace-Operations.git; tok=${LAPLACE_FINGERPRINT_TOKEN:-}
-  if [ -n "$tok" ]; then git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$tok" | base64 | tr -d '\n')" clone -q --depth 1 --branch fingerprints "$url" "$d" 2>/dev/null || true
+  if [ -n "$given" ]; then mkdir -p "$d/$k"; cp "$given"/*.txt "$d/$k"/ 2>/dev/null || true   # compare FILE DIR: the records in DIR, in place of the branch's
+  elif [ -n "$tok" ]; then git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$tok" | base64 | tr -d '\n')" clone -q --depth 1 --branch fingerprints "$url" "$d" 2>/dev/null || true
   else git clone -q --depth 1 --branch fingerprints "$url" "$d" 2>/dev/null || true; fi
   n=0
   for o in "$d/$k"/*.txt; do [ -f "$o" ] || continue; om=$(basename "$o" .txt); [ "$om" = "$m" ] && continue; n=$((n + 1))
     echo "against $om ($(sed -n 's/^os  *//p' "$o"); made $(sed -n 's/^made  *//p' "$o"))"
-    for field in tier0 flags highway; do a=$(sed -n "s/^$field  *//p" "$f"); b=$(sed -n "s/^$field  *//p" "$o")
-      if [ -z "$a" ] || [ -z "$b" ]; then echo "  $field: not in both"; elif [ "$a" = "$b" ]; then echo "  $field: same ($a)"; else echo "  $field: DIFFERS: $a here, $b there"; rc=1; fi; done
-    sed -n 's/^claims  *//p' "$f" | while read -r s cnt h; do b=$(sed -n "s/^claims  *$s  *//p" "$o")
-      if [ -z "$b" ]; then echo "  claims $s: not decomposed there"; elif [ "$cnt $h" = "$b" ]; then echo "  claims $s: same ($cnt, $h)"; else echo "  claims $s: DIFFERS: $cnt $h here, $b there"; fi; done
-    sed -n 's/^claims  *//p' "$f" | while read -r s cnt h; do b=$(sed -n "s/^claims  *$s  *//p" "$o"); [ -z "$b" ] || [ "$cnt $h" = "$b" ] || exit 1; done || rc=1
+    # the inputs first: what differs in a result is then said to follow from them, or to be the machines' arithmetic
+    ucd=$(same "$(fld "$f" ucd)" "$(fld "$o" ucd)")
+    for field in ucd icu; do a=$(fld "$f" $field); b=$(fld "$o" $field)
+      case $(same "$a" "$b") in same) echo "  $field: same ($a)" ;; differs) echo "  $field: DIFFERS: $a here, $b there"; rc=1 ;; *) echo "  $field: not in both" ;; esac; done
+    for s in $(sed -n 's/^data  *\([^ ]*\).*/\1/p' "$f"); do a=$(dat "$f" "$s"); b=$(dat "$o" "$s")
+      case $(same "$a" "$b") in same) echo "  data $s: same ($a)" ;; differs) echo "  data $s: DIFFERS: $a here, $b there"; rc=1 ;; *) echo "  data $s: not in both" ;; esac; done
+    hw=$ucd; for s in $(fld "$f" resources); do hw=$(both "$hw" "$(same "$(dat "$f" "$s")" "$(dat "$o" "$s")")"); done
+    for field in tier0 flags highway; do a=$(fld "$f" $field); b=$(fld "$o" $field); [ $field = highway ] && in=$hw || in=$ucd
+      case $(same "$a" "$b") in same) echo "  $field: same ($a)" ;; differs) echo "  $field: DIFFERS: $a here, $b there   $(why "$in")"; rc=1 ;; *) echo "  $field: not in both" ;; esac; done
+    for s in $(sed -n 's/^claims  *\([^ ]*\).*/\1/p' "$f"); do a=$(fld "$f" "claims  *$s"); b=$(fld "$o" "claims  *$s")
+      in=$(both "$ucd" "$(same "$(dat "$f" "$s")" "$(dat "$o" "$s")")")
+      case $(same "$a" "$b") in same) echo "  claims $s: same ($a)" ;; differs) echo "  claims $s: DIFFERS: $a here, $b there   $(why "$in")"; rc=1 ;; *) echo "  claims $s: not decomposed there" ;; esac; done
   done
   [ "$n" -gt 0 ] || echo "no other machine has a record for $k yet (on HART-DESKTOP: fingerprint.ps1 at these commits)"
   rm -rf "$d"; return $rc; }
 
 case ${1:-} in
   record)  record "${2:?file}" ;;
+  inputs)  inputs ;;
   publish) publish "${2:?file}" ;;
-  compare) compare "${2:?file}" ;;
-  *) echo "fingerprint.sh record|publish|compare FILE"; exit 2 ;;
+  compare) compare "${2:?file}" "${3:-}" ;;
+  *) echo "fingerprint.sh record|publish|compare FILE, or inputs"; exit 2 ;;
 esac
