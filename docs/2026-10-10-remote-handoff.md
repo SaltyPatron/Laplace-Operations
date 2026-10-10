@@ -63,9 +63,13 @@ Original working files remain unchanged. Recovery copies do not establish that
 the code is accepted into implementation main or ready for deployment.
 
 Protected homes (`/root`, `/home/hartonomous`) and protected temporary directories
-remain uninspected by the unprivileged agent. A read-only root inventory script is
-prepared at `/repos/build/audit-scratch/laplace-root-inventory.sh`; the user was
-asked to run it once. No result has been received. The recovery README records
+remain uninspected by the unprivileged agent. The user's root inventory attempt
+failed because `rg` was missing from sudo's PATH; the original cleanup discarded
+partial output. [Scratch PR2](https://github.com/SaltyPatron/Laplace-Scratch/pull/2)
+merged the correction: base-system find/grep, prerequisite checks, retained partial
+evidence and errors, and failure without replacing a completed report. Restricted-PATH
+fixtures and ShellCheck passed; actual protected-root coverage has not completed.
+The local script matches the merged source. No repeat execution request was made. The recovery README records
 selection boundaries, excluded runtime/data/credential/session files, and the
 remaining access limit. Do not claim every Laplace fragment anywhere on disk has
 been found or all historical conversations reviewed.
