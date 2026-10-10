@@ -398,7 +398,7 @@ appdb(){ part "application database"
     "host    all   $LAPLACE_ROLE   127.0.0.1/32  scram-sha-256" "host    all   $LAPLACE_ROLE   $LAPLACE_LAN  scram-sha-256" > "$conf/pg_hba.conf.setup"
   cmp -s "$conf/pg_hba.conf.setup" "$conf/pg_hba.conf" || { mv "$conf/pg_hba.conf.setup" "$conf/pg_hba.conf"; chown postgres:postgres "$conf/pg_hba.conf"; say "pg_hba.conf" "written"; }
   rm -f "$conf/pg_hba.conf.setup"; pg_ctlcluster "$ver" "$cl" reload 2>/dev/null || pg_ctlcluster "$ver" "$cl" start
-  aq(){ su postgres -c "psql -X -p $port -Atc \"$1\""; }
+  aq(){ printf '%s' "$1" | su postgres -c "psql -X -p $port -Atq -v ON_ERROR_STOP=1"; }      # the statement on stdin: its own quotes survive
   [ "$(aq "SELECT count(*) FROM pg_roles WHERE rolname = '$LAPLACE_ROLE'")" = 1 ] || aq "CREATE ROLE $LAPLACE_ROLE LOGIN CREATEDB" >/dev/null
   # the role's password for this cluster: one canonical copy, root's, as the 127.0.0.1 line of /etc/laplace/pgpass
   install -d -m 700 /etc/laplace; local canon=/etc/laplace/pgpass pw
