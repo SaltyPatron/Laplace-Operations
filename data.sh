@@ -25,6 +25,7 @@ fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
             else dest=$LAPLACE_DATA/$set/${into%/}; p=${origin#*://*/}; cut=$(printf '%s' "${p%/}" | tr -cd / | wc -c); cut=$((cut + 1)); fi   # the directory itself lands at into
             mkdir -p "$dest"
             wget -q -r -np -nH --cut-dirs="$cut" -N -R 'index.html*' -P "$dest" "$origin" || [ $? = 8 ]   # 8: a file the server would not give; the rest came
+            rm -f "$dest/robots.txt"                                             # wget's, read to obey it; not the publisher's data
             if [ "$into" = . ]; then landed "$set" '*'; else landed "$set" "$(top "$into")"; fi
             printf '  %-28s %s files from %s\n' "$set" "$(find "$dest" -type f | wc -l)" "$origin" ;;
     file)   dest=$(land "$set" "$into" "${origin##*/}"); get "$origin" "$dest" "$([ -f "$dest" ] && echo "$dest")" || return 1; landed "$set" "$(top "${dest#"$LAPLACE_DATA/$set/"}")"
