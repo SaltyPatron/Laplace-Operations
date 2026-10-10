@@ -1,0 +1,857 @@
+{
+  "schema_version": 1,
+  "task": "Cross-repository configuration glossary and source index",
+  "generated_utc": "2026-10-10T20:13:52.7351474Z",
+  "artifact_directory": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010",
+  "reproduce": "audit/README.md",
+  "tracker": "https://github.com/SaltyPatron/Laplace-Operations/issues/2",
+  "scope": {
+    "github_repositories": 20,
+    "local_checkouts": 35,
+    "text_files": 33357,
+    "source_occurrences": 2385019,
+    "indexed_terms": 297047,
+    "environment_names_with_direct_evidence": 1103,
+    "source_reviewed_terms": 43,
+    "scan_failures": []
+  },
+  "sources": [
+    {
+      "id": "Laplace@github",
+      "repository": "Laplace",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace.git",
+      "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+      "empty": null
+    },
+    {
+      "id": "Laplace_Hartonomous-Old@github",
+      "repository": "Laplace_Hartonomous-Old",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace_Hartonomous-Old.git",
+      "revision": "5fe9c9e7c389ddd0e2ca5de65b4d0bafeae77897",
+      "empty": null
+    },
+    {
+      "id": "Laplace_Hartonomous-Old-@github",
+      "repository": "Laplace_Hartonomous-Old-",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace_Hartonomous-Old-.git",
+      "revision": "4c0bed737680b7efcb195d7ac3a05635f6b5fedc",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Conventional@github",
+      "repository": "Laplace-Conventional",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-Conventional.git",
+      "revision": "cad35c8aea0b62b393d55e0a30b31eaf6ddfb05d",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Engine@github",
+      "repository": "Laplace-Engine",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-Engine.git",
+      "revision": "bde37b928b34e1e5da500eeb77d418019c82a48e",
+      "empty": null
+    },
+    {
+      "id": "Laplace-MCP@github",
+      "repository": "Laplace-MCP",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-MCP.git",
+      "revision": "d7fbc1d89035c1e51e59153f5ca3fa9561e7a6ab",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Native@github",
+      "repository": "Laplace-Native",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-Native.git",
+      "revision": "1b9367c8055cdbd79beb1a8ba4c2d1aa322e4678",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Operations@github",
+      "repository": "Laplace-Operations",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-Operations.git",
+      "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Patreon@github",
+      "repository": "Laplace-Patreon",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-Patreon.git",
+      "revision": "4416c2750051578e4bb7e13281fc526cef902d18",
+      "empty": null
+    },
+    {
+      "id": "Laplace-postgres@github",
+      "repository": "Laplace-postgres",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-postgres.git",
+      "revision": "4a13ac71aaa359ebf6640300caa91e2e53e593dc",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Prototype@github",
+      "repository": "Laplace-Prototype",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-Prototype.git",
+      "revision": "d488b3b097421a9aed8de713b7ae0485857631dd",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Refactor@github",
+      "repository": "Laplace-Refactor",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-Refactor.git",
+      "revision": "18e6f104efbc8ddc2a6c2fd6b1c3a93be8781b33",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Research@github",
+      "repository": "Laplace-Research",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-Research.git",
+      "revision": "b6eb6407ed75f2a4db9d9bd2e8cb8c9a9fae2689",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Scratch@github",
+      "repository": "Laplace-Scratch",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-Scratch.git",
+      "revision": "9b1b9ae8a75a22b97a8867fbcc0d057cfd3082c2",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Wiki@github",
+      "repository": "Laplace-Wiki",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Laplace-Wiki.git",
+      "revision": "1145467f6da11b13a5916f0c70d4282d555ab2d3",
+      "empty": null
+    },
+    {
+      "id": "code-search@github",
+      "repository": "code-search",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\code-search.git",
+      "revision": "e958856ef19495ec4938f85696acd44638add4b5",
+      "empty": null
+    },
+    {
+      "id": "Composer@github",
+      "repository": "Composer",
+      "scope": "github-default",
+      "path": null,
+      "revision": null,
+      "empty": true
+    },
+    {
+      "id": "Hartonomous-001@github",
+      "repository": "Hartonomous-001",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Hartonomous-001.git",
+      "revision": "1ea12b4dfaa0a24b46ffa8c41290d9e1767fec4b",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous-002@github",
+      "repository": "Hartonomous-002",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Hartonomous-002.git",
+      "revision": "412ae3cf95d27f852546c9e0e014eec707fd14fd",
+      "empty": null
+    },
+    {
+      "id": "Qwen-Test@github",
+      "repository": "Qwen-Test",
+      "scope": "github-default",
+      "path": "E:\\Data\\Laplace\\work\\audit\\configuration-20261010\\repositories\\Qwen-Test.git",
+      "revision": "ae3106bc30395d964050358d61d4efc06cdcf18e",
+      "empty": null
+    },
+    {
+      "id": "Laplace@local-1",
+      "repository": "Laplace",
+      "scope": "local-checkout",
+      "path": "E:\\Repositories\\Laplace\\Laplace",
+      "revision": "224065c1dcd174b3484a5b1ea0740c82657abafa",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Engine@local-2",
+      "repository": "Laplace-Engine",
+      "scope": "local-checkout",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Engine",
+      "revision": "7459129e79c894f2d4166b683feb4c7ee81301b0",
+      "empty": null
+    },
+    {
+      "id": "Laplace-MCP@local-3",
+      "repository": "Laplace-MCP",
+      "scope": "local-checkout",
+      "path": "E:\\Repositories\\Laplace\\Laplace-MCP",
+      "revision": "e86961f87e1653460f0f7b7aaedab23d0ea20589",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Native@local-4",
+      "repository": "Laplace-Native",
+      "scope": "local-checkout",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Native",
+      "revision": "1b9367c8055cdbd79beb1a8ba4c2d1aa322e4678",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Operations@local-5",
+      "repository": "Laplace-Operations",
+      "scope": "local-checkout",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Operations",
+      "revision": "8b00424329719cde364b22cec33baec9f432f0b7",
+      "empty": null
+    },
+    {
+      "id": "Laplace-postgres@local-6",
+      "repository": "Laplace-postgres",
+      "scope": "local-checkout",
+      "path": "E:\\Repositories\\Laplace\\Laplace-postgres",
+      "revision": "0429d10a2b41fd11f28fa82c4482047a9abc1563",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Wiki@local-7",
+      "repository": "Laplace-Wiki",
+      "scope": "local-checkout",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Wiki",
+      "revision": "1145467f6da11b13a5916f0c70d4282d555ab2d3",
+      "empty": null
+    },
+    {
+      "id": "Laplace@local-8",
+      "repository": "Laplace",
+      "scope": "local-checkout",
+      "path": "E:\\Repositories\\Laplace\\wt-config",
+      "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Operations@local-9",
+      "repository": "Laplace-Operations",
+      "scope": "local-checkout",
+      "path": "E:\\Repositories\\Laplace\\wt-ops-landing",
+      "revision": "a03eb2ac3171de1649ff002439095f1e71c748a5",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Operations@local-10",
+      "repository": "Laplace-Operations",
+      "scope": "local-checkout",
+      "path": "E:\\Repositories\\Laplace\\wt-ops-win",
+      "revision": "ace8a90896d6925951a08ec2cfa754f0a484d77f",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous-Fail-003@local-11",
+      "repository": "Hartonomous-Fail-003",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\AI-Sandbox",
+      "revision": "d42f18879c3b3f88f65d895b1fa7c3a27dbf65d7",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-13",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Github\\AHartTN\\Hartonomous",
+      "revision": "b1829b46a39a7f3214ada167d97dfa46370a7034",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous-Opus@local-14",
+      "repository": "Hartonomous-Opus",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Github\\AHartTN\\Hartonomous-Opus",
+      "revision": "6361d1629f22192acab522026519586e3c7b6ea0",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-15",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous",
+      "revision": "fb08783cc3fe123d6794ccb45ad5c5c879c70489",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-18",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous",
+      "revision": "c3ff7cb00b2a91d9cefebc9b256cfd2bca45c222",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-19",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous - Copy",
+      "revision": "50a739cb258628502fb6bde489660d93c5176faa",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-20",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous-001",
+      "revision": "d31593a880b10224fc64e9a20f9a6cfe34a58120",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-21",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous-Claude-001",
+      "revision": "fba853c01cef67384d1f34864720af88e2e401e8",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-22",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous-Fail006",
+      "revision": "614f22ef2c0c8fefc8ca67bda2b8ed771d50b58b",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-23",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous-Fail008",
+      "revision": "53d54b405d7415f33c3598a8d3d35b8bcf2324f7",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-24",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous-Failed",
+      "revision": "99d46b456ff77ae809d5e7cd5507493d89a6d76d",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous-Sandbox@local-25",
+      "repository": "Hartonomous-Sandbox",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous-Sandbox",
+      "revision": "a659ec8a44c59e5f3b987ca1c20be581d3879834",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous-Sandbox@local-26",
+      "repository": "Hartonomous-Sandbox",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous-Sandbox - Copy",
+      "revision": "a659ec8a44c59e5f3b987ca1c20be581d3879834",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-27",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous-Test",
+      "revision": "ff5560627f213f3d42e41af47574c235a591df7f",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-28",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous.OLD",
+      "revision": "50a739cb258628502fb6bde489660d93c5176faa",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-30",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomousx",
+      "revision": "f2c56fe314b863689698747f50cece746e3d6585",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-31",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous-Fail-003",
+      "revision": "b05f181d3247c5eba95d34d78eb9f6124bb52415",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous-Opus@local-40",
+      "repository": "Hartonomous-Opus",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous-Opus",
+      "revision": "6361d1629f22192acab522026519586e3c7b6ea0",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous-Opus@local-41",
+      "repository": "Hartonomous-Opus",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous-Opus_FROM_HART-SERVER",
+      "revision": "f3ebec10a21b678075f13d9647032413f965882c",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Operations@local-42",
+      "repository": "Laplace-Operations",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Laplace-Operations-enterprise-flow",
+      "revision": "fabb5259a5fd50c8481c34604d444db1d6f493df",
+      "empty": null
+    },
+    {
+      "id": "Laplace-Wiki@local-43",
+      "repository": "Laplace-Wiki",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\NewBot-Laplace\\Laplace-Wiki",
+      "revision": "b4021b315c272a3224a7a75c9e9bc002a9251c1c",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous.wiki@local-7",
+      "repository": "Hartonomous.wiki",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hartonomous.wiki",
+      "revision": "9bf4aeb637126a8317f41fef33604164ff12b7fa",
+      "empty": null
+    },
+    {
+      "id": "Hart-MCP@local-19",
+      "repository": "Hart-MCP",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hart-MCP-Fail-002",
+      "revision": "2294ae5bf57f253de61f96d966e5c849dffad0ab",
+      "empty": null
+    },
+    {
+      "id": "Hart-MCP@local-20",
+      "repository": "Hart-MCP",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\Hartonomous Failed Attempts\\Hart-MCP-Faiiled",
+      "revision": "27962513e43ec4df72ebec9905366cd887edc0d0",
+      "empty": null
+    },
+    {
+      "id": "Hartonomous@local-25",
+      "repository": "Hartonomous",
+      "scope": "local-checkout",
+      "path": "C:\\Users\\ahart\\source\\repos\\Archive\\FuckItIllDoItLive\\Hartonomous",
+      "revision": "27c90cfd4c89299d02a04ed0e4f5a7993754adb1",
+      "empty": null
+    }
+  ],
+  "semantic_review": {
+    "status": "applies to pinned source revisions",
+    "revisions": {
+      "Laplace": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+      "Laplace-Operations": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+      "Laplace-Engine": "bde37b928b34e1e5da500eeb77d418019c82a48e",
+      "Laplace-MCP": "d7fbc1d89035c1e51e59153f5ca3fa9561e7a6ab",
+      "Laplace-Native": "1b9367c8055cdbd79beb1a8ba4c2d1aa322e4678"
+    }
+  },
+  "scanner_history": [
+    {
+      "sha256": "13a1e1586e64eab1a41868a03c9a748a6096a0cc2fa4d80d6b5c3712f0324184",
+      "started_utc": "2026-10-10T19:56:01.178Z",
+      "completed_utc": "2026-10-10T19:58:16.566Z"
+    },
+    {
+      "sha256": "aa086c5a8f0ce6b226a4bd5a3eacd081dd46f20d0dec1c3b5986293af37821a8",
+      "started_utc": "2026-10-10T20:09:02.375Z"
+    }
+  ],
+  "verification": {
+    "verified_utc": "2026-10-10T20:13:36.031Z",
+    "verdict": "passed with local changes after snapshot",
+    "github_trees_reconciled": 19,
+    "local_discovery": {
+      "roots": [
+        "D:\\",
+        "E:\\",
+        "C:\\Users\\ahart\\source\\repos"
+      ],
+      "depth_limit": null,
+      "family_repositories": 35,
+      "unreadable_directories": 0
+    },
+    "source_samples": 161,
+    "local_drift": [
+      {
+        "source": "Laplace-Operations@local-42",
+        "file": "audit/acquire-repositories.ps1",
+        "expected": "18de9b9508614002420825ad577366c763d9079678ccbf6ff1293588aeb8dac9",
+        "now": "f13a356da89190e276eae74461c14e946577822e378a78463b23c0f60ee1741a"
+      }
+    ],
+    "search_timings": [
+      {
+        "query": "LAPLACE_PGUSER",
+        "count": 557,
+        "milliseconds": 232
+      },
+      {
+        "query": "LAPLACE_BATCH_MB",
+        "count": 89,
+        "milliseconds": 212
+      },
+      {
+        "query": "max_connections",
+        "count": 105,
+        "milliseconds": 172
+      }
+    ],
+    "fixture": "node audit/test-configuration-index.mjs passed 2026-10-10"
+  },
+  "findings": [
+    {
+      "id": "IDENTITY-NAME-COLLISION",
+      "classification": "verified contract mismatch",
+      "finding": "LAPLACE_PGUSER names an OS service account in Operations and a database login in monorepo Windows configuration.",
+      "evidence": [
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "laplace.env.ps1",
+          "line": 36,
+          "snippet": "Set-Default LAPLACE_PGUSER  'NT AUTHORITY\\NetworkService'                   # the account the service runs as (S-1-5-20): owns the data and the logs, reads the install",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/laplace.env.ps1#L36"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "scripts/win/env.cmd",
+          "line": 72,
+          "snippet": "rem LAPLACE_PGHOST/LAPLACE_PGUSER feed BOTH the CLI connection string below AND",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/scripts/win/env.cmd#L72"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "scripts/win/env.cmd",
+          "line": 77,
+          "snippet": "if not defined LAPLACE_PGUSER set \"LAPLACE_PGUSER=postgres\"",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/scripts/win/env.cmd#L77"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "scripts/win/env.cmd",
+          "line": 78,
+          "snippet": "[credential-bearing context omitted; inspect the cited source]",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/scripts/win/env.cmd#L78"
+        }
+      ],
+      "acceptance_criteria": [
+        "CONFIG-001",
+        "IDENTITY-001"
+      ],
+      "remediation_status": "open; inventory is not installation evidence"
+    },
+    {
+      "id": "WINDOWS-CONFIG-READERS",
+      "classification": "verified independent configuration sources",
+      "finding": "Operations reads the Windows machine declaration; pinned monorepo env.cmd and MSBuild provide independent path defaults. This establishes a reader/configuration mismatch, not a claim that differently named directories are intrinsically wrong.",
+      "evidence": [
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "laplace.env.ps1",
+          "line": 8,
+          "snippet": "# Another machine declares what differs from HART-DESKTOP in %ProgramData%\\Laplace\\machine.env (LAPLACE_MACHINE_ENV",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/laplace.env.ps1#L8"
+        },
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "laplace.env.ps1",
+          "line": 12,
+          "snippet": "$machineEnv = if ($env:LAPLACE_MACHINE_ENV) { $env:LAPLACE_MACHINE_ENV } else { Join-Path $env:ProgramData 'Laplace\\machine.env' }",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/laplace.env.ps1#L12"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "scripts/win/env.cmd",
+          "line": 14,
+          "snippet": "if not defined LAPLACE_DATA_ROOT set \"LAPLACE_DATA_ROOT=D:\\Data\\Laplace\"",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/scripts/win/env.cmd#L14"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "scripts/win/env.cmd",
+          "line": 15,
+          "snippet": "if not defined LAPLACE_BUILD_ROOT set \"LAPLACE_BUILD_ROOT=%LAPLACE_DATA_ROOT%\"",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/scripts/win/env.cmd#L15"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "scripts/win/env.cmd",
+          "line": 16,
+          "snippet": "if not defined LAPLACE_DEPLOY set \"LAPLACE_DEPLOY=%LAPLACE_DATA_ROOT%\\deploy\"",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/scripts/win/env.cmd#L16"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "scripts/win/env.cmd",
+          "line": 18,
+          "snippet": "if not defined LAPLACE_DEPS_PREFIX set \"LAPLACE_DEPS_PREFIX=%LAPLACE_DATA_ROOT%\\deps\"",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/scripts/win/env.cmd#L18"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "scripts/win/env.cmd",
+          "line": 27,
+          "snippet": "if not defined LAPLACE_TOOLS set \"LAPLACE_TOOLS=%LAPLACE_DATA_ROOT%\\tools\"",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/scripts/win/env.cmd#L27"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "app/Directory.Build.props",
+          "line": 4,
+          "snippet": "    LAPLACE_BUILD_ROOT defaults on Windows so bare `dotnet build`/IDE builds land in the",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/app/Directory.Build.props#L4"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "app/Directory.Build.props",
+          "line": 15,
+          "snippet": "    <LAPLACE_BUILD_ROOT Condition=\"'$(LAPLACE_BUILD_ROOT)' == '' AND '$(OS)' == 'Windows_NT'\">D:\\Data\\Laplace</LAPLACE_BUILD_ROOT>",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/app/Directory.Build.props#L15"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "app/Directory.Build.props",
+          "line": 15,
+          "snippet": "    <LAPLACE_BUILD_ROOT Condition=\"'$(LAPLACE_BUILD_ROOT)' == '' AND '$(OS)' == 'Windows_NT'\">D:\\Data\\Laplace</LAPLACE_BUILD_ROOT>",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/app/Directory.Build.props#L15"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "app/Directory.Build.props",
+          "line": 18,
+          "snippet": "  <PropertyGroup Condition=\"'$(LAPLACE_BUILD_ROOT)' != ''\">",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/app/Directory.Build.props#L18"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "app/Directory.Build.props",
+          "line": 19,
+          "snippet": "    <BaseOutputPath>$(LAPLACE_BUILD_ROOT)\\app\\bin\\$(MSBuildProjectName)\\</BaseOutputPath>",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/app/Directory.Build.props#L19"
+        }
+      ],
+      "acceptance_criteria": [
+        "CONFIG-001",
+        "WORKSPACE-001",
+        "INSTALL-001"
+      ],
+      "remediation_status": "open; inventory is not installation evidence"
+    },
+    {
+      "id": "RESOURCE-CONNECTION-EQUATIONS",
+      "classification": "verified different planning equations",
+      "finding": "Operations knowledge-profile serving allowance defaults to four times logical threads, while PostgresResourcePlan uses logical processors and also includes separate fold headroom. Applied live budgets and aggregate service pools still require operational validation.",
+      "evidence": [
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "tune-pg.sh",
+          "line": 18,
+          "snippet": "# and the agent; what differs is the connection plan), LAPLACE_PG_SERVING (the connections the host's services hold).",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/tune-pg.sh#L18"
+        },
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "tune-pg.sh",
+          "line": 169,
+          "snippet": "  # person's psql), which the machine cannot say: LAPLACE_PG_SERVING declares them with the measurement; undeclared,",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/tune-pg.sh#L169"
+        },
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "tune-pg.sh",
+          "line": 173,
+          "snippet": "    knowledge) ingest=$((1 + 2 * cores + 3)); serving=${LAPLACE_PG_SERVING:-$((4 * threads))}; locks=1024 ;;",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/tune-pg.sh#L173"
+        },
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "tune-pg.sh",
+          "line": 174,
+          "snippet": "    app)       ingest=0; serving=${LAPLACE_PG_SERVING:-$(max 16 $((8 * threads)))}; locks=64 ;;",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/tune-pg.sh#L174"
+        },
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "tune-pg.sh",
+          "line": 286,
+          "snippet": "  [ \"$over\" = 0 ] || echo \"tune-pg: OVER-COMMITTED by $((over / 1024)) MB: the connections declared, at PostgreSQL's floors, want more than the backends' quarter; fewer serving connections (LAPLACE_PG_SERVING) or more memory for the server (LAPLACE_PG_RESERVED)\" >&2",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/tune-pg.sh#L286"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "app/Laplace.Core/Core/PostgresResourcePlan.cs",
+          "line": 75,
+          "snippet": "        int servingConnections = logical;",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/app/Laplace.Core/Core/PostgresResourcePlan.cs#L75"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "app/Laplace.Core/Core/PostgresResourcePlan.cs",
+          "line": 69,
+          "snippet": "        const int foldPoolHeadroom = 2;",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/app/Laplace.Core/Core/PostgresResourcePlan.cs#L69"
+        },
+        {
+          "repository": "Laplace",
+          "revision": "58cab06ee7b460949cb2164cb29b7e24df50c8a5",
+          "file": "app/Laplace.Core/Core/PostgresResourcePlan.cs",
+          "line": 69,
+          "snippet": "        const int foldPoolHeadroom = 2;",
+          "url": "https://github.com/SaltyPatron/Laplace/blob/58cab06ee7b460949cb2164cb29b7e24df50c8a5/app/Laplace.Core/Core/PostgresResourcePlan.cs#L69"
+        }
+      ],
+      "acceptance_criteria": [
+        "RESOURCE-BUDGET-001"
+      ],
+      "remediation_status": "open; inventory is not installation evidence"
+    },
+    {
+      "id": "INGEST-BATCH-LAYERING",
+      "classification": "verified override layering; not automatically a defect",
+      "finding": "The modular Engine native fallback is 1024 MiB; Operations Windows supplies 256 MiB. The consuming calculation establishes the unit, despite the variable spelling MB.",
+      "evidence": [
+        {
+          "repository": "Laplace-Engine",
+          "revision": "bde37b928b34e1e5da500eeb77d418019c82a48e",
+          "file": "src/ingest.c",
+          "line": 414,
+          "snippet": "    uint64_t batch = (uint64_t)(getenv(\"LAPLACE_BATCH_MB\") ? atoll(getenv(\"LAPLACE_BATCH_MB\")) : 1024) << 20;",
+          "url": "https://github.com/SaltyPatron/Laplace-Engine/blob/bde37b928b34e1e5da500eeb77d418019c82a48e/src/ingest.c#L414"
+        },
+        {
+          "repository": "Laplace-Engine",
+          "revision": "bde37b928b34e1e5da500eeb77d418019c82a48e",
+          "file": "src/ingest.c",
+          "line": 414,
+          "snippet": "    uint64_t batch = (uint64_t)(getenv(\"LAPLACE_BATCH_MB\") ? atoll(getenv(\"LAPLACE_BATCH_MB\")) : 1024) << 20;",
+          "url": "https://github.com/SaltyPatron/Laplace-Engine/blob/bde37b928b34e1e5da500eeb77d418019c82a48e/src/ingest.c#L414"
+        },
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "laplace.env.ps1",
+          "line": 63,
+          "snippet": "# What an ingest decomposes at once (laplace ingest: LAPLACE_BATCH_MB, 1024 unless set): the batch's node table lives in",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/laplace.env.ps1#L63"
+        },
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "laplace.env.ps1",
+          "line": 66,
+          "snippet": "Set-Default LAPLACE_BATCH_MB       '256'",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/laplace.env.ps1#L66"
+        }
+      ],
+      "acceptance_criteria": [
+        "INGEST-001",
+        "RESOURCE-BUDGET-001"
+      ],
+      "remediation_status": "open; inventory is not installation evidence"
+    },
+    {
+      "id": "WINDOWS-RESIDENT-MEMORY-DEFAULT",
+      "classification": "verified host-specific historical default",
+      "finding": "Operations Windows embeds a 34 GB reservation justified by an October 5 llama-service measurement in its source comment. This audit does not establish whether that workload is currently resident.",
+      "evidence": [
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "laplace.env.ps1",
+          "line": 58,
+          "snippet": "Set-Default LAPLACE_PG_RESERVED    '34GB'   # memory the machine's other residents keep: the three llama-server services commit about 34 of 48 GB (2026-10-05)",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/laplace.env.ps1#L58"
+        }
+      ],
+      "acceptance_criteria": [
+        "RESOURCE-BUDGET-001",
+        "HOST-ROLE-001"
+      ],
+      "remediation_status": "open; inventory is not installation evidence"
+    },
+    {
+      "id": "STORAGE-PROVISIONING-DEFAULTS",
+      "classification": "verified host-specific fallback declarations",
+      "finding": "The Linux environment contains fallback LVM provisioning declarations. Whether a particular invocation created a volume cannot be established from those declarations alone.",
+      "evidence": [
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "laplace.env",
+          "line": 42,
+          "snippet": "export LAPLACE_VOLUMES=${LAPLACE_VOLUMES:-\"",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/laplace.env#L42"
+        },
+        {
+          "repository": "Laplace-Operations",
+          "revision": "9382f00aa1fd900274fbfae816195d7dd777cb2a",
+          "file": "laplace.env",
+          "line": 51,
+          "snippet": "# mounted through a loop device, e.g. LAPLACE_VOLUMES=\"file lv-wal 16G xfs $LAPLACE_PGWAL\" (hart-cloud).",
+          "url": "https://github.com/SaltyPatron/Laplace-Operations/blob/9382f00aa1fd900274fbfae816195d7dd777cb2a/laplace.env#L51"
+        }
+      ],
+      "acceptance_criteria": [
+        "CONFIG-001",
+        "INSTALL-001"
+      ],
+      "remediation_status": "open; inventory is not installation evidence"
+    }
+  ],
+  "limitations": [
+    "Dynamic/computed variable names and values require semantic review.",
+    "Unqualified shell variables can be process-local rather than exported environment variables.",
+    "Multiple definitions are variant candidates, not automatically conflicts.",
+    "Binary assets, private keys, LFS payloads and submodule contents are listed in skipped.json; text files have no size exclusion.",
+    "Local uncommitted content has a file SHA-256 and checkout revision; the revision alone does not identify those bytes.",
+    "This audit does not infer installation intent or prove live configuration.",
+    "Credential-bearing values and contexts are suppressed.",
+    "The broad environment category includes lexical name references; environment-glossary.json separates names with a direct reader, process assignment, or declaration. It does not prove export scope or effective live values for every occurrence.",
+    "The broad environment category includes lexical name references; environment-glossary.json separates names with a direct reader, process assignment, or declaration. It does not prove export scope or effective live values for every occurrence."
+  ],
+  "installation_acceptance": "incomplete; this audit does not close installation, identity, resource, networking, release or recovery criteria"
+}
