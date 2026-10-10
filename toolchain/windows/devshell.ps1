@@ -29,7 +29,10 @@ function Import-BatchEnvironment([string]$Batch, [string]$Arguments = '') {     
 }
 
 $said = [Collections.Generic.List[string]]::new()
-if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+# Each environment is judged loaded by the mark its own script leaves (VSCMD_VER, SETVARS_COMPLETED), not by a program
+# being on the PATH: laplace.env.ps1 puts oneAPI's bin there for the engine's run-time libraries, and icx found that
+# way has none of the compiler's library directories (LNK1104: libircmt.lib).
+if (-not $env:VSCMD_VER) {
     $vs = $env:LAPLACE_VS
     if (-not $vs) {
         $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -39,7 +42,7 @@ if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
     if ($vcvars -and (Test-Path $vcvars)) { [void](Import-BatchEnvironment $vcvars); if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) { $said.Add("Visual Studio: $vcvars did not give cl") } }
     else { $said.Add('Visual Studio: no installation with the C++ tools (vswhere), and LAPLACE_VS names none') }
 }
-if (-not (Get-Command icx.exe -ErrorAction SilentlyContinue)) {
+if (-not $env:SETVARS_COMPLETED) {
     # where the installer put it: ONEAPI_ROOT when it set one, else above the compiler it registered for the machine
     # (IFORT_COMPILER<yy> or ICPP_COMPILER<yy>: <oneAPI>\compiler\<version>\), the newest of them
     $oneapi = if ($env:LAPLACE_ONEAPI) { $env:LAPLACE_ONEAPI } else { $env:ONEAPI_ROOT }
