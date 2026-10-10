@@ -15,47 +15,16 @@ jobs:
   lease:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    env:
-      PROJECT: ${{ vars.LAPLACE_GCP_PROJECT }}
-      INSTANCE: ${{ vars.LAPLACE_CLOUD_INSTANCE }}
-      ZONE: ${{ vars.LAPLACE_CLOUD_ZONE }}
-      OPERATION: ${{ inputs.operation }}
-      MINUTES: ${{ inputs.minutes }}
-      LEASE_KEY: laplace-lease-${{ github.repository_id }}-${{ github.run_id }}
     steps:
-      - name: Validate declared cloud target
-        env:
-          PROVIDER: ${{ vars.LAPLACE_GCP_WIF_PROVIDER }}
-          ACCOUNT: ${{ vars.LAPLACE_GCP_SERVICE_ACCOUNT }}
-        run: |
-          set -euo pipefail
-          : "${PROJECT:?}" "${INSTANCE:?}" "${ZONE:?}" "${PROVIDER:?}" "${ACCOUNT:?}"
-          [[ "$OPERATION" = acquire || "$OPERATION" = release ]]
-          [[ "$MINUTES" =~ ^[0-9]+$ && "$MINUTES" -ge 1 && "$MINUTES" -le 360 ]]
-      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          workload_identity_provider: ${{ vars.LAPLACE_GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.LAPLACE_GCP_SERVICE_ACCOUNT }}
-      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
-      - name: Acquire or release this run's lease
-        run: |
-          set -euo pipefail
-          target=("$INSTANCE" --project="$PROJECT" --zone="$ZONE" --quiet)
-          if [[ "$OPERATION" = release ]]; then
-            gcloud compute instances remove-metadata "${target[@]}" --keys="$LEASE_KEY"
-            exit 0
-          fi
-          gcloud compute instances add-metadata "${target[@]}" --metadata "$LEASE_KEY=$GITHUB_RUN_ID $(( $(date +%s) + MINUTES * 60 ))"
-          for attempt in $(seq 1 30); do
-            state=$(gcloud compute instances describe "${target[@]}" --format='value(status)')
-            case "$state" in
-              RUNNING) exit 0 ;;
-              TERMINATED) gcloud compute instances start "${target[@]}" ;;
-              SUSPENDED) gcloud compute instances resume "${target[@]}" ;;
-              STOPPING|STAGING|PROVISIONING|SUSPENDING|REPAIRING) ;;
-              *) echo "Unsupported instance state: $state" >&2; exit 1 ;;
-            esac
-            sleep 5
-          done
-          echo 'Cloud worker did not become ready' >&2
-          exit 1
+          persist-credentials: false
+      - uses: ./cloud
+        with:
+          operation: ${{ inputs.operation }}
+          minutes: ${{ inputs.minutes }}
+          project: ${{ vars.LAPLACE_GCP_PROJECT }}
+          instance: ${{ vars.LAPLACE_CLOUD_INSTANCE }}
+          zone: ${{ vars.LAPLACE_CLOUD_ZONE }}
+          provider: ${{ vars.LAPLACE_GCP_WIF_PROVIDER }}
+          service-account: ${{ vars.LAPLACE_GCP_SERVICE_ACCOUNT }}
