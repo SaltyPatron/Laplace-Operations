@@ -72,6 +72,7 @@ jobs:
           bash tests/appdb-secrets.sh
           python3 tests/knowledge-compatibility.py
           python3 tests/dependency-revisions.py
+          python3 tests/cloud-idle.py
           pwsh -NoProfile -File tests/deployment-artifacts.ps1
       - name: Verify acceptance result failure boundaries
         shell: pwsh

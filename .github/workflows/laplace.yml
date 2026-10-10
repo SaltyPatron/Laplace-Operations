@@ -32,8 +32,8 @@ on:
         description: "drop the database and seed it again: every source of LAPLACE_SOURCES (laplace.env; empty: every source in recipes/order)"
         type: boolean
         default: false
-      production:
-        description: "after staging has passed in this run: deploy the same revisions to hart-cloud (production) and lay its record beside hart-server's"
+      cloud:
+        description: "after staging has passed in this run: deploy the same revisions to hart-cloud for component verification and lay its record beside hart-server's"
         type: boolean
         default: false
 concurrency:
@@ -46,6 +46,7 @@ env:
   LAPLACE_RESEED: ${{ vars.LAPLACE_RESEED || 'auto' }}
 permissions:
   contents: read
+  id-token: write
 jobs:
   resolve:
     runs-on: ubuntu-24.04
@@ -81,7 +82,7 @@ jobs:
         with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-postgres", ref: "${{ needs.resolve.outputs.postgres }}", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-Engine", ref: "${{ needs.resolve.outputs.engine }}", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
-      - name: Record dependency revisions for production
+      - name: Record dependency revisions for cloud
         id: revisions
         shell: bash
         run: |
@@ -152,11 +153,17 @@ jobs:
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
   # Production uses the exact dependency revisions captured in staging. It runs only
-  # after deployment readback AND staging runtime reads pass, on explicit production dispatch.
-  deploy-production:
+  # after deployment readback AND staging runtime reads pass, on explicit cloud dispatch.
+  cloud-acquire:
     needs: [deploy, checks, reads]
-    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.reads.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.production == true
-    runs-on: [self-hosted, laplace, Laplace-Operations, production]
+    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.reads.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.cloud == true
+    uses: ./.github/workflows/cloud-lease.yml
+    with:
+      operation: acquire
+  deploy-cloud:
+    needs: [deploy, checks, reads, cloud-acquire]
+    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.reads.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.cloud == true && needs.cloud-acquire.result == 'success'
+    runs-on: [self-hosted, laplace, Laplace-Operations, knowledge]
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -183,32 +190,39 @@ jobs:
           { echo "## hart-cloud: the deployment"; echo; echo "- $(lscpu | sed -n 's/^Model name: *//p')"
             echo '- `'"$(grep -o -wE 'avx2|avx_vnni|avx512f|avx512_vnni|avx512_bf16|amx_tile' /proc/cpuinfo | sort -u | tr '\n' ' ')"'`'; echo; } >> "$GITHUB_STEP_SUMMARY"
           ./Laplace-Operations/deploy.sh
-  checks-production:
-    needs: deploy-production
-    runs-on: [self-hosted, laplace, Laplace-Operations, production]
+  checks-cloud:
+    needs: deploy-cloud
+    runs-on: [self-hosted, laplace, Laplace-Operations, knowledge]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: Verify deployed extension and artifact compatibility
         run: ./Laplace-Operations/verify.sh deployment
-  ingest-production:
-    needs: [deploy-production, checks-production]
-    if: always() && needs.deploy-production.result == 'success' && needs.checks-production.result == 'success' && inputs.reseed == true
-    runs-on: [self-hosted, laplace, Laplace-Operations, production]
+  ingest-cloud:
+    needs: [deploy-cloud, checks-cloud]
+    if: always() && needs.deploy-cloud.result == 'success' && needs.checks-cloud.result == 'success' && inputs.reseed == true
+    runs-on: [self-hosted, laplace, Laplace-Operations, knowledge]
     timeout-minutes: 7200
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: the ingest of this machine's sources, its status, and its measurements
         run: ./Laplace-Operations/ingest.sh
-  reads-production:
-    needs: [deploy-production, ingest-production]
-    if: always() && needs.deploy-production.result == 'success' && needs.ingest-production.result != 'failure' && needs.ingest-production.result != 'cancelled'
-    runs-on: [self-hosted, laplace, Laplace-Operations, production]
+  reads-cloud:
+    needs: [deploy-cloud, ingest-cloud]
+    if: always() && needs.deploy-cloud.result == 'success' && needs.ingest-cloud.result != 'failure' && needs.ingest-cloud.result != 'cancelled'
+    runs-on: [self-hosted, laplace, Laplace-Operations, knowledge]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
+
+  cloud-release:
+    needs: [cloud-acquire, deploy-cloud, checks-cloud, ingest-cloud, reads-cloud]
+    if: always() && needs.cloud-acquire.result != 'skipped'
+    uses: ./.github/workflows/cloud-lease.yml
+    with:
+      operation: release

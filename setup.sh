@@ -463,31 +463,11 @@ appdb(){ part "application database"
 # skip the part.
 idlestop(){ part "idle stop"
   local m=${LAPLACE_IDLE_STOP_MINUTES:-}; [ -n "$m" ] || { say "idle stop" "none declared (LAPLACE_IDLE_STOP_MINUTES): skipped"; return 0; }
-  cat > /usr/local/sbin/laplace-idle-stop <<EOS
-#!/bin/bash
-# Laplace (setup.sh idlestop): stop this host when it has been idle for $m minutes. Declared, not hand-made.
-minutes=$m
-up=\$(awk '{print int(\$1/60)}' /proc/uptime); [ "\$up" -ge "\$minutes" ] || exit 0
-busy=""
-pgrep -f 'Runner\.Worker' >/dev/null && busy="a runner job"
-pgrep -f 'laplace (ingest|tier0|highway|deploy)|/deploy\.sh|/build\.sh|/ingest\.sh|/data\.sh fetch|setup\.sh' >/dev/null && busy="\${busy:+\$busy, }an operation"
-[ "\$(who | wc -l)" = 0 ] || busy="\${busy:+\$busy, }a login session"
-# the delivery that started this host holds a lease (Laplace's knowledge-host job: instance metadata laplace-lease
-# "<run id> <expiry epoch>") until its job here has run, released by its release job or by the expiry: a job queued
-# behind a concurrency group or an approval is not running here yet, and the host would have stopped under it
-# (2026-10-10 05:04Z, run 38023100147)
-lease=\$(curl -sf -m 2 -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/attributes/laplace-lease 2>/dev/null || true)
-if [ -n "\$lease" ]; then set -- \$lease; [ "\${2:-0}" -gt "\$(date +%s)" ] && busy="\${busy:+\$busy, }a delivery's lease (run \${1:-?} until \$(date -u -d "@\$2" +%H:%MZ))"; fi
-stamp=/run/laplace-idle-since
-if [ -n "\$busy" ]; then rm -f "\$stamp"; exit 0; fi
-[ -f "\$stamp" ] || { date +%s > "\$stamp"; exit 0; }
-idle=\$(( (\$(date +%s) - \$(cat "\$stamp")) / 60 ))
-[ "\$idle" -ge "\$minutes" ] || exit 0
-logger -t laplace-idle-stop "idle for \$idle minutes (declared \$minutes): stopping the host"
-systemctl poweroff
-EOS
+  [[ "$m" =~ ^[0-9]+$ && "$m" -ge 1 ]] || { echo 'Idle minutes must be positive' >&2; return 2; }
+  install -m 755 "$here/cloud/idle-stop.py" /usr/local/sbin/laplace-idle-stop.new
+  mv -f /usr/local/sbin/laplace-idle-stop.new /usr/local/sbin/laplace-idle-stop
   chmod 755 /usr/local/sbin/laplace-idle-stop
-  printf '[Unit]\nDescription=Laplace: stop this host when idle for %s minutes\n[Service]\nType=oneshot\nExecStart=/usr/local/sbin/laplace-idle-stop\n' "$m" > /etc/systemd/system/laplace-idle-stop.service
+  printf '[Unit]\nDescription=Laplace: stop this host when idle for %s minutes\n[Service]\nType=oneshot\nExecStart=/usr/local/sbin/laplace-idle-stop --minutes %s\n' "$m" "$m" > /etc/systemd/system/laplace-idle-stop.service
   printf '[Unit]\nDescription=Laplace: idle check every five minutes\n[Timer]\nOnBootSec=5min\nOnUnitActiveSec=5min\n[Install]\nWantedBy=timers.target\n' > /etc/systemd/system/laplace-idle-stop.timer
   systemctl daemon-reload; systemctl enable -q --now laplace-idle-stop.timer
   say "idle stop" "after $m idle minutes; $(systemctl is-active laplace-idle-stop.timer); next $(systemctl show -p NextElapseUSecRealtime --value laplace-idle-stop.timer)"
