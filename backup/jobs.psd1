@@ -13,7 +13,16 @@
     Mounts = @{ vault = '/vault'; archive = '/archive'; backup = '/backup'; inbox = '/vault/Inbox' }
     Sets   = @(
         @{
-            Name = 'D'; Logs = ''; Inbox = '\\hart-server\inbox\HART-DESKTOP-D'; Patches = $true
+            Name = 'Laplace'; Logs = 'Laplace'; Inbox = '\\%LAPLACE_SHARE_HOST%\inbox\%COMPUTERNAME%-Laplace'; Patches = $true
+            Jobs = @(
+                @{ n = 'Repositories'; s = '%LAPLACE_SRC%'; d = 'Repositories'; required = $true
+                   xd = @('node_modules', 'bin', 'obj', 'build', '.vs', '.venv') }
+                @{ n = 'Work'; s = '%LAPLACE_WORK%'; d = 'Work'; required = $true; xd = @('locks', 'logs') }
+                @{ n = 'Ingest'; s = '%LAPLACE_DATA%'; d = 'Ingest'; required = $true; manifestOnly = $true }
+            )
+        }
+        @{
+            Name = 'D'; Logs = ''; Inbox = '\\%LAPLACE_SHARE_HOST%\inbox\HART-DESKTOP-D'; Patches = $true
             Jobs = @(
                 @{ n = 'Repositories';       s = 'D:\Repositories';      d = 'Repositories' }
                 @{ n = 'Media';              s = 'D:\Media';             d = 'Media' }
@@ -33,20 +42,20 @@
                    xf = @('*.dll', '*.obj', '*.o', '*.exe', '*.pdb', '*.lib', '*.pack', '*.idx') }
                 @{ n = 'Temp-oni-decompile'; s = 'D:\Temp\oni-decompile'; d = 'Temp\oni-decompile' }
                 @{ n = 'Temp-oni-disease';   s = 'D:\Temp\oni-disease';  d = 'Temp\oni-disease' }
-                @{ n = 'xClaude-Trash';      s = 'D:\xClaude-Trash';     d = '\\hart-server\vault\AI_Sabotage\022\xClaude-Trash'; man = '\\hart-server\vault\AI_Sabotage\022\_manifest' }
-                @{ n = 'Downloads';          s = 'D:\Downloads';         d = '\\hart-server\backup\HART-DESKTOP-Downloads'; man = '\\hart-server\backup\HART-DESKTOP-Downloads\_manifest' }
+                @{ n = 'xClaude-Trash';      s = 'D:\xClaude-Trash';     d = '\\%LAPLACE_SHARE_HOST%\vault\AI_Sabotage\022\xClaude-Trash'; man = '\\%LAPLACE_SHARE_HOST%\vault\AI_Sabotage\022\_manifest' }
+                @{ n = 'Downloads';          s = 'D:\Downloads';         d = '\\%LAPLACE_SHARE_HOST%\backup\HART-DESKTOP-Downloads'; man = '\\%LAPLACE_SHARE_HOST%\backup\HART-DESKTOP-Downloads\_manifest' }
                 @{ n = 'Data-Ingest';        s = 'D:\Data\Ingest';       d = 'Data\Ingest'; manifestOnly = $true }
                 @{ n = 'Models-Active';      s = 'D:\Models\Active';     d = 'Models\Active' }
                 @{ n = 'Models-laplace-gen'; s = 'D:\Models\laplace-gen'; d = 'Models\laplace-gen' }
                 @{ n = 'Models-tiny-codes';  s = 'D:\Models\hub\datasets--nampdn-ai--tiny-codes'; d = 'Models\hub\datasets--nampdn-ai--tiny-codes' }
                 @{ n = 'Models-FLUX.2-dev';  s = 'D:\Models\hub\xmodels--black-forest-labs--FLUX.2-dev'; d = 'Models\hub\xmodels--black-forest-labs--FLUX.2-dev' }
-                @{ n = 'Models-DeepSeek-V3.2'; s = 'D:\Models\hub\zDeepSeek-V3.2-Speciale'; d = '\\hart-server\archive\Models\hub\zDeepSeek-V3.2-Speciale'; man = '\\hart-server\archive\Models\_manifest' }
+                @{ n = 'Models-DeepSeek-V3.2'; s = 'D:\Models\hub\zDeepSeek-V3.2-Speciale'; d = '\\%LAPLACE_SHARE_HOST%\archive\Models\hub\zDeepSeek-V3.2-Speciale'; man = '\\%LAPLACE_SHARE_HOST%\archive\Models\_manifest' }
                 @{ n = 'Models-Llama-4-Maverick'; s = 'D:\Models\hub\ymodels--meta-llama--Llama-4-Maverick-17B-128E'; d = 'Models\hub\ymodels--meta-llama--Llama-4-Maverick-17B-128E' }
-                @{ n = 'Models-Qwen3-Coder-480B'; s = 'D:\Models\hub\wQwen3-Coder-480B-A35B-Instruct'; d = '\\hart-server\backup\Models\hub\wQwen3-Coder-480B-A35B-Instruct'; man = '\\hart-server\backup\Models\_manifest' }
+                @{ n = 'Models-Qwen3-Coder-480B'; s = 'D:\Models\hub\wQwen3-Coder-480B-A35B-Instruct'; d = '\\%LAPLACE_SHARE_HOST%\backup\Models\hub\wQwen3-Coder-480B-A35B-Instruct'; man = '\\%LAPLACE_SHARE_HOST%\backup\Models\_manifest' }
             )
         }
         @{
-            Name = 'C'; Logs = 'C'; Inbox = '\\hart-server\inbox\HART-DESKTOP-C'; Patches = $false
+            Name = 'C'; Logs = 'C'; Inbox = '\\%LAPLACE_SHARE_HOST%\inbox\HART-DESKTOP-C'; Patches = $false
             Jobs = @(
                 @{ n = 'C-source';           s = 'C:\Users\ahart\source'; d = 'Users\ahart\source' }
             )

@@ -17,7 +17,7 @@ public static class CopyoffHasher {
         var files = new List<(string, long)>(); var stack = new Stack<DirectoryInfo>(); stack.Push(new DirectoryInfo(root));
         while (stack.Count > 0) {
             var d = stack.Pop(); FileSystemInfo[] entries;
-            try { entries = d.GetFileSystemInfos(); } catch (Exception e) { Console.Error.WriteLine($"  unreadable: {d.FullName}: {e.Message}"); continue; }
+            entries = d.GetFileSystemInfos();
             foreach (var e in entries) {
                 if ((e.Attributes & FileAttributes.ReparsePoint) != 0) continue;
                 if (e is DirectoryInfo sub) {
@@ -36,10 +36,12 @@ public static class CopyoffHasher {
         var rows = new ConcurrentBag<string>(); var gate = new object(); int done = 0; var t0 = DateTime.UtcNow;
         using var pf = new StreamWriter(part, false, new System.Text.UTF8Encoding(false)) { NewLine = "\n" };
         Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = threads }, f => {
-            string hex;
+            string hex; var before = new FileInfo(f.Path); var modified = before.LastWriteTimeUtc;
             try { using var s = new FileStream(f.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 20);
                   hex = Convert.ToHexString(SHA256.HashData(s)).ToLowerInvariant(); }
-            catch (Exception e) { Console.Error.WriteLine($"  unreadable, not in the manifest: {f.Path}: {e.Message}"); return; }
+            catch (Exception e) { throw new IOException($"Cannot hash {f.Path}", e); }
+            var after = new FileInfo(f.Path);
+            if (after.Length != f.Size || after.LastWriteTimeUtc != modified) throw new IOException($"Changed while hashing: {f.Path}");
             var row = $"{Path.GetRelativePath(root, f.Path)}\t{f.Size}\t{hex}"; rows.Add(row);
             lock (gate) { pf.WriteLine(row); if (++done % 20000 == 0) { pf.Flush(); Console.WriteLine($"  {done:N0}/{files.Count:N0}  {(DateTime.UtcNow - t0).TotalSeconds:F0}s"); } }
         });

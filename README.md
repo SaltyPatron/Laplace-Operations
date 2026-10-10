@@ -184,6 +184,34 @@ tier 0 under `$LAPLACE_WORK`; installed dependencies under `$LAPLACE_DEPS`; the 
 
 ## Windows (the development machine)
 
+`setup.ps1 network` reconciles Windows' LAN search domains and Tailscale DNS; `network.ps1 -Check` verifies
+resolution without changing it. Windows Tailscale writes bare peer names into its managed hosts-file section.
+LAN-only consumers use the explicit LAN name (`LAPLACE_SHARE_HOST=hart-server.lan`); remote consumers use the
+tailnet name. The check resolves all registered peers and internet DNS without starting offline machines. It
+does not establish that a peer's application is healthy or that the transport is direct.
+
+For Google Cloud's existing VM tags, `LAPLACE_GCP_PROJECT=PROJECT ./network-gcp.sh apply` declares only the
+encrypted Tailscale UDP 41641 ingress rule; `check` verifies it. Network, target tags and source ranges have
+`LAPLACE_GCP_NETWORK`, `LAPLACE_GCP_TAILSCALE_TAGS`, and `LAPLACE_GCP_TAILSCALE_SOURCES` overrides.
+Verify actual direct connectivity with `tailscale ping`; a firewall rule alone is not that evidence.
+
+Knowledge-cluster access also requires PostgreSQL authorization. `setup.sh access` preserves the optional
+`$LAPLACE_PGDATA/pg_hba.remote.conf` include for explicit remote database/role/client rules, independently of
+`LAPLACE_LAN` (which also controls LAN shares). For example, `hostssl laplace-mono laplace 100.124.95.17/32
+scram-sha-256` admits hart-prod to hart-server's monorepo substrate over TLS. Validate `pg_hba_file_rules`
+for errors and reload PostgreSQL after changing it. Do not substitute the modular `laplace` database for
+`laplace-mono`: their schemas and installed native interfaces differ. Selecting another knowledge substrate
+does not move the hosting application's separate `LAPLACE_APP_DB` accounts and billing database.
+
+The backup's `Laplace` set takes its repositories, generated work, and corpus inventory from the machine's
+`LAPLACE_SRC`, `LAPLACE_WORK`, and `LAPLACE_DATA`, including when they are on E:. `backup/copyoff.ps1 -Set Laplace
+-Plan` lists the resolved paths without copying. Required sources cannot silently disappear. Every copy uses a
+fresh manifest, Robocopy's incremental transfer, and destination SHA-256 verification; an old receipt never skips
+later source changes. Failures reach the scheduled task. `setup.ps1 backup` registers the current implementation;
+the task is invoked on demand, with no recurring trigger. Ingest is **inventory only**, and this copy-off is not a
+PostgreSQL backup or a versioned/offsite backup. Database recovery needs its own supported backup and restore path.
+Run `pwsh -File tests/backup-continuity.ps1` for local copy, corruption, unreadable-file and failure-propagation checks.
+
 ```powershell
 pwsh -File setup.ps1                  # the machine: volumes, packages, rights, dependencies, cluster, settings, access, report
 pwsh -File setup.ps1 deps report      # one part, or several

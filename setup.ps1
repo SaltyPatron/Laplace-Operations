@@ -678,6 +678,13 @@ function report {
 # operator's Credential Manager entry for the host. Checked and reported, never made: no drive letter is mapped and no
 # credential is stored here, and the Explorer locations and mappings the operator made are theirs. A check that fails
 # says what to do. The password is never read, printed or written: cmdkey asks for it.
+function network {
+    Part 'network'
+    $argsForNetwork = @('-NoProfile', '-File', "$PSScriptRoot\network.ps1")
+    if ($Status) { $argsForNetwork += '-Check' }
+    & pwsh.exe @argsForNetwork
+    if ($LASTEXITCODE) { $failed.Add('network: DNS configuration or resolution failed') }
+}
 function shares {
     Part 'shares'
     $server = $env:LAPLACE_SHARE_HOST; $user = $env:LAPLACE_SHARE_USER
@@ -768,9 +775,10 @@ function firewall {
 function backup {
     Part 'backup'
     $task = $env:LAPLACE_BACKUP_TASK; $logs = $env:LAPLACE_BACKUP_LOGS
-    $argv = "--headless pwsh.exe -NoProfile -ExecutionPolicy Bypass -File $(Join-Path $PSScriptRoot 'backup\run.ps1')"
+    $argv = "--headless pwsh.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'backup\run.ps1')`""
     $conf = $null
-    try { $conf = Import-PowerShellDataFile $env:LAPLACE_BACKUP_JOBS }
+    . "$PSScriptRoot\backup\config.ps1"
+    try { $conf = Read-BackupConfiguration $env:LAPLACE_BACKUP_JOBS }
     catch { Say 'jobs' "FAILED: $($env:LAPLACE_BACKUP_JOBS): $($_.Exception.Message)"; $failed.Add("backup: $($env:LAPLACE_BACKUP_JOBS) does not read") }
     foreach ($s in @($conf.Sets)) { $held = @($s.Jobs | Where-Object { $_.n -like 'Models-*' }).Count; Say "set $($s.Name)" "$(@($s.Jobs).Count) jobs to $($s.Inbox)$(if ($held) { "; $held Models-* on hold without -Models" })" }
     $t = Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
@@ -817,13 +825,13 @@ function backup {
     }
 }
 
-$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'cluster', 'settings', 'access', 'report', 'shares', 'services', 'firewall', 'backup', 'status'
+$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'cluster', 'settings', 'access', 'report', 'network', 'shares', 'services', 'firewall', 'backup', 'status'
 foreach ($p in $Parts) { if ($known -notcontains $p) { "setup.ps1 [drop] [$(($known | Select-Object -Skip 1) -join '|') ...]"; Stop-Transcript | Out-Null; exit 2 } }
 # status: the desktop's own parts named with it (all three, when none is) report and change nothing
 $Status = $Parts -contains 'status'
 if ($Status) {
     $Parts = @($Parts | Where-Object { $_ -ne 'status' }); if (-not $Parts.Count) { $Parts = 'shares', 'services', 'firewall', 'backup' }
-    $other = @($Parts | Where-Object { $_ -notin 'shares', 'services', 'firewall', 'backup' })
+    $other = @($Parts | Where-Object { $_ -notin 'network', 'shares', 'services', 'firewall', 'backup' })
     if ($other.Count) { "setup.ps1 status reports shares, services, firewall and backup; $($other -join ', ') has none (report)"; Stop-Transcript | Out-Null; exit 2 }
 }
 try { foreach ($p in $Parts) { if ($p -eq 'all') { volumes; packages; rights; deps; cluster; settings; access; report } else { & $p } } }

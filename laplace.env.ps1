@@ -68,13 +68,13 @@ Set-Default LAPLACE_BATCH_MB       '256'
 # The desktop's own parts (setup.ps1 shares, services, backup; none is part of all): the deployment target's shares
 # this machine reaches by UNC path with a Credential Manager entry, the GPU services the operator starts and stops
 # without elevation (chess\chess-gpu.ps1), and the copy-off of the drives to the deployment target (backup\).
-Set-Default LAPLACE_SHARE_HOST   'hart-server'                              # setup.sh shares there serves them
+Set-Default LAPLACE_SHARE_HOST   'hart-server.lan'                          # SMB listens on the LAN; MagicDNS owns the bare hart-server name
 Set-Default LAPLACE_SHARE_USER   'ahart'                                    # its SMB user: the Credential Manager entry's
 Set-Default LAPLACE_SHARES       'vault,archive,backup,inbox'               # \\<host>\<share>, each checked
 Set-Default LAPLACE_GPU_SERVICES 'llama-embedding,llama-embedding-text,llama-reranker,llama-generative'
 Set-Default LAPLACE_FIREWALL     'engines=5190@192.168.1.2'                 # inbound rules, name=port@client;...: the engine endpoint for hart-server
 Set-Default LAPLACE_BACKUP_TASK  'copyoff'                                  # the scheduled task that runs backup\run.ps1
-Set-Default LAPLACE_BACKUP_LOGS  'D:\Logs\copyoff'                          # its logs, manifests, robocopy logs and patches
+Set-Default LAPLACE_BACKUP_LOGS  "$env:LAPLACE_WORK\logs\backup"            # follows the machine's declared work volume
 Set-Default LAPLACE_BACKUP_JOBS  "$PSScriptRoot\backup\jobs.psd1"           # what it copies, where to
 
 # The toolchain: the developer shell (Visual Studio's vcvars64, oneAPI, CMake, the manifest's build tools) and the

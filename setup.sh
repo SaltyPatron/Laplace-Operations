@@ -82,6 +82,7 @@ hostssl   all   $LAPLACE_ROLE  $LAPLACE_LAN       scram-sha-256
 host      all   $PGUSER        127.0.0.1/32       scram-sha-256
 host      all   $PGUSER        ::1/128            scram-sha-256
 hostssl   all   $PGUSER        $LAPLACE_LAN       scram-sha-256
+include_if_exists pg_hba.remote.conf
 hostnossl all   all            0.0.0.0/0          reject
 "
 # Who operates Laplace on this machine is the shared group: every member connects over the socket as $LAPLACE_ROLE,
