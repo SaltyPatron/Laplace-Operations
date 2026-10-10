@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: SaltyPatron/Laplace
-          ref: 3943f4fc6
+          ref: 3943f4fc6edae0c7fa2eb35c24eadc80d675b238
           path: .acceptance/laplace
           persist-credentials: false
       - name: Use the application SDK for configuration evaluation

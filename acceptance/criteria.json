@@ -42,9 +42,10 @@
       "checks": [
         {
           "id": "workspace-isolation",
-          "platform": "any",
-          "argv": null,
-          "evidence": "Two actual builds and a clean-operation boundary check."
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/windows-workspace.ps1"],
+          "timeout_seconds": 300,
+          "evidence": "Two actual managed builds at distinct source revisions, independent output roots, and preservation of the other artifact plus runtime/data sentinels during clean."
         }
       ]
     },
