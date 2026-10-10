@@ -1,0 +1,82 @@
+# Remote work and deployment status — 2026-10-10
+
+## Machine roles and current priority
+
+The user clarified that hart-desktop will be the primary development machine.
+Development may continue on hart-server; it also serves as the dev/BAT/QA/staging
+deployment target. hart-cloud and hart-prod are production. The immediate request
+is to ensure Laplace work is on remote, not to remove development tools or working copies
+from hart-server. The server's GTX 1080 Ti remains off limits due to broken cooling.
+
+## Remote preservation verified around 19:07 UTC
+
+All local branch tips in the 15 `/repos/src/Laplace*` repositories are represented
+by a GitHub branch or already contained in origin/main. Live `git ls-remote --heads`
+was used as well as local ancestry checks: several checkouts fetch only main, so
+absence from cached remote refs does not establish absence from GitHub.
+
+The following existing recovery branches were pushed without merging their changes:
+
+| Repository | Branch | Commit |
+| --- | --- | --- |
+| Laplace-Refactor | found/copy-453 | 1ea4d70f |
+| Laplace-Refactor | found/copy-461 | 2d35a3b8 |
+| Laplace-Research | found/copy-462 | 825946c |
+| Laplace-Scratch | found/copy-463 | fae763c |
+
+Laplace's `vertex-agent-provider` at `6c5c128` was already on GitHub. Its changes
+have not been accepted into main or deployed by this audit.
+
+The separate historical snapshot `/repos/src/Laplace_Hartonomous-Old` had no
+remote. Its 356 files were preserved in a new **private** repository,
+[SaltyPatron/Laplace_Hartonomous-Old](https://github.com/SaltyPatron/Laplace_Hartonomous-Old),
+at `5fe9c9e`. This is distinct from the existing repository ending in a hyphen.
+No historical snapshot has been promoted into a current implementation.
+
+The registered worktrees of these repositories have no uncommitted source changes.
+Laplace-MCP has two untracked compiled ELF files, `native/lpm` and `native/liblpm.so`;
+they were left intact and were not added to source control. This statement does not
+cover ignored build files, credentials, raw conversation archives, or every other
+repository on the machine. The user explicitly excludes unrelated projects from
+this task. No working directory or archive was deleted.
+
+## Completed infrastructure changes and verification limits
+
+- Operations and monorepo permission/setup fixes are merged. Existing credentials
+  are preserved by repeat setup; the previous live postgres default password has
+  not yet been rotated.
+- Operations deployment no longer generates/adopts highway content as an ordinary
+  deployment side effect. Staging deployment/checks/reads passed in run38075199422.
+- Host operation locking, isolated extension PR installation tests, dependency
+  revision capture, deployment readback and required staging reads are merged.
+- OpenBao app DB credential refresh is installed and verified on hart-prod using
+  its AppRole. Knowledge credentials and shared service credentials remain separate
+  unfinished integration work.
+- Corrected secrets backup is installed on hart-server. The user's19:00 run passed
+  SQLite integrity and Bao snapshot checksum checks. Timer readback is active for
+  October11 03:15 UTC. Live restore and off-host recovery have not been established.
+- Local API/system MCP and native MCP have passed the endpoint/protocol checks
+  recorded in the system audit. Native MCP remains an installed user service;
+  automated delivery of that service is unfinished.
+
+## Main is not proof of deployment
+
+Hart-server's application, web and native-library receipts read
+`2716c31750fd330a2aa4c0067de6ad792c32ef19`; monorepo main is
+`58cab06ee7b460949cb2164cb29b7e24df50c8a5` at this observation.
+[Main delivery38078073055](https://github.com/SaltyPatron/Laplace/actions/runs/38078073055)
+failed at installation after its build phase: `another deployment or ingest holds
+/run/lock/laplace/host-resource.lock`. One retry reproduced this failure at19:06 UTC.
+Migration, publication and production were skipped. The lock holder and whether
+build-child inheritance caused the conflict are not established. Do not report
+latest main as deployed or keep retrying without diagnosing it.
+
+Two open draft PRs were observed: Operations#67 (Windows DNS/backup continuity)
+and Engine#44 (Engine behavior). Remote preservation does not establish readiness
+of either for main.
+
+Other outstanding work includes public production MCP routing, huge-page usage,
+certificate renewal verification, coordinated administrator-credential migration,
+production lifecycle/rollback verification, actual trial spend/credit balance,
+Azure resource access and the full historical log review. Structural log inventory
+and selected-message review are not a completed audit of all conversations.
