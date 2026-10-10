@@ -40,6 +40,36 @@ cover ignored build files, credentials, raw conversation archives, or every othe
 repository on the machine. The user explicitly excludes unrelated projects from
 this task. No working directory or archive was deleted.
 
+## Expanded home, temporary and archived work check
+
+The initial15-repository check did not cover all loose files and archived agent
+worktrees. The user's explicit follow-up expanded this to Laplace work wherever
+it is stored, while keeping unrelated projects outside scope.
+
+The follow-up found191 candidate checkout locations across home/temp/source/build,
+runner and mounted archive locations. It checked146 readable Git object stores,
+including detached HEADs, stashes, reflogs and unreachable commits. Forty archived
+worktree locations had unusable Git metadata, commonly Windows drive paths; their
+source files were checked directly rather than treated as empty or clean.
+
+[The recovery index in Laplace-Scratch](https://github.com/SaltyPatron/Laplace-Scratch/tree/main/recovery/2026-10-10)
+records137 recovery branches and293 recovery tags verified against live GitHub
+refs. It also preserves217 loose files,1,504 files from broken/unversioned working
+trees,14 dirty-checkout snapshots,32 agent note/instruction files and14 readable
+host declarations, plus one large scratch C source. Another1,833 loose files and
+19,077 selected files from broken/unversioned locations matched already preserved
+content. All1,768 manifest-listed file snapshot hashes match the committed bytes.
+Original working files remain unchanged. Recovery copies do not establish that
+the code is accepted into implementation main or ready for deployment.
+
+Protected homes (`/root`, `/home/hartonomous`) and protected temporary directories
+remain uninspected by the unprivileged agent. A read-only root inventory script is
+prepared at `/repos/build/audit-scratch/laplace-root-inventory.sh`; the user was
+asked to run it once. No result has been received. The recovery README records
+selection boundaries, excluded runtime/data/credential/session files, and the
+remaining access limit. Do not claim every Laplace fragment anywhere on disk has
+been found or all historical conversations reviewed.
+
 ## Completed infrastructure changes and verification limits
 
 - Operations and monorepo permission/setup fixes are merged. Existing credentials
