@@ -11,32 +11,46 @@ function Set-Default([string]$name, [string]$value) { if (-not [Environment]::Ge
 # anyone's shell environment; a value set in the environment still wins.
 $machineEnv = if ($env:LAPLACE_MACHINE_ENV) { $env:LAPLACE_MACHINE_ENV } else { Join-Path $env:ProgramData 'Laplace\machine.env' }
 if (Test-Path -LiteralPath $machineEnv) {
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($line in Get-Content -LiteralPath $machineEnv) {
+        if ($line -match '^\s*(#|$)') { continue }
         if ($line -match '^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$') {
             $name = $Matches[1]; $value = $Matches[2]
+            if (-not $seen.Add($name)) { throw "Duplicate configuration key: $name" }
             if ($value.Length -ge 2 -and $value[0] -in '"', "'" -and $value[-1] -eq $value[0]) { $value = $value.Substring(1, $value.Length - 2) }
+            if ($value -match '["\r\n]') { throw "Unsupported quote or newline in configuration key: $name" }
             Set-Default $name ([Environment]::ExpandEnvironmentVariables($value))
-        }
+        } else { throw "Invalid configuration line in $machineEnv" }
     }
-}
+    $env:LAPLACE_CONFIG_SOURCE = [IO.Path]::GetFullPath($machineEnv)
+} elseif ($env:LAPLACE_MACHINE_ENV) { throw "LAPLACE_MACHINE_ENV does not name a file: $machineEnv" }
+else { $env:LAPLACE_CONFIG_SOURCE = 'defaults' }
 
-Set-Default LAPLACE_SRC     'D:\Repositories\Laplace'                       # Laplace's repositories
-Set-Default LAPLACE_BUILD   'D:\Libraries\build\Laplace'                    # build trees
-Set-Default LAPLACE_WORK    'D:\Data\Laplace\work'                          # generated data and logs
-Set-Default LAPLACE_DEPSRC  'D:\Libraries\src'                              # the dependencies' sources (blake3, core-math, tree-sitter, ...)
-Set-Default LAPLACE_DEPS    'D:\Libraries'                                  # installed dependencies
-Set-Default LAPLACE_DATA    'D:\Data\Ingest'                                # corpora and the Unicode data
+Set-Default LAPLACE_DATA_ROOT (Join-Path $env:LOCALAPPDATA 'Laplace')
+Set-Default LAPLACE_SRC     (Join-Path $env:USERPROFILE 'source\repos')
+Set-Default LAPLACE_WORK    "$env:LAPLACE_DATA_ROOT\work"
+Set-Default LAPLACE_BUILD   "$env:LAPLACE_WORK\build"
+$checkout = if ($env:LAPLACE_ROOT) { $env:LAPLACE_ROOT } else { [IO.Path]::Combine($env:LAPLACE_SRC, 'Laplace') }
+$checkout = [IO.Path]::GetFullPath($checkout).TrimEnd('\').ToLowerInvariant()
+$workspaceId = [IO.Path]::GetFileName($checkout) + '-' + [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($checkout))).Substring(0,12).ToLowerInvariant()
+Set-Default LAPLACE_BUILD_ROOT "$env:LAPLACE_BUILD\worktrees\$workspaceId"
+Set-Default LAPLACE_ENGINE_BUILD "$env:LAPLACE_BUILD_ROOT\build-win"
+Set-Default LAPLACE_DEPS    "$env:LAPLACE_DATA_ROOT\dependencies"
+Set-Default LAPLACE_DEPSRC  "$env:LAPLACE_DEPS\src"
+Set-Default LAPLACE_EXTERNAL $env:LAPLACE_DEPSRC
+Set-Default LAPLACE_DATA    "$env:LAPLACE_DATA_ROOT\data"
 
 # The machine, as setup.ps1 declares it (Operations: Setup, Database). Every name here is this installation's choice.
-Set-Default LAPLACE_PG_DIR  'D:\Libraries\postgresql\18.6'                  # PostgreSQL 18, built with icx (dependencies.tsv)
-Set-Default LAPLACE_PGDATA  'D:\Data\Laplace\pgdata'                        # the cluster: heap and indexes
+Set-Default LAPLACE_PG_DIR  (Join-Path "$env:LAPLACE_DEPS\postgresql" ((Get-Content "$PSScriptRoot\dependencies.tsv" | Where-Object { $_ -match '^postgresql\t' } | Select-Object -First 1) -split "`t")[1])
+Set-Default LAPLACE_PGDATA  "$env:LAPLACE_DATA_ROOT\pgdata"
 Set-Default LAPLACE_PGWAL   "$env:LAPLACE_PGDATA\pg_wal"                    # its write-ahead log; a path on another drive puts it there (initdb --waldir)
                                                                             # LAPLACE_PGTEMP, when set: its temporary files as the tablespace pgtemp, on another drive
 Set-Default LAPLACE_PG_WAL_DEDICATED '0'                                   # 1 only when the separate WAL drive holds no other workloads; a different drive alone is not dedicated
 Set-Default LAPLACE_PGSERVICE 'laplace-postgres'                            # the Windows service
-Set-Default LAPLACE_PGUSER  'NT AUTHORITY\NetworkService'                   # the account the service runs as (S-1-5-20): owns the data and the logs, reads the install
+Set-Default LAPLACE_PG_SERVICE_ACCOUNT 'NT AUTHORITY\NetworkService'       # Windows service identity; never a database login
 Set-Default LAPLACE_ROLE    'laplace'                                       # the database role Laplace connects as
-Set-Default LAPLACE_LAN     '192.168.1.0/24'                                # the network the server is reachable from; hart-server is on it
+Set-Default LAPLACE_PGUSER   $env:LAPLACE_ROLE
+Set-Default LAPLACE_LAN     '127.0.0.1/32'                                # remote database access requires the host's declared network
 # The Windows identities this host authenticates as the role over loopback (SSPI, pg_ident map; setup.ps1 access): the
 # counterpart of Linux's peer socket. The operator; IIS's pool for the monorepo's site (deploy\windows\Install-LaplaceSite.ps1:
 # LaplacePool); the account the monorepo's managed services run as (scripts\win\ensure-managed-services.ps1: LocalService).
@@ -49,18 +63,15 @@ Set-Default LAPLACE_CONNINFO "host=$env:LAPLACE_PGHOST port=$env:LAPLACE_PGPORT 
 # The deployment target, whose operator holds the role's one password for the whole installation (setup.sh access writes
 # it into every operator's ~/.pgpass there): this machine's role takes it, so one pgpass line reaches both databases
 # and either machine is the other's client. Reached over the operator's SSH key. Unset: this machine makes its own.
-Set-Default LAPLACE_PEER     'ahart@hart-server'
-Set-Default LAPLACE_PEER_KEY "$env:USERPROFILE\.ssh\id_hartserver"
+# LAPLACE_PEER and LAPLACE_PEER_KEY are optional host declarations.
 
 # The server's settings follow the machine (tune-pg.ps1): a quarter of the memory the server may use for the buffers,
 # seven tenths of it for the cache estimate, the cores for the workers, half of a dedicated drive for the log. What a
 # rule cannot read from the machine is declared here, each with the measurement that set it; another machine measures
 # its own.
-Set-Default LAPLACE_PG_RESERVED    '34GB'   # memory the machine's other residents keep: the three llama-server services commit about 34 of 48 GB (2026-10-05)
-Set-Default LAPLACE_PG_BUFFERS_MAX '1GB'    # the largest shared memory this Windows build maps in every backend: at 4GB 826 backends in three hours could not (error 487); 1GB maps (2026-10-05)
 Set-Default LAPLACE_PGWAL_ROOM     '32GB'   # the log's bound when it shares its drive (D: holds the heap, the sources and the models); a dedicated drive gets half of itself
 Set-Default LAPLACE_PG_PRELOAD     'pg_stat_statements,auto_explain,laplace_substrate'   # the libraries the server loads at start: observability (tune-pg.sh), and the monorepo's substrate, which this server also serves (database laplace-mono)
-Set-Default LAPLACE_PG_LIBDIRS     'D:\Data\Laplace\deploy\lib'   # where the monorepo installs its extension DLLs (scripts\win\install-extensions.cmd); a preload library is declared only once its DLL is there
+Set-Default LAPLACE_PG_LIBDIRS     "$env:LAPLACE_DATA_ROOT\deploy\lib"
 # What an ingest decomposes at once (laplace ingest: LAPLACE_BATCH_MB, 1024 unless set): the batch's node table lives in
 # memory, and an XML source spends far more memory than its bytes. This machine has 13 GB left after the llama
 # services' 34 GB; FrameNet's 849 MB as one batch ran out of it (realloc: Not enough space, 2026-10-05). 256 MB fits.
@@ -69,11 +80,11 @@ Set-Default LAPLACE_BATCH_MB       '256'
 # The desktop's own parts (setup.ps1 shares, services, backup; none is part of all): the deployment target's shares
 # this machine reaches by UNC path with a Credential Manager entry, the GPU services the operator starts and stops
 # without elevation (chess\chess-gpu.ps1), and the copy-off of the drives to the deployment target (backup\).
-Set-Default LAPLACE_SHARE_HOST   'hart-server.lan'                          # SMB listens on the LAN; MagicDNS owns the bare hart-server name
-Set-Default LAPLACE_SHARE_USER   'ahart'                                    # its SMB user: the Credential Manager entry's
+# LAPLACE_SHARE_HOST is an explicit host declaration when SMB is used.
+Set-Default LAPLACE_SHARE_USER   $env:USERNAME
 Set-Default LAPLACE_SHARES       'vault,archive,backup,inbox'               # \\<host>\<share>, each checked
 Set-Default LAPLACE_GPU_SERVICES 'llama-embedding,llama-embedding-text,llama-reranker,llama-generative'
-Set-Default LAPLACE_FIREWALL     'engines=5190@192.168.1.2'                 # inbound rules, name=port@client;...: the engine endpoint for hart-server
+# LAPLACE_FIREWALL is opt-in: name=port@client;... for this host's actual clients.
 Set-Default LAPLACE_BACKUP_TASK  'copyoff'                                  # the scheduled task that runs backup\run.ps1
 Set-Default LAPLACE_BACKUP_LOGS  "$env:LAPLACE_WORK\logs\backup"            # follows the machine's declared work volume
 Set-Default LAPLACE_BACKUP_JOBS  "$PSScriptRoot\backup\jobs.psd1"           # what it copies, where to

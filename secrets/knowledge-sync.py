@@ -92,7 +92,8 @@ def main():
         atomic(pgpass, "\n".join(lines) + "\n", 0o600, account.pw_uid, account.pw_gid)
         if args.select:
             assignments(args.machine_file, {"LAPLACE_PGHOST": host, "LAPLACE_PGPORT": port,
-                "LAPLACE_DBNAME": database, "LAPLACE_KNOWLEDGE_ROLE": role, "LAPLACE_DB_SSLMODE": "Require"})
+                "LAPLACE_DBNAME": database, "LAPLACE_KNOWLEDGE_ROLE": role, "LAPLACE_DB_SSLMODE": "Require",
+                "LAPLACE_CONNINFO": f"host={host} port={port} user={role} dbname={database} sslmode=require"})
             assignments(args.prefix / "app/laplace-api.env", {"LAPLACE_DB":
                 f"Host={host};Port={port};Username={role};Database={database};SSL Mode=Require"})
             subprocess.run(["systemctl", "restart", "laplace-api"], check=True, timeout=30)

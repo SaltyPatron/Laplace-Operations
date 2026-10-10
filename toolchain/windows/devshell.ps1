@@ -76,4 +76,13 @@ $tools = foreach ($line in Get-Content (Join-Path $PSScriptRoot '..\..\dependenc
 # configured OpenSSL and generated PostgreSQL's headers wrongly). Only a tool's own programs are named above, so nothing
 # of it stands in for the machine's CMake, Ninja or compiler.
 foreach ($d in $tools) { if (($env:PATH -split ';') -notcontains $d) { $env:PATH = "$d;$env:PATH" } }
+# Resolve the installed interpreter through uv; a Windows App Execution Alias
+# named python.exe can exist without being usable by CMake's code generators.
+if (Get-Command uv.exe -ErrorAction SilentlyContinue) {
+    $python = & uv.exe python find 2>$null
+    if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $python)) {
+        $pythonDirectory = Split-Path $python
+        if (($env:PATH -split ';') -notcontains $pythonDirectory) { $env:PATH = "$pythonDirectory;$env:PATH" }
+    }
+}
 foreach ($s in $said) { Write-Warning $s }

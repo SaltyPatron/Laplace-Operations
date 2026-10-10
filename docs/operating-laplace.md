@@ -74,3 +74,30 @@ only on the two programmatic service hosts, preserving application authenticatio
 The nginx template preserves HTTPS from the trusted local tunnel and the public host header, so OAuth callback URLs
 have the correct public origin. [ASP.NET proxy guidance](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/proxy-load-balancer?view=aspnetcore-10.0)
 explains why forwarded scheme and host affect redirects.
+
+For development on HART-DESKTOP, use the same entry point:
+
+```powershell
+./laplace.ps1 prepare
+./laplace.ps1 build
+./laplace.ps1 test
+```
+
+The source defaults to `LAPLACE_SRC/Laplace`; `-SourcePath <checkout>` selects a worktree. Preparation fetches the
+exact grammar commits required by that source and the numbered Unicode release with checked SHA-256 inputs.
+Build compiles the CPU native libraries, prepared artifacts, managed solution and web application, then executes
+native interop, decomposition and round-trip tests. These commands do not start a GPU service or install a local
+PostgreSQL server. Every build/test writes a result under `LAPLACE_WORK/operations`, including failures.
+
+Windows machine settings live in `%ProgramData%/Laplace/machine.env`. `LAPLACE_SRC` contains checkouts;
+`LAPLACE_DEPSRC` contains dependency source; `LAPLACE_DEPS` contains versioned installed dependencies;
+`LAPLACE_BUILD` contains generated build trees; `LAPLACE_WORK` contains operation receipts and logs.
+The application build directory defaults to `LAPLACE_BUILD/worktrees/<checkout-name>-<path-hash>` so checkouts
+have independent native caches and managed intermediates. `LAPLACE_BUILD_ROOT` remains an explicit override.
+The installed dependency manifest is copied by preparation and supplies the versioned prefixes used by CMake.
+Neither a Windows service account nor a guessed password is used as a database login.
+
+The MSBuild values are resolved during project evaluation, so IDE builds use the same directories as scripted builds.
+[Microsoft documents why these output properties must be set before their consumers](https://learn.microsoft.com/en-us/visualstudio/msbuild/customize-by-directory).
+The workspace identifier uses the same SHA-256 function in PowerShell and
+[MSBuild's stable hashing implementation](https://github.com/dotnet/msbuild/blob/main/src/Build/Evaluation/IntrinsicFunctions.cs).

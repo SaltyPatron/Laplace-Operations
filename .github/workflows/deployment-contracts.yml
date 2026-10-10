@@ -26,9 +26,22 @@ jobs:
       - name: Verify acceptance result failure boundaries
         shell: pwsh
         run: pwsh -NoProfile -File tests/acceptance-runner.ps1
+      - name: Check out the application configuration contract
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: SaltyPatron/Laplace
+          ref: 3943f4fc6
+          path: .acceptance/laplace
+          persist-credentials: false
+      - name: Use the application SDK for configuration evaluation
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: '10.0.x'
       - name: Verify named Windows acceptance checks
         shell: pwsh
-        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check storage-windows,resource-refusal-windows,backup-copy-windows -Output "$env:RUNNER_TEMP/acceptance-windows.json"
+        env:
+          LAPLACE_ACCEPTANCE_SOURCE: ${{ github.workspace }}/.acceptance/laplace
+        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check config-windows,storage-windows,resource-refusal-windows,backup-copy-windows -Output "$env:RUNNER_TEMP/acceptance-windows.json"
       - name: Preserve Windows acceptance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

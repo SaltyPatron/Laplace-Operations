@@ -35,9 +35,9 @@ $ErrorActionPreference = 'Stop'
 
 $Src = $env:LAPLACE_SRC; $Build = $env:LAPLACE_BUILD; $Work = $env:LAPLACE_WORK; $DepSrc = $env:LAPLACE_DEPSRC; $Deps = $env:LAPLACE_DEPS; $Data = $env:LAPLACE_DATA
 $PgDir = $env:LAPLACE_PG_DIR; $PgBin = Join-Path $PgDir 'bin'; $PgData = $env:LAPLACE_PGDATA; $PgWal = $env:LAPLACE_PGWAL; $PgTemp = $env:LAPLACE_PGTEMP
-$PgHost = $env:LAPLACE_PGHOST; $PgPort = $env:LAPLACE_PGPORT; $PgService = $env:LAPLACE_PGSERVICE; $PgAccount = $env:LAPLACE_PGUSER; $PgRole = $env:LAPLACE_ROLE; $PgLan = $env:LAPLACE_LAN; $Locks = $env:LAPLACE_LOCKS
+$PgHost = $env:LAPLACE_PGHOST; $PgPort = $env:LAPLACE_PGPORT; $PgService = $env:LAPLACE_PGSERVICE; $PgAccount = $env:LAPLACE_PG_SERVICE_ACCOUNT; $PgRole = $env:LAPLACE_ROLE; $PgLan = $env:LAPLACE_LAN; $Locks = $env:LAPLACE_LOCKS
 $PgLogs = Join-Path $Work 'logs\postgres'
-$PgCanon = 'C:\ProgramData\Laplace\pgpass.conf'   # the role's password: one canonical copy, administrators only (setup.sh: /etc/laplace/pgpass)
+$PgCanon = Join-Path $env:ProgramData 'Laplace\pgpass.conf'
 $Math = $env:LAPLACE_MATH; $DevShell = $env:LAPLACE_DEVSHELL
 $Toolchain = Join-Path $PSScriptRoot 'toolchain\laplace.cmake'
 
@@ -112,15 +112,15 @@ function PgReady { & "$PgBin\pg_isready.exe" -h $PgHost -p $PgPort 2>$null | Out
 # one statement to the server, as a superuser: postgres (trust on a cluster initdb made; its declared password after
 # access), else the role with the canonical password
 function PgSql([string]$sql) {
+    $previousPassword = $env:PGPASSWORD; $previousPassfile = $env:PGPASSFILE
     try {
-        $env:PGPASSWORD = 'postgres'
-        $out = & "$PgBin\psql.exe" -X -h $PgHost -p $PgPort -U postgres -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
+        $out = & "$PgBin\psql.exe" -X -w -h $PgHost -p $PgPort -U postgres -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
         if (-not $LASTEXITCODE) { return $out }
-        Remove-Item Env:PGPASSWORD; $env:PGPASSFILE = $PgCanon
-        $out = & "$PgBin\psql.exe" -X -h $PgHost -p $PgPort -U $PgRole -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
+        Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue; $env:PGPASSFILE = $PgCanon
+        $out = & "$PgBin\psql.exe" -X -w -h $PgHost -p $PgPort -U $PgRole -d postgres -v ON_ERROR_STOP=1 -Atq -c $sql 2>&1
         if ($LASTEXITCODE) { throw "psql: $($out -join ' ')" }
         $out
-    } finally { Remove-Item Env:PGPASSWORD, Env:PGPASSFILE -ErrorAction SilentlyContinue }
+    } finally { $env:PGPASSWORD = $previousPassword; $env:PGPASSFILE = $previousPassfile }
 }
 function PgWaitReady([int]$minutes) {
     $deadline = (Get-Date).AddMinutes($minutes)
@@ -565,7 +565,11 @@ function settings {
 # the server accepts, made when none is, and written into the operator's %APPDATA%\postgresql\pgpass.conf, which libpq
 # reads for psql and the laplace program. Only this host's line for the role is replaced there: the operator's lines
 # for other hosts (hart-server's database) are theirs and stay. Never printed. The firewall admits the server's port (LAPLACE_PGPORT) from $PgLan.
-function PgWorks([string]$pw) { $env:PGPASSWORD = $pw; $r = & "$PgBin\psql.exe" -X -h $PgHost -p $PgPort -U $PgRole -d postgres -Atq -c 'SELECT 1' 2>$null; Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue; "$r" -eq '1' }
+function PgWorks([string]$pw) {
+    $previousPassword = $env:PGPASSWORD
+    try { $env:PGPASSWORD = $pw; $r = & "$PgBin\psql.exe" -X -w -h $PgHost -p $PgPort -U $PgRole -d postgres -Atq -c 'SELECT 1' 2>$null; "$r" -eq '1' }
+    finally { $env:PGPASSWORD = $previousPassword }
+}
 function PgPassOf([string]$file) { if (Test-Path $file) { foreach ($l in Get-Content $file) { $f = $l -split ':'; if ($f.Count -ge 5 -and $f[3] -eq $PgRole -and $f[0] -in '*', 'localhost', '127.0.0.1', '::1', $env:COMPUTERNAME) { return ($f[4..($f.Count - 1)] -join ':') } } }; $null }
 function access {
     Part 'access'

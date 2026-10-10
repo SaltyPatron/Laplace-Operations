@@ -9,13 +9,20 @@ Operate the installed Laplace application through its delivery workflows.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('status','runs','verify','deploy')][string]$Operation = 'status',
+    [ValidateSet('status','runs','verify','deploy','prepare','build','test')][string]$Operation = 'status',
     [ValidateSet('staging','production','knowledge')][string]$Target = 'staging',
     [string]$Revision = 'main',
     [string]$Repository = 'SaltyPatron/Laplace',
+    [string]$SourcePath,
     [switch]$Wait
 )
 $ErrorActionPreference = 'Stop'
+if ($Operation -in 'prepare','build','test') {
+    $localArgs = @('-NoProfile','-File',"$PSScriptRoot/dev.ps1",'-Operation',$Operation)
+    if ($SourcePath) { $localArgs += @('-SourcePath',$SourcePath) }
+    & pwsh @localArgs
+    exit $LASTEXITCODE
+}
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required; sign in with gh auth login.' }
 if ($Operation -eq 'runs') {
     & gh run list --repo $Repository --limit 12

@@ -16,7 +16,8 @@
         {
           "id": "config-windows",
           "platform": "windows",
-          "argv": null,
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/windows-configuration.ps1"],
+          "timeout_seconds": 120,
           "evidence": "Execute all three real entry points against one alternate-root fixture."
         },
         {
@@ -120,6 +121,13 @@
           "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "staging", "-Wait"],
           "timeout_seconds": 900,
           "evidence": "Actual staging workflow execution through the human entry point; does not by itself prove replacement-runner installation."
+        },
+        {
+          "id": "site-live-production",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "production", "-Wait"],
+          "timeout_seconds": 900,
+          "evidence": "Actual installed production SQL/native verification and retained configuration/revision receipts through the human entry point."
         }
       ]
     },
