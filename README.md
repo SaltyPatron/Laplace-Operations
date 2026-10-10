@@ -166,7 +166,10 @@ The root steps are `sudo ./setup.sh`. Its part `site` runs the monorepo's `deplo
 over `laplace-mono` behind nginx). Its part `agents` runs `agents.sh`, which gives every repository of `LAPLACE_REPOS` its
 runner. `agents.sh status` fails when any repository of the owner with a self-hosted workflow has no runner here, or is
 missing from `LAPLACE_REPOS`. A runner carries `LAPLACE_AGENT_LABELS`, its repository's name, and the repository's own
-labels from `LAPLACE_AGENT_LABELS_<repo>` (Laplace-Conventional's ask for the GTX 1080 Ti).
+labels from `LAPLACE_AGENT_LABELS_<repo>`. GPU labels require an explicit usable-host
+declaration. hart-server's GTX 1080 Ti has broken cooling and is off limits; do not
+register it with GPU labels or run GPU probes/workloads. hart-desktop's RTX 4060 Ti
+is the user-declared development GPU.
 
 ## Build
 
