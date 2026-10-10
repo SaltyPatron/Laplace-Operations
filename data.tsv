@@ -44,17 +44,20 @@ Wordnet	archive	https://wordnetcode.princeton.edu/3.0/WordNet-3.0.tar.gz	.
 # its publisher serves it (CC BY-NC-SA 4.0: the download page asks the licence be accepted; LICENSES.txt is in the archive)
 FrameNet	archive	https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/framenet_v17.zip	.
 VerbAtlas-1.1	archive	https://verbatlas.org/downloads/VerbAtlas-1.1.0.zip	.
-# Tatoeba's weekly exports: the publisher keeps only the current week, so these are the latest by nature; the record (fingerprint.sh
-# inputs) says which week a host holds. users_sentences is published as a plain .csv, not an archive.
-Tatoeba	archive	https://downloads.tatoeba.org/exports/links.tar.bz2	.
-Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences.tar.bz2	.
-Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences_CC0.tar.bz2	.
-Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences_detailed.tar.bz2	.
-Tatoeba	archive	https://downloads.tatoeba.org/exports/sentences_with_audio.tar.bz2	.
-Tatoeba	archive	https://downloads.tatoeba.org/exports/tags.tar.bz2	.
-Tatoeba	archive	https://downloads.tatoeba.org/exports/transcriptions.tar.bz2	.
-Tatoeba	archive	https://downloads.tatoeba.org/exports/user_languages.tar.bz2	.
-Tatoeba	file	https://downloads.tatoeba.org/exports/users_sentences.csv	./
+# Tatoeba's weekly exports: the publisher keeps only the current week. Taken once: a host that holds an export keeps it, so the
+# tables that cite each other by sentence id are of one week (staging holds 2026-09-03); a host with none takes the current week,
+# every table of it. users_sentences is published as a plain .csv. The record says which week a host holds.
+Tatoeba	once	https://downloads.tatoeba.org/exports/links.tar.bz2	links.csv
+Tatoeba	once	https://downloads.tatoeba.org/exports/sentences.tar.bz2	sentences.csv
+Tatoeba	once	https://downloads.tatoeba.org/exports/sentences_CC0.tar.bz2	sentences_CC0.csv
+Tatoeba	once	https://downloads.tatoeba.org/exports/sentences_detailed.tar.bz2	sentences_detailed.csv
+Tatoeba	once	https://downloads.tatoeba.org/exports/sentences_in_lists.tar.bz2	sentences_in_lists.csv
+Tatoeba	once	https://downloads.tatoeba.org/exports/sentences_with_audio.tar.bz2	sentences_with_audio.csv
+Tatoeba	once	https://downloads.tatoeba.org/exports/tags.tar.bz2	tags.csv
+Tatoeba	once	https://downloads.tatoeba.org/exports/tags_detailed.tar.bz2	tags_detailed.csv
+Tatoeba	once	https://downloads.tatoeba.org/exports/transcriptions.tar.bz2	transcriptions.csv
+Tatoeba	once	https://downloads.tatoeba.org/exports/user_languages.tar.bz2	user_languages.csv
+Tatoeba	once	https://downloads.tatoeba.org/exports/users_sentences.csv	users_sentences.csv
 # Wiktextract at kaikki.org: the raw dump of every language (2.8 GB) and the English dictionary (2.9 GB), each one current file the
 # publisher replaces in place. Taken once: a host that holds a dump keeps it (staging holds 2026-08-28 and an April English file), a
 # host with none takes the current one; the record says which. The recipes match raw-wiktextract-data* and kaikki.org-dictionary-*.jsonl.

@@ -33,8 +33,16 @@ fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
             # staging loaded stays what staging holds; a host with none takes the current one. into is the pattern of what counts.
             local have; have=$(ls -d "$LAPLACE_DATA/$set"/$into 2>/dev/null | head -1 || true)
             if [ -n "$have" ]; then printf '  %-28s %s held: not fetched again\n' "$set" "${have#"$LAPLACE_DATA/$set/"}"; landed "$set" "$(top "${have#"$LAPLACE_DATA/$set/"}")"
-            else dest=$LAPLACE_DATA/$set/${origin##*/}; mkdir -p "$LAPLACE_DATA/$set"; get "$origin" "$dest" || return 1; landed "$set" "${origin##*/}"
-              printf '  %-28s %s, the publisher'"'"'s current file\n' "$set" "${origin##*/}"; fi ;;
+            else local name=${origin##*/}; mkdir -p "$LAPLACE_DATA/$set"
+              case $name in
+                *.tar.gz|*.tgz|*.tar.bz2|*.zip)                                   # an archive: kept under .archive, opened into the set
+                  f=$LAPLACE_DATA/$set/.archive/$name; get "$origin" "$f" || return 1
+                  case $f in *.tar.gz|*.tgz) tar xzf "$f" -C "$LAPLACE_DATA/$set"; members=$(tar tzf "$f") ;; *.tar.bz2) tar xjf "$f" -C "$LAPLACE_DATA/$set"; members=$(tar tjf "$f") ;;
+                             *.zip) unzip -q -o -DD "$f" -d "$LAPLACE_DATA/$set"; members=$(unzip -Z1 "$f") ;; esac
+                  landed "$set" $(printf '%s\n' "$members" | sed 's|^\./||; s|/.*||' | sort -u) ;;
+                *) get "$origin" "$LAPLACE_DATA/$set/$name" || return 1; landed "$set" "$name" ;;
+              esac
+              printf '  %-28s %s, the publisher'"'"'s current file\n' "$set" "$name"; fi ;;
     listing) local u; for u in $(curl -fsSL "$origin" | urls download_url); do
               dest=$(land "$set" "$into" "${u##*/}"); get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"; done; landed "$set" "$(top "$into")"
             printf '  %-28s %s: %s files from %s\n' "$set" "${into%/}" "$(ls "$LAPLACE_DATA/$set/${into%/}" | wc -l)" "$origin" ;;
