@@ -16,6 +16,8 @@ rows(){ grep -v '^#' "$manifest" | grep .; }
 sets(){ rows | cut -f1 | sed 's/-{edition}$/-*/' | sort -u; }                   # a release set's directory carries its edition
 get(){ curl -fsSL --retry 3 -R --create-dirs -o "$2" ${3:+-z "$3"} "$1"; }     # -R: the publisher's time; -z: only when newer
 urls(){ sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p"; }                          # the download URLs of a GitHub listing or release
+landed(){ local set=$1; shift; mkdir -p "$LAPLACE_DATA/$set"; { [ ! -f "$LAPLACE_DATA/$set/.landed" ] || cat "$LAPLACE_DATA/$set/.landed"; printf '%s\n' "$@"; } | grep . | sort -u > "$LAPLACE_DATA/$set/.landed.new"; mv -f "$LAPLACE_DATA/$set/.landed.new" "$LAPLACE_DATA/$set/.landed"; }
+top(){ local p=${1#./}; p=${p%%/*}; printf '%s' "$p"; }                          # the first component of a path under the set
 land(){ local set=$1 into=$2 name=$3; case $into in */) echo "$LAPLACE_DATA/$set/${into#./}$name" ;; .) echo "$LAPLACE_DATA/$set" ;; *) echo "$LAPLACE_DATA/$set/$into" ;; esac; }
 fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
   case $kind in
@@ -23,17 +25,18 @@ fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
             else dest=$LAPLACE_DATA/$set/${into%/}; p=${origin#*://*/}; cut=$(printf '%s' "${p%/}" | tr -cd / | wc -c); cut=$((cut + 1)); fi   # the directory itself lands at into
             mkdir -p "$dest"
             wget -q -r -np -nH --cut-dirs="$cut" -N -R 'index.html*' -P "$dest" "$origin" || [ $? = 8 ]   # 8: a file the server would not give; the rest came
+            if [ "$into" = . ]; then landed "$set" '*'; else landed "$set" "$(top "$into")"; fi
             printf '  %-28s %s files from %s\n' "$set" "$(find "$dest" -type f | wc -l)" "$origin" ;;
-    file)   dest=$(land "$set" "$into" "${origin##*/}"); get "$origin" "$dest" "$([ -f "$dest" ] && echo "$dest")"
+    file)   dest=$(land "$set" "$into" "${origin##*/}"); get "$origin" "$dest" "$([ -f "$dest" ] && echo "$dest")"; landed "$set" "$(top "${dest#"$LAPLACE_DATA/$set/"}")"
             printf '  %-28s %s\n' "$set" "${dest#"$LAPLACE_DATA"/}" ;;
     listing) local u; for u in $(curl -fsSL "$origin" | urls download_url); do
-              dest=$(land "$set" "$into" "${u##*/}"); get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"; done
+              dest=$(land "$set" "$into" "${u##*/}"); get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"; done; landed "$set" "$(top "$into")"
             printf '  %-28s %s: %s files from %s\n' "$set" "${into%/}" "$(ls "$LAPLACE_DATA/$set/${into%/}" | wc -l)" "$origin" ;;
     release) local u name edition pre=${into%%\**}
             u=$(curl -fsSL "$origin" | urls browser_download_url | while read -r x; do case ${x##*/} in $into) echo "$x"; break ;; esac; done)
             [ -n "$u" ] || { echo "  $set: no asset of the latest release matches $into"; return 1; }
             name=${u##*/}; edition=${name#"$pre"}; edition=${edition%%.*}; set=${set//\{edition\}/$edition}   # the name after the pattern's prefix, before its extension
-            dest=$LAPLACE_DATA/$set/$name; get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"
+            dest=$LAPLACE_DATA/$set/$name; get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"; landed "$set" "$name"
             printf '  %-28s %s, the latest release\n' "$set" "$name" ;;
     git)    local pin=""; case $into in *@*) pin=${into##*@}; into=${into%@*} ;; esac; dest=$LAPLACE_DATA/$set/${into%/}
             if [ -n "$pin" ]; then                                              # the declared commit, and no other
@@ -41,16 +44,20 @@ fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
               [ "$(git -C "$dest" rev-parse HEAD 2>/dev/null)" = "$pin" ] || { git -C "$dest" fetch -q --depth 1 origin "$pin" && git -C "$dest" -c advice.detachedHead=false checkout -q --force "$pin"; }
             elif [ -d "$dest/.git" ]; then git -C "$dest" pull -q --ff-only 2>/dev/null || { git -C "$dest" fetch -q --depth 1 origin && git -C "$dest" reset -q --hard FETCH_HEAD; }
             else mkdir -p "$(dirname "$dest")"; git clone -q --depth 1 "$origin" "$dest"; fi
+            if [ "${into%/}" = . ]; then landed "$set" '*'; else landed "$set" "$(top "$into")"; fi
             printf '  %-28s %s at %s%s\n' "$set" "${into%/}" "$(git -C "$dest" rev-parse --short HEAD)" "${pin:+ (pinned)}" ;;
     archive) dest=$LAPLACE_DATA/$set; mkdir -p "$dest"; local name=${origin##*/}
             case $into in *.tgz|*.tar.gz|*.tar.bz2|*.zip) name=${into##*/}; into=${into%/*}; [ "$into" != "$name" ] || into=. ;; esac   # a URL that does not name its file: into names it
             [ "$into" = . ] || { dest=$dest/${into%/}; mkdir -p "$dest"; }
             f=$LAPLACE_DATA/$set/.archive/$name
             get "$origin" "$f" "$([ -f "$f" ] && echo "$f")"
-            case $f in *.tar.gz|*.tgz) tar xzf "$f" -C "$dest" ;; *.tar.bz2) tar xjf "$f" -C "$dest" ;; *.zip) unzip -q -o -DD "$f" -d "$dest" ;; *) echo "  $set: $f is not an archive data.sh opens"; return 1 ;; esac
+            case $f in *.tar.gz|*.tgz) tar xzf "$f" -C "$dest"; members=$(tar tzf "$f") ;; *.tar.bz2) tar xjf "$f" -C "$dest"; members=$(tar tjf "$f") ;;
+                       *.zip) unzip -q -o -DD "$f" -d "$dest"; members=$(unzip -Z1 "$f") ;; *) echo "  $set: $f is not an archive data.sh opens"; return 1 ;; esac
+            if [ "$into" = . ]; then landed "$set" $(printf '%s\n' "$members" | sed 's|^\./||; s|/.*||' | sort -u); else landed "$set" "$(top "$into")"; fi
             printf '  %-28s %s opened\n' "$set" "$name" ;;
     extract) dest=$LAPLACE_DATA/$set/${into%/}; mkdir -p "$dest"
             unzip -q -o -DD "$LAPLACE_DATA/$set/$origin" -d "$dest"          # the publisher's archive, opened beside itself
+            landed "$set" "$(top "$into")"
             printf '  %-28s %s opened into %s\n' "$set" "${origin##*/}" "${into%/}" ;;
     *) echo "  $set: $kind is not a kind data.sh fetches"; return 1 ;;
   esac; }
@@ -69,8 +76,9 @@ case $op in
       if [ -n "$d" ] && [ -n "$(ls -A "$d")" ]; then printf '  %-28s %s files\n' "${d##*/}" "$(find "$d" -type f | wc -l)"
         # what the set's directory holds beside what the declarations land there: an older sibling a root pattern may
         # resolve to instead of the declared one; said, never removed (the operator decides what leaves a data directory)
-        extra=$(ls -A "$d" | grep -v '^\.' | while read -r e; do rows | awk -F'\t' -v s="${d##*/}" '$1==s || $1 ~ /\{edition\}/' | grep -qF -- "$e" || echo "$e"; done | tr '\n' ' ')
-        [ -z "$extra" ] || printf '  %-28s also holds: %s\n' "" "$extra"
+        if [ -f "$d/.landed" ] && ! grep -qx '\*' "$d/.landed"; then
+          extra=$(ls -A "$d" | grep -v '^\.' | grep -vxF -f "$d/.landed" | tr '\n' ' ')
+          [ -z "$extra" ] || printf '  %-28s also holds: %s\n' "" "$extra"; fi
       else printf '  %-28s missing\n' "$s"; bad=$((bad + 1)); fi
     done
     echo "data: $(sets | wc -l) sets declared, $bad missing, under $LAPLACE_DATA"
