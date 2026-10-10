@@ -3,7 +3,7 @@
 #
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
-#                              appdb | site | agents | idlestop | report
+#                              appdb | backup | site | agents | idlestop | report
 #   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
 #   sudo ./setup.sh shares     the SMB shares for the development machine (LAPLACE_SHARES); not part of all
 #   sudo ./setup.sh landing    where other hosts' backups land (LAPLACE_LANDING, backup/landing.keys); not part of all
@@ -450,6 +450,49 @@ EOS
   systemctl daemon-reload; systemctl enable -q --now laplace-idle-stop.timer
   say "idle stop" "after $m idle minutes; $(systemctl is-active laplace-idle-stop.timer); next $(systemctl show -p NextElapseUSecRealtime --value laplace-idle-stop.timer)"
 }
+# Business continuity: a host that holds databases (LAPLACE_BACKUP_DATABASES in its machine.env, e.g. "laplace laplace-mono"
+# on the knowledge host, "laplace-app" on the hosting host) dumps each of them nightly with pg_dump -Fc, proves the dump
+# readable with pg_restore --list, and ships it over the tailnet to the landing LAPLACE_BACKUP_TARGET (user@host:, the
+# landing part on hart-server: setup.sh landing), by rsync with the host's own key /etc/laplace/backup.key, made here; its
+# public half /etc/laplace/backup.pub is declared in backup/landing.keys, which is what the landing authorizes. The landing
+# is write-only for a sender (rrsync -wo into the sender's own directory): paths are relative to it, nothing is listed,
+# read back or deleted there, so the dump is proven before it ships and retention on the landing is the landing's own
+# timer. LAPLACE_BACKUP_KEEP_DAYS (default 30) dumps are kept locally under /var/backups/laplace. The server's own binaries
+# are used (LAPLACE_PG_DIR; LAPLACE_BACKUP_PGBIN/PGPORT for the application cluster). Hosts without the declaration skip the
+# part. A restore is proven by restoring into a scratch database on another host, which is an operation, not this part.
+backup(){ part backup
+  local dbs=${LAPLACE_BACKUP_DATABASES:-}; [ -n "$dbs" ] || { say "backup" "none declared (LAPLACE_BACKUP_DATABASES): skipped"; return 0; }
+  local target=${LAPLACE_BACKUP_TARGET:-}; [ -n "$target" ] || { say "backup" "no landing declared (LAPLACE_BACKUP_TARGET): skipped"; return 0; }
+  local pgbin=${LAPLACE_BACKUP_PGBIN:-$LAPLACE_PG_DIR/bin} port=${LAPLACE_BACKUP_PGPORT:-5432} keep=${LAPLACE_BACKUP_KEEP_DAYS:-30} dir=/var/backups/laplace
+  install -d -m 750 -o "$PGUSER" -g "$PGUSER" "$dir"
+  install -d -m 700 /etc/laplace
+  [ -s /etc/laplace/backup.key ] || { ssh-keygen -q -t ed25519 -N '' -C "laplace-backup@$(hostname)" -f /etc/laplace/backup.key; mv -f /etc/laplace/backup.key.pub /etc/laplace/backup.pub; say "key" "made: declare /etc/laplace/backup.pub in backup/landing.keys"; }
+  [ -s /etc/laplace/backup.pub ] || mv -f /etc/laplace/backup.key.pub /etc/laplace/backup.pub 2>/dev/null || true
+  chown "$PGUSER" /etc/laplace/backup.key /etc/laplace/backup.pub; chmod 600 /etc/laplace/backup.key; chmod 644 /etc/laplace/backup.pub
+  cat > /usr/local/sbin/laplace-backup <<EOS
+#!/bin/bash
+# Laplace (setup.sh backup): dump, prove, ship. Declared, not hand-made. Runs as $PGUSER.
+set -euo pipefail
+dir=$dir; pgbin=$pgbin; port=$port; keep=$keep; target=$target; host=\$(hostname); stamp=\$(date -u +%Y%m%dT%H%M%SZ); rc=0
+for db in $dbs; do
+  f="\$dir/\$host-\$db-\$stamp.dump"
+  if "\$pgbin/pg_dump" -p "\$port" -Fc -f "\$f" "\$db" && "\$pgbin/pg_restore" --list "\$f" > /dev/null; then
+    sha256sum "\$f" > "\$f.sha256"; logger -t laplace-backup "\$db: \$(stat -c %s "\$f") bytes, readable, \$f"
+  else logger -t laplace-backup "\$db: DUMP FAILED"; rm -f "\$f" "\$f.sha256"; rc=1; continue; fi
+  if rsync -q -e "ssh -i /etc/laplace/backup.key -o BatchMode=yes -o StrictHostKeyChecking=accept-new" "\$f" "\$f.sha256" "\$target"; then
+    logger -t laplace-backup "\$db: shipped to \$target (the landing's directory for this host)"
+  else logger -t laplace-backup "\$db: NOT SHIPPED to \$target (kept locally)"; rc=1; fi
+done
+find "\$dir" -name '*.dump*' -mtime +"\$keep" -delete
+exit \$rc
+EOS
+  chmod 755 /usr/local/sbin/laplace-backup
+  printf '[Unit]\nDescription=Laplace: dump, prove and ship the databases %s\n[Service]\nType=oneshot\nUser=%s\nExecStart=/usr/local/sbin/laplace-backup\n' "$dbs" "$PGUSER" > /etc/systemd/system/laplace-backup.service
+  printf '[Unit]\nDescription=Laplace: nightly backup\n[Timer]\nOnCalendar=*-*-* 03:30:00\nRandomizedDelaySec=10min\nPersistent=true\n[Install]\nWantedBy=timers.target\n' > /etc/systemd/system/laplace-backup.timer
+  systemctl daemon-reload; systemctl enable -q --now laplace-backup.timer
+  say "backup" "$dbs nightly at 03:30 UTC to $target, $keep days kept under $dir; $(systemctl is-active laplace-backup.timer)"
+  say "key" "$(hostname)  $(cut -d' ' -f1,2 /etc/laplace/backup.pub)   (the line for backup/landing.keys)"
+}
 site(){ part site
   site_sources
   missing=$(for p in $SITE_PACKAGES; do dpkg-query -W -f '${Status}\n' "$p" 2>/dev/null | grep -q "install ok installed" || echo "$p"; done)
@@ -559,7 +602,7 @@ shares(){ part shares
 # than LAPLACE_LANDING_KEEP days, and always keeps a host's newest LAPLACE_LANDING_MIN files whatever their age.
 landing(){ part landing
   L=$LAPLACE_LANDING; U=$LAPLACE_LANDING_USER; keys=$here/backup/landing.keys
-  [ -n "$L" ] || { say "landing" "not a landing host: LAPLACE_LANDING is not declared (/etc/laplace/machine.env)"; return; }
+  [ -n "$L" ] || { say "landing" "LAPLACE_LANDING is empty: nothing lands here"; return; }
   command -v rrsync >/dev/null || { echo "rrsync is not installed: the rsync package brings it"; exit 1; }
   up=$(dirname "$L"); [ -d "$up" ] || { echo "$up is not there: the volume backups land on is not mounted"; exit 1; }
   [ "$(stat -c %d "$up")" != "$(stat -c %d /)" ] || { echo "$up is on the system's volume: the backup volume is not mounted there; nothing is written"; exit 1; }
@@ -608,10 +651,10 @@ report(){ part report
 }
 
 parts=${*:-all}
-for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|site|agents|idlestop|report|chess|shares|landing) ;;
-  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|site|agents|idlestop|report|chess|shares|landing ...]"; exit 2 ;; esac; done
+for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing) ;;
+  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing ...]"; exit 2 ;; esac; done
 for p in $parts; do case $p in
-  all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; site; agents; idlestop; report ;;
+  all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup; site; agents; idlestop; report ;;
   *) "$p" ;;
 esac; done
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
