@@ -293,6 +293,13 @@
           "platform": "any",
           "argv": null,
           "evidence": "Client-to-service probes plus renewal/distribution evidence."
+        },
+        {
+          "id": "private-dns",
+          "platform": "any",
+          "argv": ["pwsh", "-NoProfile", "-File", "network/openwrt-private-dns.ps1", "-Router", "hart-router", "-TailnetHost", "hart-server", "-Nodes", "hart-prod,hart-cloud", "-LocalDomain", "lan"],
+          "timeout_seconds": 60,
+          "evidence": "Live router records and actual server resolver answers agree with Tailscale node identity/address; cloud may remain off."
         }
       ]
     },
