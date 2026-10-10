@@ -1,0 +1,30 @@
+machine     hart-cloud
+os          Linux 6.8.0-1069-gcp
+cpu         Intel(R) Xeon(R) Platinum 8481C CPU @ 2.70GHz
+compiler    Intel(R) oneAPI DPC++/C++ Compiler 2026.1.1 (2026.1.1.20260724)
+made        2026-10-10T02:30:48Z
+native      1b9367c8055c
+engine      aa38df13d4a0
+postgres    0429d10a2b41
+operations  08177c090cdb
+ucd         17.0.0 109 f27bd26be3149e94
+icu         78.3 unicode 17.0
+resources   cili princeton-wordnet propbank verbnet framenet semlink predicate-matrix verbatlas universal-dependencies-tools
+data        iso-639 31 8f0a5f2224806286 ISO639
+data        open-english-wordnet 2 d37c8772a78b6bf3 OpenEnglishWordNet-2025-plus
+data        cili 70 1631c36b4e0386c5 CILI
+data        princeton-wordnet 185 9de7f9870ec0cc95 WordNet-3.0
+data        propbank 7569 72bed4c9b03acebf frames
+data        verbnet 331 82b9de7cc0366276 verbnet3.4
+data        framenet 14930 7aad583dd4a67eba framenet_v17
+data        semlink 44 518e9908811ac329 semlink-cu-clear
+data        predicate-matrix none
+data        verbatlas 17 8f19c994f84afb71 VerbAtlas-1.1.0
+data        universal-dependencies-tools 10 b1153e1081d59130 data
+tier0       f8b0882f3483f0db7f5191c230ae74ed42231ff1194a59f908658e234746b047
+flags       0cac44d487ef1edd538ae432a76d1bf5105e29a8e6c33df4a039c195d01bf2e1
+highway     aa74cc92390bb9f55b06878f2dd93027c9255344fce598e5a7cbb1ded1dd358e
+claims      iso-639 93797 e35ab9e854d16d17
+determinism iso-639 same: twice 93797 claims, e35ab9e854d16d17
+claims      open-english-wordnet 1390805 ea1472609027b87f
+determinism open-english-wordnet same: twice 1390805 claims, ea1472609027b87f
