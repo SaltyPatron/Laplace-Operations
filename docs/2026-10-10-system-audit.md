@@ -104,4 +104,12 @@ Validation: `lpm check` passed; dynamic-library resolution uses the installed `l
 
 ## Continuation
 
+### Open pull requests reviewed
+
+The October 10 inventory found three open draft PRs under SaltyPatron: Operations #57 and Engine #38/#44.
+
+- Engine #38 is a superseded prototype. Its highway string fix has the same stable patch ID as main's `55861e9`; `src/provenance.c` and all `tools/containment-prototype` files at its head `602f56e` are byte-identical to main-history commit `99bced5`. Main subsequently merged containment work in #47 and extracted the shared walks in #52. Closing the old draft does not delete the branch or erase its recorded measurements. This does not certify the later implementation's semantic completeness.
+- Engine #44 is genuinely unfinished: its own description reports incorrect sense selection, missing POS standings, recipe labels used as FrameNet strings, and 40–75-second turns. Its prerequisite #43 is merged. Passing its build does not resolve these functional defects; it must remain a tracked implementation task rather than be marked ready cosmetically.
+- Operations #57's bounded verification correction has seven passing regression cases and a PowerShell parse check. Its broader audit records unfinished work; that does not make the tested correction itself unready. Land the correction without running the known defective automatic deployment chain, and continue the lifecycle repair separately within this same task.
+
 Continue the same system-wide task after user corrections. Track fixes against their original requirement, affected consumers, actual checks and deployment state. Do not replace unfinished implementation with a completion statement, and do not require the user to re-list repositories or restart the work.
