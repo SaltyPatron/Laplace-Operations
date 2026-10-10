@@ -72,9 +72,10 @@ function TunePlan {   # every derived quantity, tune-pg.sh's plan(): the same na
     $minWalMB = [math]::Min([math]::Max([int64]($walMB / 8), 80), 4096)
     $walBufKB = [math]::Min([math]::Max([int64]($sharedKB / 32), 16384), [int64]($walMB * 1024 / 16))
     $par = $cores; $gather = [int]($cores / 2); $avw = [math]::Max(3, [int]($cores / 2)); $iow = [math]::Min([math]::Max([int]($threads * 2 / 3), 1), 32); $mwp = $par + 4
+    $declaredServing = if ($env:LAPLACE_PG_SERVING) { [int]$env:LAPLACE_PG_SERVING } else { 0 }
     switch ($TuneProfile) {
-        'knowledge' { $ingest = 1 + 2 * $cores + 3; $serving = $threads; $locks = 1024 }
-        'app'       { $ingest = 0; $serving = [math]::Max(16, 8 * $threads); $locks = 64 }
+        'knowledge' { $ingest = 1 + 2 * $cores + 3; $serving = if ($declaredServing) { $declaredServing } else { 4 * $threads }; $locks = 1024 }
+        'app'       { $ingest = 0; $serving = if ($declaredServing) { $declaredServing } else { [math]::Max(16, 8 * $threads) }; $locks = 64 }
     }
     $reservedConns = 3; $conns = $ingest + $serving + $avw + $reservedConns
     $maintDomKB = [int64]($privateKB / 4); $mwmKB = [math]::Max([int64]($maintDomKB / 2), 65536); $avwmKB = [math]::Max([int64]($maintDomKB / 2 / $avw), 1024)

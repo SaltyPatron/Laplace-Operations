@@ -15,7 +15,7 @@
 # machine.env with the measurement that set it: LAPLACE_PG_RESERVED (memory its other residents keep: HART-DESKTOP's
 # llama-servers), LAPLACE_PG_BUFFERS_MAX (the largest shared memory a build maps: Windows), LAPLACE_PG_PROFILE
 # (knowledge: the server shares the host with the ingest client, the build and the agent; app: with the API, the MCP
-# and the agent; what differs is the connection plan).
+# and the agent; what differs is the connection plan), LAPLACE_PG_SERVING (the connections the host's services hold).
 #
 # The memory is one equation in four domains (the monorepo's PostgresResourcePlan, which the laplace program sizes
 # its own working sets from, so the two never promise the same byte twice): of what the server may use (the memory
@@ -164,11 +164,14 @@ plan() {  # every derived quantity as NAME=value lines; declared() formats them
   # the processors: parallel query on the cores (a sibling thread is not another core), asynchronous reads on the threads
   par=$cores; gather=$((cores / 2)); avw=$(max 3 $((cores / 2))); iow=$(clamp $((threads * 2 / 3)) 1 32); mwp=$((par + 4))
   # the connection plan: who may be connected at once. knowledge: the ingest's fan (one coordinator, two a core, three
-  # observers: the monorepo's measured population), a serving connection a thread, the maintenance workers; app: the
-  # API's pool (eight a thread, sixteen at least), the maintenance workers. Three superuser connections are reserved.
+  # observers: the monorepo's measured population), the serving pools, the maintenance workers; app: the serving pools
+  # and the maintenance workers. The serving pools are the host's services' (the API, the MCP, the runners' checks, a
+  # person's psql), which the machine cannot say: LAPLACE_PG_SERVING declares them with the measurement; undeclared,
+  # four a thread (on hart-server one MCP process held 13 idle backends after a single search, 2026-10-10 01:07Z, so
+  # one a thread was too few). Three superuser connections are reserved.
   case $PROFILE in
-    knowledge) ingest=$((1 + 2 * cores + 3)); serving=$threads; locks=1024 ;;
-    app)       ingest=0; serving=$(max 16 $((8 * threads))); locks=64 ;;
+    knowledge) ingest=$((1 + 2 * cores + 3)); serving=${LAPLACE_PG_SERVING:-$((4 * threads))}; locks=1024 ;;
+    app)       ingest=0; serving=${LAPLACE_PG_SERVING:-$(max 16 $((8 * threads)))}; locks=64 ;;
   esac
   reserved_conns=3; conns=$((ingest + serving + avw + reserved_conns))
   # the private quarter: a quarter of it for maintenance (one explicit operation and the autovacuum workers between
