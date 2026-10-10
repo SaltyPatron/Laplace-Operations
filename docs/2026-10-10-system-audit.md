@@ -95,6 +95,14 @@ Validation: `lpm check` passed; dynamic-library resolution uses the installed `l
 
 ## Other outstanding operational work
 
+GPU scheduling correction: the Conventional runner `hart-server-Laplace-Conventional`
+(GitHub runner 22) was online and idle but advertised `gpu`, `pascal`, and `1080ti`,
+contrary to the user's damaged-GPU restriction. Removed those custom labels through
+the GitHub runner API; retained its CPU-capable labels. The registration default now
+omits GPU labels. No GPU probe or workload was executed. Registration defaults do
+not overwrite an explicit machine override; root-owned machine configuration still
+requires inspection where access is unavailable.
+
 - Production API: earlier live inspection found `/etc/laplace` mode 700, an unreadable machine declaration for the runner, repeated restarts and no health response. The deployed revision receipt was absent. Configuration and artifact-delivery repair remains outstanding.
 - Google: the working account is `thesaltypatron@gmail.com`, project `project-f5812b96-f924-41a4-94c`. Earlier audit records confirm the nightly stop at approximately 02:06 Central, a later start, and a later guest shutdown. Recheck VM state before operational decisions.
 - Billing: project linkage and an open billing account were verified. Actual spend, credit remaining and expiry were not obtained; do not infer them from VM runtime or enabled billing.
