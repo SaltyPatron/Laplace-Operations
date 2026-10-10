@@ -15,6 +15,7 @@ jobs:
         shell: bash
         run: |
           export TMPDIR="$RUNNER_TEMP"
+          bash tests/operation-lock.sh
           bash tests/deployment-artifacts.sh
           bash tests/deployment-readback.sh
           bash tests/fingerprint-comparison.sh
