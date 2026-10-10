@@ -380,6 +380,37 @@ function deps {
             if (Test-Path $proof) { Say $what "built and installed at $prefix" } else { throw "DID NOT INSTALL: no $proof; the build is $b" }
         }
     }
+    Attempt 'runtime closure' { RuntimeClosure }
+}
+# What PostgreSQL loads, beside it. Its service runs as NetworkService and reads no person's PATH (Operations#2), and
+# the libraries it was built against are each under a prefix of their own (ICU, zlib, lz4, zstd, OpenSSL, libxml2;
+# GEOS, PROJ and theirs for PostGIS) with the compiler's runtime under oneAPI: none of that is found by a service, and
+# a client's PostgreSQL on the PATH would be found in their place. Every library the installed programs and modules
+# import, and what those import in turn, is copied into PostgreSQL's bin when it is one of ours (a manifest prefix or
+# the compiler's runtime); Windows' own are left to Windows. Read from the files themselves (dumpbin /dependents).
+function RuntimeClosure {
+    if (-not (Test-Path (Join-Path $PgBin 'postgres.exe'))) { Say 'runtime closure' 'no PostgreSQL installed yet'; return }
+    if (-not (DevShell) -or -not (Get-Command dumpbin.exe -ErrorAction SilentlyContinue)) { throw 'no dumpbin: the developer shell does not provide Visual Studio''s tools' }
+    $from = [Collections.Generic.List[string]]::new()
+    foreach ($r in (Manifest | Where-Object { $_.kind -ne 'tool' -and $_.name -ne 'postgis' })) { foreach ($s in 'bin', 'bin64', 'lib') { $d = Join-Path (Prefix $r) $s; if (Test-Path $d) { $from.Add($d) } } }
+    $rt = Split-Path (Get-Command icx.exe).Source; if (Test-Path (Join-Path $rt 'libmmd.dll')) { $from.Add($rt) }
+    $have = @{}; Get-ChildItem $PgBin -Filter *.dll | ForEach-Object { $have[$_.Name.ToLowerInvariant()] = $true }
+    $queue = [Collections.Generic.Queue[string]]::new()
+    Get-ChildItem $PgBin, (Join-Path $PgDir 'lib') -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object { $queue.Enqueue($_.FullName) }
+    $seen = @{}; $copied = [Collections.Generic.List[string]]::new()
+    while ($queue.Count) {
+        $file = $queue.Dequeue(); if ($seen[$file]) { continue }; $seen[$file] = $true
+        foreach ($line in (& dumpbin.exe /nologo /dependents $file 2>$null)) {
+            $name = $line.Trim(); if ($name -notmatch '^[\w.+-]+\.dll$') { continue }
+            $key = $name.ToLowerInvariant(); if ($have[$key]) { continue }
+            $src = $from | ForEach-Object { Join-Path $_ $name } | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if (-not $src) { continue }                                       # not ours: Windows' own, or the C runtime
+            Copy-Item -LiteralPath $src -Destination $PgBin; $have[$key] = $true; $copied.Add($name); $queue.Enqueue((Join-Path $PgBin $name))
+        }
+    }
+    $v = & (Join-Path $PgBin 'postgres.exe') --version 2>&1
+    if ($LASTEXITCODE) { throw "postgres.exe does not start from its own directory (exit $LASTEXITCODE): a library it loads is in none of the manifest's prefixes" }
+    Say 'runtime closure' "$(if ($copied.Count) { "copied $($copied.Count) beside postgres.exe: $($copied -join ' ')" } else { 'complete' }); $v"
 }
 # The cluster: made once (Sequence 8: UTF-8, the C.UTF-8 locale, data checksums, the log where LAPLACE_PGWAL says),
 # run as the Windows service, its account over its directories; then the certificate, before ssl = on is declared (a
