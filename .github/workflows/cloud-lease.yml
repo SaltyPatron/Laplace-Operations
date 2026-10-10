@@ -1,0 +1,30 @@
+name: Cloud worker lease
+on:
+  workflow_call:
+    inputs:
+      operation:
+        type: string
+        required: true
+      minutes:
+        type: number
+        default: 300
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  lease:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: ./cloud
+        with:
+          operation: ${{ inputs.operation }}
+          minutes: ${{ inputs.minutes }}
+          project: ${{ vars.LAPLACE_GCP_PROJECT }}
+          instance: ${{ vars.LAPLACE_CLOUD_INSTANCE }}
+          zone: ${{ vars.LAPLACE_CLOUD_ZONE }}
+          provider: ${{ vars.LAPLACE_GCP_WIF_PROVIDER }}
+          service-account: ${{ vars.LAPLACE_GCP_SERVICE_ACCOUNT }}

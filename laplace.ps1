@@ -9,7 +9,7 @@ Operate the installed Laplace application through its delivery workflows.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('status','runs','verify','deploy','prepare','build','test')][string]$Operation = 'status',
+    [ValidateSet('status','runs','verify','deploy','components','prepare','build','test')][string]$Operation = 'status',
     [ValidateSet('staging','production','knowledge')][string]$Target = 'staging',
     [string]$Revision = 'main',
     [string]$Repository = 'SaltyPatron/Laplace',
@@ -28,12 +28,20 @@ if ($Operation -eq 'runs') {
     & gh run list --repo $Repository --limit 12
     exit $LASTEXITCODE
 }
-if ($Operation -eq 'deploy') {
+$workflow = 'product-operator.yml'
+$inputs = @('-f',"operation=$Operation",'-f',"target=$Target")
+if ($Operation -eq 'components') {
+    if ($Target -eq 'production') { throw 'Use deploy for public production delivery; components supports staging and on-demand knowledge-host verification.' }
+    if (-not $PSBoundParameters.ContainsKey('Repository')) { $Repository = 'SaltyPatron/Laplace-Operations' }
+    $workflow = 'laplace.yml'
+    $inputs = @('-f','drop=false','-f','reseed=false','-f',"cloud=$($Target -eq 'knowledge')".ToLowerInvariant())
+    Write-Host "Verify component deployment from $Revision on $Target."
+} elseif ($Operation -eq 'deploy') {
     Write-Host "Deploy ${Revision}: staging verification, cloud build, production verification."
 } else {
     Write-Host "$Operation on $Target using checks from $Revision."
 }
-$output = & gh workflow run product-operator.yml --repo $Repository --ref $Revision -f "operation=$Operation" -f "target=$Target" 2>&1
+$output = & gh workflow run $workflow --repo $Repository --ref $Revision @inputs 2>&1
 if ($LASTEXITCODE -ne 0) { throw ($output -join "`n") }
 $text = $output -join "`n"
 Write-Output $text
