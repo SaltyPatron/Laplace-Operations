@@ -131,7 +131,7 @@ off leaves the stamp `pending`, and the next deployment with the same stamp pick
 By hand, in one click: `laplace.yml` with `drop` (empty, no ingest) or `reseed` (drop, then every source), or
 `ingest.yml` with `reseed`.
 
-**Does it work on another machine** (`verify.sh`, `fingerprint.sh`, `fingerprint.ps1`). Every deployment writes the
+**Build fingerprints and local repeatability** (`verify.sh`, `fingerprint.sh`, `fingerprint.ps1`). Every deployment writes the
 record of its build: the commits, tier 0 and its flags made afresh, the highway, and, for each source of
 `LAPLACE_DETERMINISM`, the claims its recipes make, counted and hashed as a sorted set. Each source is decomposed twice,
 and the two runs must agree. The record is published on the branch `fingerprints` of this repository, at
@@ -139,16 +139,25 @@ and the two runs must agree. The record is published on the branch `fingerprints
 HART-DESKTOP, `pwsh -File fingerprint.ps1`, run after `build.ps1` at the commits a deployment names, writes the
 Windows record beside it, and either side reports any field that differs.
 
+No peer record means cross-machine verification is incomplete, not successful. The scripts return exit 2 when no
+other machine's record is available; the shell comparator also distinguishes retrieval failure from a mismatch.
+`verify.sh build` reports incomplete evidence as a non-passing check. Record comparison does not establish that an
+application starts, an installation works, or a semantic operation is correct on another machine.
+
 The record also says what its results are made from, so that two records which differ are told apart by their inputs
 before their arithmetic: the Unicode data (`ucd`: its version, as `DerivedAge.txt` names it, and its files but the
 charts), the ICU and the Unicode version it is of (`icu`), the resources the highway was generated from (`resources`,
 as the highway's log names them), and the directory each of those and each source of `LAPLACE_DETERMINISM` is read from
 (`data`: its files and one hash of their paths, sizes and SHA-256). A result that differs is then said to follow from
-inputs that differ, or to come from the same inputs, which alone means the machines compute differently. Either is a
-failure: machines with different data are not the same by construction. `verify.sh build` also fails when the Unicode
+inputs that differ, or to come from the same inputs. The current comparison fails output mismatches when inputs
+match or are unknown, and ICU or Unicode-version mismatches. Differences attributed to different data are reported
+without failing; this does not establish equivalent results. `verify.sh build` also fails when the Unicode
 data is not of the Unicode version the ICU is of. `fingerprint.sh inputs` (`fingerprint.ps1 -Inputs`) prints those lines
 alone, in about a minute and without the engine; `fingerprint.sh compare FILE DIR` (`-Against DIR`) compares with the
 records in a directory in place of the branch's.
+
+The [ongoing system audit](docs/2026-10-10-system-audit.md) records confirmed lifecycle, verification and service
+defects, their evidence, and outstanding work. It is not a system-completion report.
 
 `laplace.sh`, installed as the operator's `~/.local/bin/laplace`, runs the program the last deployment built, with its
 code, recipes and environment.
