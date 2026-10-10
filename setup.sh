@@ -4,6 +4,7 @@
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
 #                              appdb | backup | site | agents | idlestop | report
+#   sudo ./setup.sh machine    public declaration permissions only; no packages, database or service changes
 #   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
 #   sudo ./setup.sh shares     the SMB shares for the development machine (LAPLACE_SHARES); not part of all
 #   sudo ./setup.sh landing    where other hosts' backups land (LAPLACE_LANDING, backup/landing.keys): part of all on the
@@ -18,15 +19,16 @@
 # machine's (paths, users, groups, volumes, the service, the network) is a variable of laplace.env, so another machine
 # declares its own.
 set -euo pipefail
-here=$(cd "$(dirname "$0")" && pwd); . "$here/laplace.env"
+here=$(cd "$(dirname "$0")" && pwd)
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
+. "$here/machine-config.sh"
+machine_config_permissions
+if [[ $# == 1 && $1 == machine ]]; then
+  echo '/etc/laplace: 755; machine.env: 644 when present; credentials unchanged'
+  exit 0
+fi
+. "$here/laplace.env"
 op=${SUDO_USER:-$(id -un)}; ophome=$(getent passwd "$op" | cut -d: -f6)
-# The machine's declaration, /etc/laplace/machine.env, is every user's to read: the runner's jobs, the server's unit and
-# the operator all take their names from it (laplace.env reads it first; the monorepo's site.sh reads it too). A
-# directory only root could enter left the runner on hart-prod with hart-server's defaults (2026-10-10: the API looked for
-# a socket in /tmp instead of the knowledge host over the tailnet). What is secret in it protects itself: pgpass and
-# backup.key are 600.
-install -d -m 755 /etc/laplace; [ ! -f /etc/laplace/machine.env ] || chmod 644 /etc/laplace/machine.env
 PGDATA=$LAPLACE_PGDATA; PGWAL=$LAPLACE_PGWAL; PGTEMP=$LAPLACE_PGTEMP; PGUSER=$LAPLACE_PGUSER; PGBIN=$LAPLACE_PG_DIR/bin; PREFIX=$LAPLACE_PREFIX; SERVICE=$LAPLACE_PGSERVICE
 as_pg(){ su "$PGUSER" -c "$*" </dev/null; }                                     # as the server's user; never reads our stdin
 as_op(){ su -s /bin/bash "$op" -c "$*" </dev/null; }                              # as whoever ran this (an agent has no shell of its own)
