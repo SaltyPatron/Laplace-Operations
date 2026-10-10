@@ -123,7 +123,7 @@ repository at its main, one deployment at a time (the concurrency group `hart-se
 | deploy | `seed-stamp.sh decide`, then `deploy.sh`, or `deploy.sh drop` when the database is reseeded |
 | checks | `verify.sh deployment`: extension version/tables and Engine/PostgreSQL artifact compatibility, with observed binary/artifact hashes |
 | ingest | only for an explicit reseed request: `ingest.sh` (every source of `LAPLACE_SOURCES`), then `seed-stamp.sh seeded` |
-| reads | `verify.sh reads`: `laplace status`, and `text`, `hop`, `translate`, `fills` through the indexes |
+| reads | `verify.sh reads`: `laplace status`, and `text`, `hop` and `translate` through the indexes |
 
 Production additionally waits for successful staging runtime reads. Missing cross-machine qualification records are still incomplete evidence, but are not a substitute for this infrastructure deployment gate.
 
