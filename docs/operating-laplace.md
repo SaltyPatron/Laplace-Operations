@@ -97,6 +97,10 @@ For development on HART-DESKTOP, use the same entry point:
 ./laplace.ps1 test
 ```
 
+`./setup.ps1` prepares this development profile by default. `./setup.ps1 deps` installs dependencies from the
+toolchain manifest; `./setup.ps1 all` explicitly includes a local PostgreSQL server and its service/access setup.
+Use the default profile for HART-DESKTOP and hart-server for deployment verification.
+
 The source defaults to `LAPLACE_SRC/Laplace`; `-SourcePath <checkout>` selects a worktree. Preparation fetches the
 exact grammar commits required by that source and the numbered Unicode release with checked SHA-256 inputs.
 Build compiles the CPU native libraries, prepared artifacts, managed solution and web application, then executes

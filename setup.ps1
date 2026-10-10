@@ -6,8 +6,8 @@
   $LAPLACE_WORK\logs\root. Every name of this machine's is a variable of laplace.env.ps1, so another Windows machine
   declares its own.
 
-    pwsh -File setup.ps1                   everything below, in order (the parts that change the service, its rights,
-                                           its settings and its access need an elevated PowerShell and say so)
+    pwsh -File setup.ps1                   development inputs and manifest for the declared desktop checkout
+    pwsh -File setup.ps1 all               explicitly install the local PostgreSQL development server as well
     pwsh -File setup.ps1 deps report       one part, or several: volumes | packages | rights | deps | cluster | settings | access | report
     $env:LAPLACE_DROP = 'D:\Data\Laplace\pgdata'; pwsh -File setup.ps1 drop all
                                            the cluster dropped and made again, empty: never part of all, and named to be dropped
@@ -28,8 +28,13 @@
   developer shell is LAPLACE_DEVSHELL); privileged steps happen here and only here. HART-DESKTOP's one-time cleanup
   of what earlier set-ups left is toolchain\windows\retire.ps1, not this.
 #>
-param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('all'))
+param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('development'))
 $ErrorActionPreference = 'Stop'
+if ($Parts -contains 'development') {
+    if ($Parts.Count -ne 1) { throw 'Run the development profile separately from explicit database/service installation steps.' }
+    & pwsh -NoProfile -File "$PSScriptRoot/dev.ps1" -Operation prepare
+    exit $LASTEXITCODE
+}
 . "$PSScriptRoot\laplace.env.ps1"
 . "$PSScriptRoot\tune-pg.ps1"
 

@@ -43,8 +43,27 @@ env:
   LAPLACE_SRC: ${{ github.workspace }}
   LAPLACE_CONNINFO: ""   # the database is laplace.env's, never a copy a runner kept from when it was registered
   LAPLACE_RESEED: ${{ vars.LAPLACE_RESEED || 'auto' }}
+permissions:
+  contents: read
 jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.refs.outputs.native }}
+      postgres: ${{ steps.refs.outputs.postgres }}
+      engine: ${{ steps.refs.outputs.engine }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Resolve immutable dependency revisions
+        id: refs
+        env:
+          GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
+        run: python3 .github/scripts/resolve-dependencies.py
   deploy:
+    needs: resolve
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 240
     outputs:
@@ -53,14 +72,14 @@ jobs:
       postgres: ${{ steps.revisions.outputs.postgres }}
       engine: ${{ steps.revisions.outputs.engine }}
     steps:
-      - uses: actions/checkout@v4
-        with: { path: Laplace-Operations }
-      - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-Native", ref: main, path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
-      - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-postgres", ref: main, path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
-      - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-Engine", ref: main, path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, path: Laplace-Operations }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-Native", ref: "${{ needs.resolve.outputs.native }}", path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-postgres", ref: "${{ needs.resolve.outputs.postgres }}", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-Engine", ref: "${{ needs.resolve.outputs.engine }}", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - name: Record dependency revisions for production
         id: revisions
         shell: bash
@@ -78,6 +97,9 @@ jobs:
         env:
           DROP: ${{ inputs.drop }}
           RESEED: ${{ inputs.reseed }}
+          TRIGGER_EVENT: ${{ github.event_name }}
+          TRIGGER_REPOSITORY: ${{ github.event.client_payload.repository }}
+          TRIGGER_SHA: ${{ github.event.client_payload.sha }}
         run: |
           GITHUB_OUTPUT= ./Laplace-Operations/seed-stamp.sh decide > policy.txt; cat policy.txt
           drop=$(sed -n 's/^drop=//p' policy.txt); ingest=$(sed -n 's/^ingest=//p' policy.txt); why=$(sed -n 's/^why=//p' policy.txt)
@@ -86,7 +108,7 @@ jobs:
           else why="$why; a deployment ingests only when dispatched with reseed: drop $drop, ingest $ingest were called for, neither is done"; drop=false; ingest=false; fi
           echo "drop=$drop" >> "$GITHUB_OUTPUT"; echo "ingest=$ingest" >> "$GITHUB_OUTPUT"
           { echo "## hart-server: the deployment"; echo
-            echo "- triggered by: ${{ github.event_name }} ${{ github.event.client_payload.repository }} ${{ github.event.client_payload.sha }}"
+            echo "- triggered by: $TRIGGER_EVENT $TRIGGER_REPOSITORY $TRIGGER_SHA"
             echo "- reseed policy (LAPLACE_RESEED=$LAPLACE_RESEED): drop $drop, ingest $ingest: $why"; echo
             echo '```'; ./Laplace-Operations/seed-stamp.sh show; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: build/install prepared artifacts and deploy database infrastructure
@@ -102,8 +124,8 @@ jobs:
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-        with: { path: Laplace-Operations, clean: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: Verify deployed extension and artifact compatibility
         run: ./Laplace-Operations/verify.sh deployment
   ingest:
@@ -112,8 +134,8 @@ jobs:
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 7200
     steps:
-      - uses: actions/checkout@v4
-        with: { path: Laplace-Operations, clean: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: the ingest, its status, and its measurements
         run: ./Laplace-Operations/ingest.sh
       - name: the database holds the stamp it was seeded from
@@ -124,8 +146,8 @@ jobs:
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-        with: { path: Laplace-Operations, clean: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
   # Production uses the exact dependency revisions captured in staging. It runs only
@@ -136,8 +158,8 @@ jobs:
     runs-on: [self-hosted, laplace, Laplace-Operations, production]
     timeout-minutes: 240
     steps:
-      - uses: actions/checkout@v4
-        with: { path: Laplace-Operations }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, path: Laplace-Operations }
       - name: Require the dependency revisions checked in staging
         shell: bash
         env:
@@ -149,12 +171,12 @@ jobs:
           for sha in "$NATIVE" "$POSTGRES" "$ENGINE"; do
             [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'Missing or invalid staging revision'; exit 1; }
           done
-      - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-Native", ref: "${{ needs.deploy.outputs.native }}", path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
-      - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-postgres", ref: "${{ needs.deploy.outputs.postgres }}", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
-      - uses: actions/checkout@v4
-        with: { repository: "${{ github.repository_owner }}/Laplace-Engine", ref: "${{ needs.deploy.outputs.engine }}", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-Native", ref: "${{ needs.deploy.outputs.native }}", path: Laplace-Native, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-postgres", ref: "${{ needs.deploy.outputs.postgres }}", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-Engine", ref: "${{ needs.deploy.outputs.engine }}", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - name: build/install prepared artifacts and deploy database infrastructure
         run: |
           { echo "## hart-cloud: the deployment"; echo; echo "- $(lscpu | sed -n 's/^Model name: *//p')"
@@ -165,8 +187,8 @@ jobs:
     runs-on: [self-hosted, laplace, Laplace-Operations, production]
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-        with: { path: Laplace-Operations, clean: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: Verify deployed extension and artifact compatibility
         run: ./Laplace-Operations/verify.sh deployment
   ingest-production:
@@ -175,8 +197,8 @@ jobs:
     runs-on: [self-hosted, laplace, Laplace-Operations, production]
     timeout-minutes: 7200
     steps:
-      - uses: actions/checkout@v4
-        with: { path: Laplace-Operations, clean: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: the ingest of this machine's sources, its status, and its measurements
         run: ./Laplace-Operations/ingest.sh
   reads-production:
@@ -185,7 +207,7 @@ jobs:
     runs-on: [self-hosted, laplace, Laplace-Operations, production]
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-        with: { path: Laplace-Operations, clean: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
