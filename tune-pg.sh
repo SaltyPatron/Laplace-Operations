@@ -289,6 +289,19 @@ tune_plan() {
   [ "$over" = 0 ] || echo "tune-pg: OVER-COMMITTED by $((over / 1024)) MB: the connections declared, at PostgreSQL's floors, want more than the backends' quarter; fewer serving connections (LAPLACE_PG_SERVING) or more memory for the server (LAPLACE_PG_RESERVED)" >&2
 }
 
+# This rejects the planner's own known overcommit; it is not a bound on every
+# query operator or every other service's memory. Those need workload evidence.
+tune_validate_plan() {
+  local p over
+  p=$(plan) || return 1
+  over=$(sed -n 's/^over_kb=//p' <<<"$p")
+  [[ "$over" =~ ^[0-9]+$ ]] || { echo 'tune-pg: invalid memory plan' >&2; return 1; }
+  if [ "$over" -gt 0 ]; then
+    echo "tune-pg: OVER-COMMITTED by $over kB; refusing database changes. Reconcile the declared resident memory and serving connections before applying." >&2
+    return 1
+  fi
+}
+
 tune_ingesting() {
   local db l
   db=$(echo "$LAPLACE_CONNINFO" | sed -n 's/.*dbname=\([^ ]*\).*/\1/p')
@@ -364,6 +377,7 @@ SQL
 tune_apply() {
   declare -A want=()
   local name value match context source pending live literal n=0
+  tune_validate_plan || return 1
   tune_local_or_die
   while read -r name value; do [ -n "$name" ] && want[$name]=$value; done < <(declared)
   while IFS='|' read -r name match context source pending live; do
@@ -440,8 +454,8 @@ tune_check() {
 
 tune_main() {
   case ${1:-} in
-    --check) tune_check ;;
-    --plan) tune_plan ;;
+    --check) tune_validate_plan && tune_check ;;
+    --plan) tune_plan; tune_validate_plan ;;
     "") tune_apply; tune_restart; tune_check ;;
     *) echo "usage: tune-pg.sh [--check|--plan]" >&2; return 2 ;;
   esac

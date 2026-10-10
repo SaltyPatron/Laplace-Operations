@@ -263,7 +263,15 @@ ORDER BY 1;
 }
 function TuneReport { foreach ($line in (TunePsql (TuneReportSql))) { if (-not $line) { continue }; $f = $line -split '\|'; [pscustomobject]@{ name = $f[0]; match = $f[1]; context = $f[2]; source = $f[3]; pending = $f[4]; live = $f[5] } } }
 
+function TuneValidatePlan {
+    $p = TunePlan
+    if ($p.over_kb -gt 0) {
+        throw "tune-pg: OVER-COMMITTED by $($p.over_kb) kB; refusing database changes. Reconcile the declared resident memory and serving connections before applying."
+    }
+}
+
 function TuneApply {
+    TuneValidatePlan
     TuneLocalOrDie
     $want = TuneDeclared; $n = 0
     foreach ($r in TuneReport) {
@@ -318,8 +326,8 @@ function TuneCheck {
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
-    if ($Plan) { TuneShowPlan; exit 0 }
-    if ($Check) { if (TuneCheck) { exit 0 } else { exit 1 } }
+    if ($Plan) { TuneShowPlan; TuneValidatePlan; exit 0 }
+    if ($Check) { TuneValidatePlan; if (TuneCheck) { exit 0 } else { exit 1 } }
     TuneApply
     TuneRestart | Out-Null
     if (-not (TuneCheck)) { exit 1 }

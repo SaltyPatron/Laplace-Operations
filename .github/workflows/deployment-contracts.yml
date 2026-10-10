@@ -11,12 +11,19 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Verify Windows copy and failure propagation
+      - name: Verify acceptance result failure boundaries
         shell: pwsh
-        run: pwsh -NoProfile -File tests/backup-continuity.ps1
-      - name: Verify Windows WAL storage classification
+        run: pwsh -NoProfile -File tests/acceptance-runner.ps1
+      - name: Verify named Windows acceptance checks
         shell: pwsh
-        run: pwsh -NoProfile -File tests/tune-pg-storage.ps1
+        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check storage-windows,resource-refusal-windows,backup-copy-windows -Output "$env:RUNNER_TEMP/acceptance-windows.json"
+      - name: Preserve Windows acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: acceptance-windows-${{ github.sha }}
+          path: ${{ runner.temp }}/acceptance-windows.json
+          if-no-files-found: error
   boundaries:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -28,7 +35,6 @@ jobs:
         shell: bash
         run: |
           export TMPDIR="$RUNNER_TEMP"
-          bash tests/tune-pg-storage.sh
           bash tests/tune-pg-plan.sh
           bash tests/machine-config.sh
           bash tests/operation-lock.sh
@@ -39,6 +45,19 @@ jobs:
           ruby tests/secrets-setup.rb
           bash tests/appdb-secrets.sh
           pwsh -NoProfile -File tests/deployment-artifacts.ps1
+      - name: Verify acceptance result failure boundaries
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/acceptance-runner.ps1
+      - name: Verify named Linux acceptance checks
+        shell: pwsh
+        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check storage-linux,resource-refusal-linux -Output "$env:RUNNER_TEMP/acceptance-linux.json"
+      - name: Preserve Linux acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: acceptance-linux-${{ github.sha }}
+          path: ${{ runner.temp }}/acceptance-linux.json
+          if-no-files-found: error
       - name: Install SQLite for backup recovery checks
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3
       - name: Check secrets backup failure and recovery behavior

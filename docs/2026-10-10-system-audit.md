@@ -70,6 +70,14 @@ existing secrets integration landed on Operations main. Existing OpenBao and Vau
 
 ## Expanded installation, delivery and resource audit
 
+Execution is now tracked in [acceptance/criteria.json](../acceptance/criteria.json) and
+[Operations issue #2](https://github.com/SaltyPatron/Laplace-Operations/issues/2). The
+[acceptance runner](../acceptance/README.md) records named commands, source revision, host, timestamps and outcomes.
+The whole-system criteria are not completed by this document. CI produces scoped component receipts; missing checks
+remain incomplete. RESOURCE-REFUSAL-001 adds an executable failure boundary: the known overcommitted desktop plan was
+accepted by both old apply implementations, and is now rejected before database access on both platforms. This does not
+establish a full host budget or reconcile the desktop's old resident-memory declaration.
+
 This addition inspects Operations main `75fd1de`, Laplace main `58cab06ee`, Native main `1b9367c`,
 the desktop, hart-server, hart-prod, and GitHub's registered runners on October 10. Older observations elsewhere
 in this running record are historical evidence, not assertions that later repairs never happened. No cloud instance

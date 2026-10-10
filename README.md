@@ -342,6 +342,9 @@ service: the conductor starts it per match, only in chess-GPU mode.
 
 ## Repair
 
+Operational completion is tracked in [the acceptance register](acceptance/README.md) and [issue #2](https://github.com/SaltyPatron/Laplace-Operations/issues/2).
+Named checks save revision- and host-specific receipts in CI; unimplemented outcomes stay incomplete.
+
 These component repair commands do not yet constitute a transactional product installer or a complete rollback.
 The [system audit](docs/2026-10-10-system-audit.md#expanded-installation-delivery-and-resource-audit) records the
 remaining differences between entry points, machine configuration and live services.
@@ -357,3 +360,5 @@ On Windows, a separate WAL drive is still treated as shared unless the machine d
 `LAPLACE_PG_WAL_DEDICATED=1`. Set that only for a drive reserved for WAL; the desktop's D: also holds dependencies
 and builds. The planner's arithmetic checks do not establish a bound on all simultaneous query operators or
 other processes' memory use.
+When that arithmetic already reports overcommit, plan/check/apply now fail; apply refuses before contacting
+PostgreSQL. This catches a known-invalid plan without claiming that a fitting plan has passed a workload test.
