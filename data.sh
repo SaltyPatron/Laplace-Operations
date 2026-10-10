@@ -5,7 +5,7 @@
 # rewritten: a file lands as the publisher serves it, at the path the recipe reads it from.
 #
 #   ./data.sh fetch [SET...]    every declared set (or these): mirrored, downloaded when newer, cloned at a pinned commit or the
-#                               latest, the latest release, an archive opened
+#                               latest, the latest release, an archive opened, a dump taken once and then kept
 #   ./data.sh status            each declared set present or missing, then each recipe's roots: resolved or not;
 #                               exit 1 when a declared set is missing
 #   ./data.sh record            set, file, bytes, SHA-256 of what $LAPLACE_DATA holds for the declared sets
@@ -27,8 +27,14 @@ fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
             wget -q -r -np -nH --cut-dirs="$cut" -N -R 'index.html*' -P "$dest" "$origin" || [ $? = 8 ]   # 8: a file the server would not give; the rest came
             if [ "$into" = . ]; then landed "$set" '*'; else landed "$set" "$(top "$into")"; fi
             printf '  %-28s %s files from %s\n' "$set" "$(find "$dest" -type f | wc -l)" "$origin" ;;
-    file)   dest=$(land "$set" "$into" "${origin##*/}"); get "$origin" "$dest" "$([ -f "$dest" ] && echo "$dest")"; landed "$set" "$(top "${dest#"$LAPLACE_DATA/$set/"}")"
+    file)   dest=$(land "$set" "$into" "${origin##*/}"); get "$origin" "$dest" "$([ -f "$dest" ] && echo "$dest")" || return 1; landed "$set" "$(top "${dest#"$LAPLACE_DATA/$set/"}")"
             printf '  %-28s %s\n' "$set" "${dest#"$LAPLACE_DATA"/}" ;;
+    once)   # a publisher that keeps only its current file (a dump replaced in place): a host that holds one already keeps it, so what
+            # staging loaded stays what staging holds; a host with none takes the current one. into is the pattern of what counts.
+            local have; have=$(ls -d "$LAPLACE_DATA/$set"/$into 2>/dev/null | head -1 || true)
+            if [ -n "$have" ]; then printf '  %-28s %s held: not fetched again\n' "$set" "${have#"$LAPLACE_DATA/$set/"}"; landed "$set" "$(top "${have#"$LAPLACE_DATA/$set/"}")"
+            else dest=$LAPLACE_DATA/$set/${origin##*/}; mkdir -p "$LAPLACE_DATA/$set"; get "$origin" "$dest" || return 1; landed "$set" "${origin##*/}"
+              printf '  %-28s %s, the publisher'"'"'s current file\n' "$set" "${origin##*/}"; fi ;;
     listing) local u; for u in $(curl -fsSL "$origin" | urls download_url); do
               dest=$(land "$set" "$into" "${u##*/}"); get "$u" "$dest" "$([ -f "$dest" ] && echo "$dest")"; done; landed "$set" "$(top "$into")"
             printf '  %-28s %s: %s files from %s\n' "$set" "${into%/}" "$(ls "$LAPLACE_DATA/$set/${into%/}" | wc -l)" "$origin" ;;
