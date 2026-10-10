@@ -357,7 +357,9 @@ function deps {
                     if ($LASTEXITCODE) { throw 'meson-native.py failed' }
                     $inc = ($libs | ForEach-Object { "$_\include" -replace '\\', '/' }) -join ','
                     $lib = ($libs | ForEach-Object { foreach ($l in 'lib', 'lib64') { if (Test-Path "$_\$l") { "$_\$l" -replace '\\', '/' } } }) -join ','
-                    if (-not (Test-Path (Join-Path $b 'build.ninja'))) { Exec meson.exe (@('setup', $b, $checkout, "--native-file=$native", "-Dprefix=$prefix", "-Dextra_include_dirs=$inc", "-Dextra_lib_dirs=$lib") + $PgMesonOptions) }
+                    # where a dependency is found by CMake (ICU: Meson asks FindICU, which looks under a prefix, lib64 and bin64 included)
+                    $cmk = ($libs | ForEach-Object { $_ -replace '\\', '/' }) -join ','
+                    if (-not (Test-Path (Join-Path $b 'build.ninja'))) { Exec meson.exe (@('setup', $b, $checkout, "--native-file=$native", "-Dprefix=$prefix", "-Dextra_include_dirs=$inc", "-Dextra_lib_dirs=$lib", "-Dcmake_prefix_path=$cmk") + $PgMesonOptions) }
                     Exec ninja.exe @('-C', $b); Exec ninja.exe @('-C', $b, 'install')
                 }
                 'configure' {
