@@ -354,7 +354,7 @@ access(){ part access
   for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [ -d "$h" ] || continue
     { [ ! -f "$h/.pgpass" ] || grep -v ":$LAPLACE_ROLE:" "$h/.pgpass" || true; cat "$canon"; } > "$h/.pgpass.setup"; mv -f "$h/.pgpass.setup" "$h/.pgpass"; chown "$u" "$h/.pgpass"; chmod 600 "$h/.pgpass"; done
   unset pw; say "~/.pgpass" "$(operators | tr '\n' ' ')"
-  run "ALTER ROLE $PGUSER PASSWORD '$PGUSER'"; say "role $PGUSER" "password $PGUSER: locally and from $LAPLACE_LAN over TLS"
+  say "role $PGUSER" 'existing administrator credential retained; setup does not assign a default password'
   printf '%s' "$HBA" > "$PGDATA/pg_hba.conf.setup"; ident > "$PGDATA/pg_ident.conf.setup"
   cmp -s "$PGDATA/pg_hba.conf.setup" "$PGDATA/pg_hba.conf" || { cp -p "$PGDATA/pg_hba.conf" "$PGDATA/pg_hba.conf.before" 2>/dev/null || true; mv "$PGDATA/pg_hba.conf.setup" "$PGDATA/pg_hba.conf"; say "pg_hba.conf" "written"; }
   cmp -s "$PGDATA/pg_ident.conf.setup" "$PGDATA/pg_ident.conf" || { mv "$PGDATA/pg_ident.conf.setup" "$PGDATA/pg_ident.conf"; say "pg_ident.conf" "written"; }
