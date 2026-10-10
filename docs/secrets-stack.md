@@ -61,7 +61,12 @@ prove recovery on another host. Vaultwarden attachments can change independently
 of its SQLite snapshot; the backup is not an atomic snapshot of all application files.
 
 Setup installs this replacement as `/usr/local/sbin/backup-secrets`, retaining the
-existing timer. It requires mounted `/hosting` and `/backup`, existing wildcard
+existing timer. To apply only this repair, run `sudo ./setup.sh secrets-backup`:
+it checks prerequisites, installs the backup script and its systemd units, enables
+the nightly timer, and immediately runs one checked backup with the existing
+30-day retention. It does not configure nginx, Docker, OpenBao or Vaultwarden.
+The full `secrets-stack` part calls the same backup installer after service setup.
+Full stack setup requires mounted `/hosting` and `/backup`, existing wildcard
 TLS material, and existing tool prerequisites before changing services. Nginx
 publication remains explicit through `sudo bash secrets/go-live.sh`; that command
 now fails if either HTTPS health check is unsuccessful.

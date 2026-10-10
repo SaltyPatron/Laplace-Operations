@@ -136,28 +136,7 @@ ln -sf /etc/nginx/sites-available/secrets-lan /etc/nginx/sites-enabled/secrets-l
 nginx -t
 if [[ $RELOAD -eq 1 ]]; then systemctl reload nginx; echo "nginx reloaded"; else echo "nginx config OK, NOT reloaded (run: sudo systemctl reload nginx once the Laplace deploys finish)"; fi
 
-echo "== 5. Nightly Vaultwarden backup -> $BACKUP (OpenBao snapshots get added after init)"
-install -d -m 700 "$BACKUP"
-install -m 750 "$HERE/backup-secrets.sh" /usr/local/sbin/backup-secrets
-cat > /etc/systemd/system/backup-secrets.service <<'EOF'
-[Unit]
-Description=Back up Vaultwarden and OpenBao to /backup/secrets
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/backup-secrets
-EOF
-cat > /etc/systemd/system/backup-secrets.timer <<'EOF'
-[Unit]
-Description=Nightly secrets backup
-[Timer]
-OnCalendar=*-*-* 03:15
-Persistent=true
-[Install]
-WantedBy=timers.target
-EOF
-systemctl daemon-reload
-systemctl enable --now backup-secrets.timer
-/usr/local/sbin/backup-secrets
+bash "$HERE/install-backup.sh"
 
 echo
 echo 'Setup finished. Existing Bao initialization and identities are preserved; this script does not initialize or unseal it.'

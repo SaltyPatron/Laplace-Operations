@@ -606,7 +606,7 @@ function access {
         $pw = $null
         Say "role $PgRole" "$how; written to $operator"
     }
-    Attempt 'role postgres' { if ((PgSql "SELECT count(*) FROM pg_roles WHERE rolname = 'postgres'") -ne '1') { PgSql 'CREATE ROLE postgres LOGIN SUPERUSER' | Out-Null }; PgSql "ALTER ROLE postgres PASSWORD 'postgres'" | Out-Null; Say 'role postgres' "password postgres: locally and from $PgLan over TLS (setup.sh declares the same)" }
+    Attempt 'role postgres' { if ((PgSql "SELECT count(*) FROM pg_roles WHERE rolname = 'postgres'") -ne '1') { PgSql 'CREATE ROLE postgres LOGIN SUPERUSER' | Out-Null }; Say 'role postgres' 'existing credential retained; a new role requires an explicitly provisioned credential' }
     Attempt 'pg_hba.conf' {
         $hba = @(
             "# Laplace (setup.ps1). Loopback: $PgRole by SSPI under the map (pg_ident.conf), postgres by scram. The network: scram over TLS from $PgLan. Nothing else.",

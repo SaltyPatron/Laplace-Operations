@@ -2,6 +2,19 @@
 
 This is an ongoing infrastructure and deployment audit. The user explicitly clarified that the coding agent is not being asked to prove the invention. Findings below are evidence, not a replacement specification or a claim that the whole system has been audited.
 
+## Latest operational observations — approximately 18:50 UTC
+
+- Operations #64 merged at `d6286e3` after hosted CI 38076782084 passed. Push run 38076898323 passed staging deployment, readback and required reads; ingestion and production were skipped. Stack maintenance now lives under `secrets/`. Local root installation of the updated secrets backup script has not yet been verified.
+- Operations #65 merged at `42b5e8e` after CI 38077156900 passed. Candidate source bundle `aac8d85` was deployed on hart-prod: `setup.sh secrets-client` authenticated the Bao appdb password against PostgreSQL, refreshed four existing consumers, and installed a 15-minute refresh timer. The systemd refresh returned status 0. A fresh `psql` connection as the runner using its password file returned `laplace|laplace-app`; its credential file is runner-owned mode600. Canonical password and AppRole files are root-owned mode600. API health is HTTP200, service active, NRestarts=0. This does not migrate knowledge DB credentials or shared OAuth/payment secrets.
+- Authenticated Bao inventory confirms roles `hart-desktop`, `hart-laptop`, `hart-prod`, `hart-server`; no `hart-cloud` role returned. The `host-` prefix belongs to policies, not role names. A real Raft snapshot was downloaded into protected build scratch; both archive payload checksums passed. Decryption and restored service were not tested.
+- Cloudflare API confirms unproxied `openbao` and `vault` CNAMEs to `hart-server.hartonomous.com`, whose A record is `192.168.1.2`. Proxied `api` and `mcp` records target the production tunnel; both ingress rules target hart-prod port8080. No Cloudflare configuration was changed. Certificate renewal remains unverified.
+- Public API `/health` returns JSON200. Public MCP GET `/` and `/mcp` return HTML200; MCP initialize POST `/mcp` returns405. Live hart-prod nginx only proxies `/` to the API on5187; it does not have the current source template's MCP route. The host setup intentionally omits local MCP when the knowledge DB is remote. This is an unresolved deployment/route defect, not a healthy MCP endpoint.
+- VM query: hart-cloud TERMINATED; hart-prod RUNNING. Actual billing spend/trial balance remain unknown. No cloud VM was started for these checks.
+- The user repaired `/etc/laplace` mode755 on hart-server; its `machine.env` is absent, not an unreadable unknown override. Setup permission repair merged in Operations #63 and Laplace #1770.
+- Archive inventory: 3144 session-shaped JSONL files, 2,236,510,861 bytes, 823,838 records, 457,633 user/assistant events, 141 duplicate-file groups, 33,737 exact duplicate message events, five parse errors and no read errors. Parsed timestamps span December 29, 2025 through October 9, 2026 for this candidate set. This is structural inventory, not semantic review or complete nineteen-month coverage. Protected details remain outside Git.
+
+Earlier observations below retain their original context; the dated updates above and below supersede their unresolved status where explicitly stated.
+
 ## Scope and authority
 
 The active acceptance criteria are operational: correct dependencies and sequence, prepared artifacts, migrations before service activation, installed-version evidence, failure propagation, recovery and declared host roles. Design documents constrain these changes; research or semantic benchmarks are not substitutes for deployment acceptance.
