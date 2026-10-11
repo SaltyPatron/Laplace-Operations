@@ -80,10 +80,18 @@
       "outcome": "Install, repair and upgrade operate on one installation, with recoverable failure boundaries.",
       "acceptance": [
         "Install onto a clean declared host, rerun repair without damage, and upgrade from an existing release.",
+        "Default setup includes every declared runtime stage and fails if runtime verification fails; an application connection must not implicitly provision another database cluster.",
         "Inject publication/activation failure; recover a coherent release and state, not only its old binaries.",
         "Remove owned services/binaries without deleting persistent knowledge, application data or shared infrastructure."
       ],
       "checks": [
+        {
+          "id": "setup-default-flow",
+          "platform": "linux",
+          "argv": ["python3", "tests/setup-flow.py"],
+          "timeout_seconds": 60,
+          "evidence": "Execute the default/all dispatcher, runtime invocation and app-cluster routing with external provisioning isolated; injected failures must stop before success. A privileged full setup receipt is separate evidence."
+        },
         {
           "id": "installer-windows",
           "platform": "windows",

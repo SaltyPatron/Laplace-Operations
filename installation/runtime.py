@@ -97,24 +97,59 @@ def validate(config):
             raise ValueError('Runtime installation requires the declared local cluster')
 
 
-def preflight(config):
+def validate_declaration(config):
     validate(config)
     if socket.gethostname().split('.')[0].lower() != config['host']:
         raise ValueError('The runtime declaration belongs to another host')
-    current = declarations(Path(config['machine_file']))
+    current = dict(declarations(Path(config['machine_file'])))
+    current.update({key: value for key, value in os.environ.items() if key.startswith('LAPLACE_') and value})
     for key, expected in {'LAPLACE_INSTALL_PREFIX': config['prefix'], 'LAPLACE_PGDATA': config['database_data'],
                           'LAPLACE_PG_DIR': str(Path(config['pgbin']).parent),
                           'LAPLACE_ROLE': config['database_owner']}.items():
         if current.get(key) != expected:
             raise ValueError('Installed configuration differs from runtime declaration: ' + key)
+    # A database consumer name does not declare another PostgreSQL cluster.
+    # Refuse contradictory topology before the base installer changes anything.
+    for key, expected in {'LAPLACE_APP_DBNAME': config['database'],
+                          'LAPLACE_APP_PGPORT': str(config['port']),
+                          'LAPLACE_APP_PGDATA': config['database_data'],
+                          'LAPLACE_PGPORT': str(config['port'])}.items():
+        if current.get(key) and current[key] != expected:
+            raise ValueError('Application database differs from runtime declaration: ' + key)
+    if current.get('LAPLACE_APP_PGHOST') not in (None, '', config['pgsocket'], config['database_host'], 'localhost'):
+        raise ValueError('Application database host differs from runtime declaration')
+
+
+def selected_manifest(explicit=None):
+    requested = explicit or os.environ.get('LAPLACE_RUNTIME_MANIFEST')
+    if not requested:
+        machine = module('runtime_selection', ROOT / 'machine-env.py')
+        machine_path = Path(os.environ.get('LAPLACE_MACHINE_ENV') or '/etc/laplace/machine.env')
+        current = machine.resolve(machine_path, os.environ, explicit=bool(os.environ.get('LAPLACE_MACHINE_ENV')))
+        requested = current.get('LAPLACE_RUNTIME_MANIFEST')
+    if requested:
+        path = Path(requested)
+        if not path.is_absolute():
+            raise ValueError('LAPLACE_RUNTIME_MANIFEST / --manifest must be an absolute path')
+        if not path.is_file():
+            raise ValueError('Missing declared runtime manifest: ' + str(path))
+        return path
+    path = Path(__file__).with_name(socket.gethostname().split('.')[0].lower() + '-runtime.json')
+    return path if path.is_file() else None
+
+
+def preflight(config):
+    validate_declaration(config)
     prefix = Path(config['prefix'])
     for path in (prefix / 'app/laplace-api.env', prefix / 'app/laplace-mcp.env',
                  prefix / 'app/operations/scripts/verify-application-release.py',
                  prefix / 'app/.laplace-source-revision', Path(config['pgbin']) / 'psql'):
         if not path.is_file():
             raise ValueError('Missing installed prerequisite: ' + str(path))
-    for service in ('laplace-api', 'laplace-mcp', config['database_service']):
-        checked(['systemctl', 'is-active', '--quiet', service], timeout=10)
+    checked(['systemctl', 'is-active', '--quiet', config['database_service']], timeout=10)
+    for service in ('laplace-api', 'laplace-mcp'):
+        if checked(['systemctl', 'show', service, '-p', 'LoadState', '--value'], timeout=10) != 'loaded':
+            raise ValueError('Missing installed service: ' + service)
     for path in config['required_mounts']:
         checked(['mountpoint', '-q', path], timeout=10)
     for name, state in ((config['runtime_user'], config['state']), (config['mcp']['user'], config['mcp']['state'])):
@@ -385,10 +420,20 @@ def install_identities(config, lock):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--manifest', type=Path, default=Path(__file__).with_name('hart-server-runtime.json'))
+    parser.add_argument('--manifest', type=Path, help='Absolute runtime declaration; otherwise use the machine declaration or matching host manifest')
+    parser.add_argument('--select', action='store_true', help='Resolve and validate declared topology without changing the installation')
     parser.add_argument('--check', action='store_true', help='Check existing installation and operator authentication without changes')
     args = parser.parse_args()
-    config = json.loads(args.manifest.read_text())
+    manifest = selected_manifest(args.manifest)
+    if manifest is None:
+        if args.select:
+            return
+        raise ValueError('No runtime manifest declared for this host; set LAPLACE_RUNTIME_MANIFEST in machine.env')
+    config = json.loads(manifest.read_text())
+    if args.select:
+        validate_declaration(config)
+        print(manifest)
+        return
     receipt = preflight(config)
     Bao(config).call(['token', 'lookup', '-field=ttl'])
     if args.check:
@@ -403,7 +448,7 @@ def main():
         started = datetime.now(timezone.utc)
         output = work / (started.strftime('%Y%m%dT%H%M%SZ') + '-runtime-' + uuid.uuid4().hex[:8] + '.json')
         receipt.update(operation='runtime', started_utc=started.isoformat(),
-                       manifest_sha256=hashlib.sha256(args.manifest.read_bytes()).hexdigest(),
+                       manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest(),
                        source=checked(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], timeout=10))
         try:
             receipt['verification'] = install(config, lock)

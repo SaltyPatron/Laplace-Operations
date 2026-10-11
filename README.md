@@ -10,10 +10,10 @@ holds what installs, sets up, deploys, repairs and runs them (Operations in the 
 ```sh
 git clone https://github.com/SaltyPatron/Laplace-Operations /repos/src/Laplace-Operations
 cd /repos/src/Laplace-Operations
-sudo ./setup.sh           # the machine: volumes, packages, rights, kernel, dependencies, cluster, settings, access
+sudo ./setup.sh           # host configuration plus declared runtime installation and verification
 ./deploy.sh               # build/install and database infrastructure; requires prepared perf-caches
 ./ingest.sh               # the sources, in recipes/order, into that database
-sudo ./agents.sh          # the repositories' agents on this machine
+# Runner setup is included in setup.sh; agents.sh is available for focused runner maintenance.
 ```
 
 `laplace.env` is the one definition of where everything is; every script here and every build reads it, and every

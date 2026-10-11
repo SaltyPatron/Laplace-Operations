@@ -19,6 +19,44 @@ CONFIG = json.loads((ROOT / 'installation/hart-server-runtime.json').read_text()
 
 
 class RuntimeBoundaries(unittest.TestCase):
+    def test_manifest_selection_honors_explicit_process_and_machine_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            installed, process, explicit = (root / name for name in ('installed manifest.json', 'process.json', 'explicit.json'))
+            for path in (installed, process, explicit):
+                path.write_text('{}')
+            machine = root / 'machine.env'
+            machine.write_text('LAPLACE_RUNTIME_MANIFEST=' + str(installed) + '\n')
+            with patch.dict(os.environ, {'LAPLACE_MACHINE_ENV': str(machine)}, clear=True):
+                self.assertEqual(runtime.selected_manifest(), installed)
+                with patch.dict(os.environ, {'LAPLACE_RUNTIME_MANIFEST': str(process)}):
+                    self.assertEqual(runtime.selected_manifest(), process)
+                    self.assertEqual(runtime.selected_manifest(explicit), explicit)
+                machine.write_text('LAPLACE_RUNTIME_MANIFEST=/missing/declared-runtime.json\n')
+                with self.assertRaisesRegex(ValueError, 'Missing declared'):
+                    runtime.selected_manifest()
+                machine.write_text('LAPLACE_RUNTIME_MANIFEST=relative.json\n')
+                with self.assertRaisesRegex(ValueError, 'absolute path'):
+                    runtime.selected_manifest()
+                machine.write_text('')
+                with patch.object(runtime.socket, 'gethostname', return_value='hart-server'):
+                    self.assertEqual(runtime.selected_manifest(), ROOT / 'installation/hart-server-runtime.json')
+                with patch.object(runtime.socket, 'gethostname', return_value='not-a-declared-host'):
+                    self.assertIsNone(runtime.selected_manifest())
+
+    def test_application_connection_cannot_request_another_cluster(self):
+        current = {'LAPLACE_INSTALL_PREFIX': CONFIG['prefix'], 'LAPLACE_PGDATA': CONFIG['database_data'],
+                   'LAPLACE_PG_DIR': str(Path(CONFIG['pgbin']).parent), 'LAPLACE_ROLE': CONFIG['database_owner']}
+        with patch.dict(os.environ, {}, clear=True), patch.object(runtime, 'declarations', return_value=current), \
+             patch.object(runtime.socket, 'gethostname', return_value=CONFIG['host']), patch.object(runtime, 'checked') as command:
+            runtime.validate_declaration(CONFIG)
+            for key, value in {'LAPLACE_APP_DBNAME': 'another-db', 'LAPLACE_APP_PGDATA': '/another/cluster',
+                               'LAPLACE_APP_PGPORT': '5433', 'LAPLACE_APP_PGHOST': 'remote-host'}.items():
+                with self.subTest(key=key), patch.dict(os.environ, {key: value}):
+                    with self.assertRaisesRegex(ValueError, 'differs from runtime declaration'):
+                        runtime.validate_declaration(CONFIG)
+            command.assert_not_called()
+
     def test_command_diagnostics_do_not_leak_into_public_exception(self):
         with self.assertRaises(runtime.CommandFailure) as failure:
             runtime.checked([sys.executable, '-c', "import sys; print('sensitive diagnostic',file=sys.stderr); sys.exit(1)"])

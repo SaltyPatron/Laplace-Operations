@@ -3,7 +3,7 @@
 #
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
-#                              appdb | backup | site | agents | idlestop | report
+#                              appdb | backup | site | runtime | agents | idlestop | report
 #   sudo ./setup.sh machine    public declaration permissions only; no packages, database or service changes
 #   sudo ./setup.sh secrets-stack  converge the existing hart-server Vaultwarden/OpenBao stack; not part of all
 #   sudo ./setup.sh secrets-backup install the backup job only and run a checked backup; not part of all
@@ -17,8 +17,8 @@
 #
 # Nothing here is a sequence of patches. Each part is a set: the volumes there are to be, the packages, the settings,
 # the access rules; the part compares the set with the machine and closes the difference. Running it again on a
-# finished machine changes nothing and reports. What it did is kept under $LAPLACE_WORK/logs/root. Then, as the
-# operator: ./deploy.sh; and for the repositories' agents on this machine: sudo ./agents.sh. Every name of this
+# finished machine converges its declared configuration and verifies the runtime. What it did is kept under
+# $LAPLACE_WORK/logs/root and the runtime receipt directory. Every name of this
 # machine's (paths, users, groups, volumes, the service, the network) is a variable of laplace.env, so another machine
 # declares its own.
 set -euo pipefail
@@ -28,7 +28,7 @@ if [[ ${1:-} == repair ]]; then
   shift
   exec python3 "$here/installation/repair.py" "$@"
 fi
-if [[ ${1:-} == runtime ]]; then
+if [[ ${1:-} == runtime && ( $# == 1 || ${2:-} == --* ) ]]; then
   shift
   exec python3 "$here/installation/runtime.py" "$@"
 fi
@@ -40,6 +40,11 @@ if [[ $# == 1 && $1 == machine ]]; then
   exit 0
 fi
 . "$here/laplace.env"
+. "$here/installation/setup-flow.sh"
+# Resolve from the host declaration, never from an application connection string.
+# This validates topology before packages, clusters or service files are changed.
+setup_runtime_manifest=$(python3 "$here/installation/runtime.py" --select)
+setup_runtime_verified=0
 op=${SUDO_USER:-$(id -un)}; ophome=$(getent passwd "$op" | cut -d: -f6)
 PGDATA=$LAPLACE_PGDATA; PGWAL=$LAPLACE_PGWAL; PGTEMP=$LAPLACE_PGTEMP; PGUSER=$LAPLACE_PGUSER; PGBIN=$LAPLACE_PG_DIR/bin; PREFIX=$LAPLACE_PREFIX; SERVICE=$LAPLACE_PGSERVICE
 as_pg(){ su "$PGUSER" -c "$*" </dev/null; }                                     # as the server's user; never reads our stdin
@@ -398,7 +403,7 @@ site_sources(){
 # migrate reaches it, and $LAPLACE_ROLE owns it with a password of its own: canonical in /etc/laplace/pgpass as
 # a 127.0.0.1 line, written into every operator's ~/.pgpass, never printed. The knowledge host gets that line for
 # this host's tailnet address by the operator (OpenBao, kv/hosts/<host>/appdb, is where it is to live).
-appdb(){ part "application database"
+appdb_cluster(){
   local name=${LAPLACE_APP_DBNAME:-}; [ -n "$name" ] || { say "application database" "none declared (LAPLACE_APP_DBNAME): skipped"; return 0; }
   local ver=${LAPLACE_APP_PGVERSION:-18} port=${LAPLACE_APP_PGPORT:-5432} data=${LAPLACE_APP_PGDATA:-/data/postgresql/app} cl=app
   if [ ! -e /etc/apt/sources.list.d/pgdg.list ]; then
@@ -784,14 +789,14 @@ report(){ part report
   addr=$(ip -4 route get "$(echo "$LAPLACE_LAN" | cut -d/ -f1 | awk -F. '{print $1"."$2"."$3"."($4+1)}')" 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)
   say "from the network, as $op" "$(as_op "$PGBIN/psql -X 'host=$addr port=5432 user=$LAPLACE_ROLE dbname=postgres sslmode=require' -Atc \"SELECT 'connected, TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')\"" 2>&1 | tail -1)"
   say "over the socket, as $op" "$(as_op "$PGBIN/psql -X 'host=/tmp port=5432 user=$LAPLACE_ROLE dbname=postgres' -Atc \"SELECT 'connected as '||current_user\"" 2>&1 | tail -1)"
-  echo; echo "next, as $op: ./deploy.sh (or a push to main: every repository's main deploys this machine)"
+  if [[ $setup_runtime_verified == 1 ]]; then
+    say 'application runtime' 'API, MCP, database access and credential refresh verified; runtime receipt saved'
+  elif [[ -n $setup_runtime_manifest ]]; then
+    say 'application runtime' 'not verified by these selected stages; full setup includes runtime verification'
+  else
+    say 'application runtime' 'not declared; this run configures host infrastructure only'
+  fi
 }
 
-parts=${*:-all}
-for p in $parts; do case $p in all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client|knowledge-client) ;;
-  *) echo "setup.sh [drop] [all|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|agents|idlestop|report|chess|shares|landing ...]"; exit 2 ;; esac; done
-for p in $parts; do case $p in
-  all) volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup; landing_of_all=1; landing; landing_of_all=; site; agents; idlestop; report ;;
-  *) "$p" ;;
-esac; done
+setup_dispatch "$@"
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
