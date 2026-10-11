@@ -184,7 +184,12 @@ def main():
                 print('Checking the landed application backup by restoring into a disposable database...', flush=True)
                 result['landed_application_backup'] = restore_landing(config)
                 print('Repairing the existing secrets backup job and taking a checked backup...', flush=True)
-                checked(['bash', str(ROOT / 'secrets/install-backup.sh')], timeout=300)
+                backup = config['backup']
+                environment = dict(os.environ, SECRETS_BACKUP_DIR=backup['secrets_directory'],
+                    VAULTWARDEN_DATA_DIR=backup['vaultwarden_data'], BAO_SNAPSHOT_TOKEN_FILE=backup['snapshot_token'],
+                    BAO_ADDR=backup['bao_address'], SECRETS_BACKUP_MOUNT=backup['backup_mount'],
+                    SECRETS_DATA_MOUNT=backup['data_mount'])
+                checked(['bash', str(ROOT / 'secrets/install-backup.sh')], env=environment, timeout=300)
                 result['vaultwarden_archive'] = restore_vaultwarden(Path(config['backup']['secrets_directory']))
                 for service in config['required_services']:
                     checked(['systemctl', 'is-active', '--quiet', service], timeout=10)

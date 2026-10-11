@@ -33,6 +33,11 @@
     "landing": "/backup/laplace/hart-prod",
     "source_database": "laplace-app",
     "pgsocket": "/tmp",
-    "secrets_directory": "/backup/secrets"
+    "secrets_directory": "/backup/secrets",
+    "vaultwarden_data": "/hosting/vaultwarden/data",
+    "snapshot_token": "/etc/openbao/snapshot.token",
+    "bao_address": "http://127.0.0.1:8200",
+    "backup_mount": "/backup",
+    "data_mount": "/hosting"
   }
 }
