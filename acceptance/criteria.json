@@ -311,6 +311,20 @@
           "evidence": "Positive/negative authorization and refresh/revocation tests using the intended workload identity."
         },
         {
+          "id": "runtime-setup-boundaries",
+          "platform": "linux",
+          "argv": ["python3", "tests/runtime-setup.py"],
+          "timeout_seconds": 60,
+          "evidence": "Wrong-host and invalid identity refusal, preserved Bao record selection, activation rollback and nested operation-lock ownership. Fixture evidence does not establish installed runtime identities."
+        },
+        {
+          "id": "runtime-setup-preflight",
+          "platform": "linux",
+          "argv": ["python3", "installation/runtime.py", "--check"],
+          "timeout_seconds": 60,
+          "evidence": "Checks the declared hart-server installation and current operator Bao login without changes. Privileged setup must separately issue a passed runtime installation receipt."
+        },
+        {
           "id": "production-runtime-identity",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "secrets/application-runtime.ps1", "-Phase", "verify", "-Target", "production"],

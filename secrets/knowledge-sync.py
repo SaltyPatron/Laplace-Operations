@@ -124,7 +124,10 @@ def main():
         raise ValueError("Expected a declared host and HTTPS Bao address")
     if args.credentials.stat().st_mode & 0o077:
         raise ValueError("AppRole credentials must be private to their owner")
-    lock = args.lock.open("a")
+    inherited = os.environ.get('LAPLACE_HOST_LOCK_FD')
+    lock = os.fdopen(os.dup(int(inherited)), 'a') if inherited else args.lock.open('a')
+    if not os.path.samestat(os.fstat(lock.fileno()), args.lock.stat()):
+        raise ValueError('Inherited operation lock belongs to a different installation')
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     token = None
 

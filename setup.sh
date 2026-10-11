@@ -28,6 +28,10 @@ if [[ ${1:-} == repair ]]; then
   shift
   exec python3 "$here/installation/repair.py" "$@"
 fi
+if [[ ${1:-} == runtime ]]; then
+  shift
+  exec python3 "$here/installation/runtime.py" "$@"
+fi
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
 . "$here/machine-config.sh"
 machine_config_permissions
@@ -93,12 +97,14 @@ host      all   $PGUSER        127.0.0.1/32       scram-sha-256
 host      all   $PGUSER        ::1/128            scram-sha-256
 hostssl   all   $PGUSER        $LAPLACE_LAN       scram-sha-256
 include_if_exists pg_hba.remote.conf
+include_if_exists pg_hba.runtime.conf
 hostnossl all   all            0.0.0.0/0          reject
 "
 # Who operates Laplace on this machine is the shared group: every member connects over the socket as $LAPLACE_ROLE,
 # and has the role's password in ~/.pgpass. Not whoever happened to run this script.
 operators(){ { getent group "$LAPLACE_GROUP" | cut -d: -f4 | tr , '\n'; echo "$LAPLACE_AGENT_USER"; echo "$PGUSER"; } | grep . | sort -u; }
 ident(){ echo "# who connects over the socket as $LAPLACE_ROLE: the members of $LAPLACE_GROUP, the agent, the server's user"
+         echo 'include_if_exists pg_ident.runtime.conf'
          operators | while read -r u; do printf 'laplace  %-20s %s\n' "$u" "$LAPLACE_ROLE"; done; }
 
 # ------------------------------------------------------------------------------------------------------- the parts
@@ -287,7 +293,7 @@ EOF
 # let the group create and run as root. /opt/laplace and the nginx site laplace are the monorepo's site again (site).
 LEGACY_UNITS="laplace-postgresql.service laplace-refactor-postgresql.service laplace-lichess.service laplace-stripe.service laplace-pg-log-prune.service laplace-pg-log-prune.timer"
 LEGACY_PATHS="/usr/local/libexec/laplace-managed-deploy /usr/local/libexec/laplace-service-control /var/lib/laplace-managed /var/lib/laplace-mcp /var/log/laplace-mcp /etc/nginx/sites-enabled/laplace-managed /etc/nginx/sites-available/laplace-managed /build"
-LEGACY_USERS="laplace-mcp laplace-lichess"
+LEGACY_USERS="laplace-lichess"
 rights(){ part rights
   for f in /etc/sudoers.d/*; do [ -f "$f" ] || continue
     if grep -qE "^[^#]*\b$LAPLACE_AGENT_USER\b" "$f" || case $(basename "$f") in laplace-*) true ;; *) false ;; esac; then rm -f "$f"; say "sudo" "removed $f"; fi; done
@@ -729,7 +735,7 @@ knowledge-client(){ part 'OpenBao knowledge credentials'
     --lock "${LAPLACE_HOST_LOCK:-/run/lock/laplace/host-resource.lock}")
   if [[ -n ${LAPLACE_BAO_APP_RUNTIME_RECORD:-} ]]; then
     args+=(--application-record "$LAPLACE_BAO_APP_RUNTIME_RECORD" --restart-on-change
-      --verification-base "${LAPLACE_PUBLIC_BASE_URL:?API verification origin is required}")
+      --verification-base "${LAPLACE_API_VERIFICATION_URL:-${LAPLACE_PUBLIC_BASE_URL:?API verification origin is required}}")
   fi
   python3 "$here/secrets/knowledge-sync.py" "${args[@]}"
   install -d -m 755 /usr/local/libexec
