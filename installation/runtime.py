@@ -30,12 +30,19 @@ def module(name, path):
 
 
 SYNC = module('runtime_sync', ROOT / 'secrets/knowledge-sync.py')
+TLS = module('runtime_tls', ROOT / 'installation/runtime_tls.py')
+
+
+class CommandFailure(RuntimeError):
+    def __init__(self, command, result):
+        super().__init__(f'{Path(command).name} failed (exit {result.returncode})')
+        self.diagnostics = result.stdout + result.stderr
 
 
 def checked(argv, **kwargs):
     result = subprocess.run(argv, capture_output=True, text=True, **kwargs)
     if result.returncode:
-        raise RuntimeError(f'{Path(argv[0]).name} failed (exit {result.returncode})')
+        raise CommandFailure(argv[0], result)
     return result.stdout.strip()
 
 
@@ -44,6 +51,7 @@ def declarations(path):
 
 
 def validate(config):
+    TLS.validate(config['tls'])
     for key in ('host', 'operator', 'record', 'database', 'role', 'database_owner', 'runtime_user', 'pg_os_user', 'bao_role'):
         if not re.fullmatch(r'[a-z][a-z0-9_-]*', config[key]):
             raise ValueError('Invalid installation identity: ' + key)
@@ -116,8 +124,17 @@ def preflight(config):
             continue
         if account.pw_uid == 0 or account.pw_dir != state:
             raise ValueError('Existing runtime account has a different home: ' + name)
+    trust = Path(config['tls']['root_certificate'])
+    tls_status = 'installation_required'
+    if trust.is_file():
+        try:
+            TLS.verify_endpoint(config['database_host'], config['port'], trust)
+            tls_status = 'verified'
+        except (OSError, ValueError):
+            tls_status = 'repair_required'
     return {'host': config['host'], 'release': (prefix / 'app/.laplace-source-revision').read_text().strip(),
-            'application_database': config['database'], 'application_data_moved': False}
+            'application_database': config['database'], 'application_data_moved': False,
+            'database_tls': {'status': tls_status, 'root_certificate': str(trust)}}
 
 
 class Bao:
@@ -176,9 +193,11 @@ class Bao:
 
 
 def connection(item, peer=False, socket_path=None):
+    tls = ('SSL Mode=VerifyFull;Root Certificate=' + item['root_certificate'] + ';'
+           if item.get('root_certificate') else 'SSL Mode=Require;')
     return (f'Host={socket_path if peer else item["database_host"]};Port={int(item["port"])};'
             f'Database={item["database"]};Username={item["role"]};'
-            + ('' if peer else 'SSL Mode=Require;') + f'Maximum Pool Size={int(item["pool_max"])}')
+            + ('' if peer else tls) + f'Maximum Pool Size={int(item["pool_max"])}')
 
 
 def mcp_verify(config):
@@ -220,16 +239,36 @@ def mcp_verify(config):
 
 
 def install(config, lock):
+    def sql(statement):
+        return checked(['runuser', '-u', config['pg_os_user'], '--', config['pgbin'] + '/psql',
+            '-XwAt', '-v', 'ON_ERROR_STOP=1', '-h', config['pgsocket'], '-p', str(config['port']),
+            '-d', config['database'], '-f', '-'], input=statement, timeout=30)
+    if Path(sql('SHOW data_directory')).resolve() != Path(config['database_data']).resolve():
+        raise ValueError('Connected cluster differs from runtime declaration')
+    print('Verifying the database certificate and runtime trust before activation...', flush=True)
+    with TLS.configured(config, sql, SYNC) as proof:
+        config['_tls_verification'] = proof
+    # A verified certificate repair is preparation, just like roles and enrollment.
+    # Keep it if a later identity activation fails; old serving connections remain valid.
+    config['root_certificate'] = config['tls']['root_certificate']
+    config['knowledge']['root_certificate'] = config['tls']['root_certificate']
+    return install_identities(config, lock)
+
+
+def install_identities(config, lock):
     env = dict(os.environ, LAPLACE_HOST_LOCK_FD=str(lock.fileno()),
+               LAPLACE_INSTALL_CAPTURE_DIAGNOSTICS='1',
                PATH=config['pgbin'] + os.pathsep + os.environ.get('PATH', ''), BAO_ADDR=config['bao_address'])
 
     def helper(name, args=(), payload=None):
         try:
             output = checked(['python3', str(ROOT / 'secrets' / name), *args], env=env,
                 pass_fds=(lock.fileno(),), input=json.dumps(payload) if payload is not None else None, timeout=180)
-        except RuntimeError:
+        except CommandFailure as error:
             phase = args[1] if args and args[0] == '--phase' else 'provision/verify'
-            raise RuntimeError(f'{name}: {phase} failed; no acceptance receipt issued') from None
+            diagnostic = Path(config['work']) / ('runtime-failure-' + uuid.uuid4().hex + '.log')
+            SYNC.atomic(diagnostic, error.diagnostics, 0o600, 0, 0)
+            raise RuntimeError(f'{name}: {phase} failed; private diagnostics: {diagnostic}') from None
         return json.loads(output)
 
     def sql(statement):
@@ -269,7 +308,8 @@ def install(config, lock):
                                             connection_limit=mcp['connection_limit']))
     fresh = helper('knowledge-sync.py', ['--host', config['host'], '--credentials', config['credentials'],
         '--user', config['runtime_user'], '--prefix', config['prefix'], '--machine-file', config['machine_file'],
-        '--lock', config['host_lock'], '--bao-address', config['bao_address'], '--application-record', config['record']])
+        '--lock', config['host_lock'], '--bao-address', config['bao_address'], '--application-record', config['record'],
+        '--root-certificate', config['root_certificate']])
     SYNC.validate_knowledge_receipt(prefix, fresh['native_receipt'])
     machine, api, mcp_env = Path(config['machine_file']), prefix / 'app/laplace-api.env', prefix / 'app/laplace-mcp.env'
     dropins = [Path(f'/etc/systemd/system/laplace-{service}.service.d/runtime-identity.conf') for service in ('api', 'mcp')]
@@ -292,6 +332,7 @@ def install(config, lock):
             'LAPLACE_APP_DBNAME': config['database'], 'LAPLACE_APP_PGHOST': config['pgsocket'],
             'LAPLACE_APP_PGPORT': config['port'], 'LAPLACE_APP_ROLE': config['database_owner'],
             'LAPLACE_BAO_KNOWLEDGE_HOST': config['host'], 'LAPLACE_API_VERIFICATION_URL': config['public_base']})
+        SYNC.assignments(machine, {'LAPLACE_RUNTIME_DB_ROOT_CERTIFICATE': config['root_certificate']})
         SYNC.assignments(api, {'LAPLACE_DB': knowledge_connection})
         SYNC.assignments(mcp_env, {'LAPLACE_DB': mcp_connection, 'LAPLACE_OPS_LOG_DIR': state / 'logs',
             'LAPLACE_OUT': state / 'out', 'LAPLACE_AGENTS_CONFIG': state / 'agents.json'})
@@ -307,7 +348,7 @@ def install(config, lock):
             '-XwAt', '-v', 'ON_ERROR_STOP=1', '-h', config['knowledge']['database_host'],
             '-p', str(config['port']), '-U', config['knowledge']['role'], '-d', config['knowledge']['database'], '-f', '-']
         knowledge_env = dict(os.environ, PGPASSFILE=str(Path(config['state']) / '.pgpass'),
-                             PGSSLMODE='require', PGCONNECT_TIMEOUT='10')
+                             PGSSLMODE='verify-full', PGSSLROOTCERT=config['root_certificate'], PGCONNECT_TIMEOUT='10')
         knowledge_env.pop('PGPASSWORD', None)
         actual = checked(knowledge_args, env=knowledge_env,
             input="SELECT current_user; SELECT encode(laplace.perfcache_receipt(),'hex');", timeout=20)
@@ -375,6 +416,8 @@ def main():
             receipt.update(status='failed', error=str(error))
             raise
         finally:
+            if '_tls_verification' in config:
+                receipt['database_tls'] = config['_tls_verification']
             receipt['finished_utc'] = datetime.now(timezone.utc).isoformat()
             SYNC.atomic(output, json.dumps(receipt, indent=2) + '\n', 0o644, 0, 0)
             print('Runtime setup receipt: ' + str(output), flush=True)

@@ -12,6 +12,8 @@ import shlex
 import struct
 import subprocess
 import tempfile
+import sys
+from datetime import datetime, timezone
 import urllib.request
 
 
@@ -59,6 +61,7 @@ def configuration_transaction(paths, recover):
 
 
 def activate(user, prefix, base):
+    started = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
     subprocess.run(["systemctl", "restart", "laplace-api"], check=True, timeout=30)
     verifier = prefix / "app/operations/scripts/verify-application-release.py"
     env = dict(os.environ)
@@ -79,6 +82,13 @@ def activate(user, prefix, base):
         str(logs / "knowledge-selection-verification.json")],
         capture_output=True, text=True, timeout=60, env=env)
     if result.returncode:
+        if os.environ.get('LAPLACE_INSTALL_CAPTURE_DIAGNOSTICS') == '1':
+            # The installer captures stderr into a root-private diagnostic file.
+            # Never include an environment dump or the credential JSON input.
+            print(result.stdout + result.stderr, file=sys.stderr)
+            journal = subprocess.run(['journalctl', '-u', 'laplace-api', '--since', started,
+                '--no-pager', '-o', 'cat', '-n', '100'], text=True, capture_output=True, timeout=10)
+            print(journal.stdout, file=sys.stderr)
         raise ValueError("Selected knowledge failed installed application verification; configuration will be restored")
 
 
@@ -111,6 +121,7 @@ def main():
     parser.add_argument("--machine-file", type=Path, required=True)
     parser.add_argument("--lock", type=Path, default=Path("/run/lock/laplace/host-resource.lock"))
     parser.add_argument("--bao-address", required=True)
+    parser.add_argument("--root-certificate", type=Path, help="Verify both declared database endpoints against this installation's CA")
     parser.add_argument("--select", action="store_true", help="Select the credential's knowledge target and restart the API")
     parser.add_argument("--application-record", help="Additional host KV record for the API's restricted application login")
     parser.add_argument("--restart-on-change", action="store_true", help="Reload pools after verified credentials change")
@@ -153,6 +164,10 @@ def main():
         account = pwd.getpwnam(args.user)
         pgpass = Path(account.pw_dir) / ".pgpass"
         env = dict(os.environ, PGPASSWORD=record["password"], PGSSLMODE="require", PGCONNECT_TIMEOUT="10")
+        if args.root_certificate:
+            if not args.root_certificate.is_absolute() or not args.root_certificate.is_file():
+                raise ValueError('Database verification requires an installed absolute trust file')
+            env.update(PGSSLMODE='verify-full', PGSSLROOTCERT=str(args.root_certificate))
         check = subprocess.run(["psql", "-X", "-w", "-h", host, "-p", str(port), "-U", role, "-d", database,
             "-Atqc", "SELECT current_user, encode(laplace.perfcache_receipt(), 'hex')"], env=env,
             text=True, capture_output=True, timeout=20)

@@ -733,6 +733,9 @@ knowledge-client(){ part 'OpenBao knowledge credentials'
   local -a args=(--host "$host" --credentials "$credentials" --user "${LAPLACE_API_USER:-$LAPLACE_AGENT_USER}"
     --prefix "$prefix" --machine-file "$machine" --bao-address "$address"
     --lock "${LAPLACE_HOST_LOCK:-/run/lock/laplace/host-resource.lock}")
+  if [[ -n ${LAPLACE_RUNTIME_DB_ROOT_CERTIFICATE:-} ]]; then
+    args+=(--root-certificate "$LAPLACE_RUNTIME_DB_ROOT_CERTIFICATE")
+  fi
   if [[ -n ${LAPLACE_BAO_APP_RUNTIME_RECORD:-} ]]; then
     args+=(--application-record "$LAPLACE_BAO_APP_RUNTIME_RECORD" --restart-on-change
       --verification-base "${LAPLACE_API_VERIFICATION_URL:-${LAPLACE_PUBLIC_BASE_URL:?API verification origin is required}}")

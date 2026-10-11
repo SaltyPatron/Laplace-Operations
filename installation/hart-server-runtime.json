@@ -25,6 +25,15 @@
   "bao_address": "https://openbao.hartonomous.com",
   "public_base": "http://127.0.0.1:5187",
   "work": "/var/lib/laplace/installation/receipts",
+  "tls": {
+    "mode": "self-signed-local",
+    "subject": "Laplace PostgreSQL hart-server",
+    "dns_names": ["hart-server", "localhost"],
+    "ip_addresses": ["127.0.0.1"],
+    "valid_days": 365,
+    "renew_before_days": 30,
+    "root_certificate": "/etc/laplace/postgres-runtime.crt"
+  },
   "knowledge": {
     "database_host": "127.0.0.1",
     "database": "laplace-mono",
