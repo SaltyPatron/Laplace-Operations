@@ -63,6 +63,27 @@ is created once under `kv/hosts/<host>/laplace-api`; provider credentials come f
 Conflicting installed credentials stop the operation instead of silently rotating them. Restart the service after
 a reported change. This bootstrap does not replace the host's AppRole or establish credential-refresh automation.
 
+The production API's OS and application database identities are declared in
+`secrets/application-runtime-installation.json`. Provision and verify its data-only credentials, then activate with:
+
+```powershell
+./secrets/application-runtime.ps1 -Phase prepare -Target production
+./secrets/application-runtime.ps1 -Phase activate -Target production
+./secrets/application-runtime.ps1 -Phase verify -Target production
+```
+
+Preparation does not switch the serving process. Activation writes the declared runtime connection, moves writable
+API state to its private service home, and restarts under the separate OS account. It runs the installed application
+verifier and restores the prior configuration/service identity on failure. Migration credentials stay with the
+deployment account; the API's pgpass contains only its two runtime credentials. Preparation enrolls a separate
+OpenBao AppRole that can read only the two declared runtime records. Its root-only credential is selected by
+`LAPLACE_BAO_RUNTIME_CREDENTIALS`; the existing host AppRole remains available for deployment. Verification exercises
+both allowed reads, denies migration/shared credentials, and proves the token stops working after revocation.
+The refresh reads selected knowledge and `LAPLACE_BAO_APP_RUNTIME_RECORD`; `setup.sh knowledge-client` installs
+that timer for `LAPLACE_API_USER`. Changed credentials are authenticated before publication and trigger verified
+pool recreation. The two-connection application pool and six-connection role allocation include a concurrent
+recovery process and credential checks; these are not an aggregate knowledge-cluster resource budget.
+
 Register an existing Stockfish build using its actual selected source path:
 
 ```sh

@@ -711,13 +711,17 @@ TIMER
 
 knowledge-client(){ part 'OpenBao knowledge credentials'
   local host=${LAPLACE_BAO_KNOWLEDGE_HOST:-$(hostname -s)}
-  local credentials=${LAPLACE_BAO_CREDENTIALS:-/etc/laplace/approle.json}
+  local credentials=${LAPLACE_BAO_RUNTIME_CREDENTIALS:-${LAPLACE_BAO_CREDENTIALS:-/etc/laplace/approle.json}}
   local address=${BAO_ADDR:-https://openbao.hartonomous.com}
   local prefix=${LAPLACE_INSTALL_PREFIX:-/opt/laplace}
   local machine=${LAPLACE_MACHINE_ENV:-/etc/laplace/machine.env}
-  local -a args=(--host "$host" --credentials "$credentials" --user "$LAPLACE_AGENT_USER"
+  local -a args=(--host "$host" --credentials "$credentials" --user "${LAPLACE_API_USER:-$LAPLACE_AGENT_USER}"
     --prefix "$prefix" --machine-file "$machine" --bao-address "$address"
     --lock "${LAPLACE_HOST_LOCK:-/run/lock/laplace/host-resource.lock}")
+  if [[ -n ${LAPLACE_BAO_APP_RUNTIME_RECORD:-} ]]; then
+    args+=(--application-record "$LAPLACE_BAO_APP_RUNTIME_RECORD" --restart-on-change
+      --verification-base "${LAPLACE_PUBLIC_BASE_URL:?API verification origin is required}")
+  fi
   python3 "$here/secrets/knowledge-sync.py" "${args[@]}"
   install -d -m 755 /usr/local/libexec
   install -m 755 "$here/secrets/knowledge-sync.py" /usr/local/libexec/laplace-knowledge-sync.py
