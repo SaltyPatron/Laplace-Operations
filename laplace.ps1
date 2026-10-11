@@ -10,13 +10,26 @@ Operate the installed Laplace application through its delivery workflows.
 [CmdletBinding()]
 param(
     [ValidateSet('status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','prepare','build','test','recovery')][string]$Operation = 'status',
-    [ValidateSet('desktop','staging','production','knowledge')][string]$Target = 'staging',
+    [ValidateSet('desktop','staging','production','knowledge')][string]$Target,
     [string]$Revision = 'main',
     [string]$Repository = 'SaltyPatron/Laplace',
     [string]$SourcePath,
     [switch]$Wait
 )
 $ErrorActionPreference = 'Stop'
+$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development')
+if (-not $PSBoundParameters.ContainsKey('Target')) {
+    $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
+}
+if ($Operation -in $desktopOperations -and $Target -ne 'desktop') {
+    throw "$Operation runs on desktop; target '$Target' is not supported. Use deploy to install a deployment target."
+}
+if ($Operation -eq 'deploy' -and $Target -notin @('staging','production')) {
+    throw 'deploy supports staging or production. Use components -Target knowledge for on-demand component qualification.'
+}
+if ($SourcePath -and $Target -ne 'desktop') {
+    throw 'SourcePath selects local desktop sources; remote operations use Revision.'
+}
 if ($Operation -in 'start','stop','logs' -or ($Operation -in 'status','verify' -and $Target -eq 'desktop')) {
     if ($PSBoundParameters.ContainsKey('Target') -and $Target -ne 'desktop') { throw "$Operation is a desktop lifecycle operation; use the deployment operator for another target." }
     $localArgs=@('-NoProfile','-File',"$PSScriptRoot/development/control.ps1",'-Operation',$Operation)
@@ -41,15 +54,15 @@ if ($Operation -eq 'run') {
     & pwsh @localArgs
     exit $LASTEXITCODE
 }
-if ($Target -eq 'desktop') { throw 'Desktop supports start, stop, status, logs, run and verify; use prepare/build/test for source development.' }
-if ($Operation -eq 'recovery') {
-    & pwsh -NoProfile -File "$PSScriptRoot/backup/recovery.ps1" -Target $Target
-    exit $LASTEXITCODE
-}
 if ($Operation -in 'prepare','build','test') {
     $localArgs = @('-NoProfile','-File',"$PSScriptRoot/dev.ps1",'-Operation',$Operation)
     if ($SourcePath) { $localArgs += @('-SourcePath',$SourcePath) }
     & pwsh @localArgs
+    exit $LASTEXITCODE
+}
+if ($Target -eq 'desktop') { throw 'Desktop supports prepare, build, test, start, stop, status, logs, run and verify.' }
+if ($Operation -eq 'recovery') {
+    & pwsh -NoProfile -File "$PSScriptRoot/backup/recovery.ps1" -Target $Target
     exit $LASTEXITCODE
 }
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required; sign in with gh auth login.' }
@@ -66,7 +79,11 @@ if ($Operation -eq 'components') {
     $inputs = @('-f','drop=false','-f','reseed=false','-f',"cloud=$($Target -eq 'knowledge')".ToLowerInvariant())
     Write-Host "Verify component deployment from $Revision on $Target."
 } elseif ($Operation -eq 'deploy') {
-    Write-Host "Deploy ${Revision}: staging verification, cloud build, production verification."
+    if ($Target -eq 'production') {
+        Write-Host "Deploy ${Revision}: staging verification, cloud build, production verification."
+    } else {
+        Write-Host "Deploy ${Revision} to staging on hart-server."
+    }
 } else {
     Write-Host "$Operation on $Target using checks from $Revision."
 }
