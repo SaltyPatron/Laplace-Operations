@@ -1,0 +1,13 @@
+{
+  "owner": "SaltyPatron",
+  "fork_pr_approval": "all_external_contributors",
+  "repositories": [
+    "Laplace",
+    "Laplace-Native",
+    "Laplace-postgres",
+    "Laplace-Engine",
+    "Laplace-MCP",
+    "Laplace-Wiki",
+    "Laplace-Conventional"
+  ]
+}
