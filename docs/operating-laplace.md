@@ -39,6 +39,13 @@ bash deploy/linux/site.sh smoke
 bash deploy/linux/site.sh configure restart smoke
 ```
 
+Linux uses `/etc/laplace/machine.env`; `LAPLACE_MACHINE_ENV` selects another declaration. Existing nonempty process
+values take precedence, including when later declarations reference them. Files contain assignments, optional
+`export`, comments, quoted values and quoted multiline values; `$NAME`, `${NAME}` and `%NAME%` resolve previously
+declared or process values. Files are read as data: command substitutions and backticks never execute. Duplicate,
+malformed, unreadable or explicitly missing declarations stop the operation. Operations' shell entry points and the
+application/site installer use the same reader contract; `LAPLACE_CONFIG_SOURCE` records the selected file.
+
 The first command verifies the installed site. The second regenerates its declared runtime configuration and
 restarts it. Shared host locks prevent these operations from racing deployment or ingestion.
 

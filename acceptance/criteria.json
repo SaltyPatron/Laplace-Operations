@@ -23,8 +23,9 @@
         {
           "id": "config-linux",
           "platform": "linux",
-          "argv": null,
-          "evidence": "Compare service and operator resolution on a declared host."
+          "argv": ["python3", "tests/linux-configuration.py"],
+          "timeout_seconds": 60,
+          "evidence": "Real Bash/POSIX imports with alternate declarations, process overrides, dependent paths and literal command syntax. Live host deployment evidence is retained separately."
         }
       ]
     },
