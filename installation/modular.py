@@ -153,15 +153,16 @@ ALTER ROLE "{role}" NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRL
 GRANT CONNECT,TEMPORARY ON DATABASE "{database}" TO "{role}";
 GRANT SET ON PARAMETER session_replication_role TO "{role}";
 GRANT USAGE ON SCHEMA public TO "{role}";
+GRANT EXECUTE ON FUNCTION public.laplace_clean_pending_list(regclass) TO "{role}";
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO "{role}";
 CREATE SCHEMA IF NOT EXISTS stage;
 GRANT USAGE,CREATE ON SCHEMA stage TO "{role}";
-GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE ON ALL TABLES IN SCHEMA stage TO "{role}";
+GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,MAINTAIN ON ALL TABLES IN SCHEMA stage TO "{role}";
 DO $$ DECLARE item record; BEGIN
  FOR item IN SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
   WHERE n.nspname='public' AND c.relkind IN ('r','p')
    AND c.relname ~ '^(entity|physicality|consensus)(_[0-9a-f]{{1,2}})?$|^witness$'
- LOOP EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE ON TABLE public.%I TO "{role}"',item.relname); END LOOP;
+ LOOP EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,MAINTAIN ON TABLE public.%I TO "{role}"',item.relname); END LOOP;
 END $$;
 COMMIT;
 '''
