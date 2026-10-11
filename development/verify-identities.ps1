@@ -4,6 +4,7 @@ param([string]$Installation = $(if ($env:LAPLACE_DEVELOPMENT_INSTALLATION) { $en
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/../laplace.env.ps1"
 . "$PSScriptRoot/../secrets/process.ps1"
+. "$PSScriptRoot/credentials.ps1"
 $config = Get-Content -LiteralPath $Installation -Raw | ConvertFrom-Json
 $psql = Join-Path $env:LAPLACE_PG_DIR 'bin/psql.exe'
 $saved = @{}
@@ -28,10 +29,9 @@ function Denied($Record, [string]$Sql, [string]$Code, [string]$Database = $Recor
     throw 'The runtime identity accepted a prohibited operation.'
 }
 try {
-    $records = @{}
+    $records = Get-DevelopmentSecrets $config
     foreach ($kind in 'knowledge','appdb') {
-        $record = (Invoke-Program bao @('kv','get','-format=json',"kv/hosts/$($config.client)/$kind") | ConvertFrom-Json).data.data
-        $records[$kind] = $record
+        $record = $records[$kind]
         if ((Query $record 'SELECT current_user') -ne $record.role) { throw 'Connected as the wrong database identity.' }
         if ((Query $record "SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls FROM pg_roles WHERE rolname=current_user") -ne 'f') { throw 'Runtime identity is privileged.' }
         Denied $record "SET ROLE $($config.admin_role)" '42501'

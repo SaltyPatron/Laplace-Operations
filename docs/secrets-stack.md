@@ -71,7 +71,7 @@ TLS material, and existing tool prerequisites before changing services. Nginx
 publication remains explicit through `sudo bash secrets/go-live.sh`; that command
 now fails if either HTTPS health check is unsuccessful.
 
-## Application integration still required
+## Application integration
 
 Authenticated inventory on October 10 at approximately 18:42 UTC found AppRoles
 `hart-desktop`, `hart-laptop`, `hart-prod`, and `hart-server`. Their policy names
@@ -100,8 +100,13 @@ already installed credentials implicitly. `LAPLACE_BAO_APPDB_HOST`,
 
 Operations `setup.sh access` and `appdb` still provision database roles and maintain
 their existing protected-file behavior. `secrets-client` supplies subsequent
-app credential refresh. Knowledge DB credentials and OAuth/payment/API service
-secrets are not yet integrated. Windows consumers are not covered by this Bash setup.
+app credential refresh. The production API uses the separate `laplace-hart-prod-runtime`
+AppRole for its knowledge and application runtime records. The root-owned refresh timer
+verifies credentials before publishing them to the API identity. Windows development uses
+`development/enroll.ps1` and a user-bound encrypted AppRole enrollment for its two database
+records, development API identity and shared OAuth configuration. See
+[operating Laplace](operating-laplace.md) for commands and scope. Payment-secret integration
+remains separate.
 Never put secret values in `machine.env`, repository documentation or logs.
 
 `sudo ./setup.sh machine` repairs public declaration permissions only:

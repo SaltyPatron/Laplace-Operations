@@ -41,7 +41,7 @@ jobs:
         shell: pwsh
         env:
           LAPLACE_ACCEPTANCE_SOURCE: ${{ github.workspace }}/.acceptance/laplace
-        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check config-windows,storage-windows,resource-refusal-windows,backup-copy-windows -Output "$env:RUNNER_TEMP/acceptance-windows.json"
+        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check config-windows,storage-windows,resource-refusal-windows,backup-copy-windows,desktop-enrollment-storage -Output "$env:RUNNER_TEMP/acceptance-windows.json"
       - name: Preserve Windows acceptance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
