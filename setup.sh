@@ -367,7 +367,9 @@ settings()( part settings
   # An unchanged huge_pages=try setting does not request a PostgreSQL restart
   # when setup has just made the kernel pool/access available. Converge actual use.
   if [ "$huge_mode" != off ] && [ "$(q "SHOW huge_pages_status")" != on ]; then
-    need=$(runuser -u "$PGUSER" -- "$PGBIN/postgres" -D "$PGDATA" -C shared_memory_size_in_huge_pages)
+    # This runtime-computed value must be read from the serving postmaster.
+    # postgres -C requires exclusive access to PGDATA for this parameter.
+    need=$(q "SHOW shared_memory_size_in_huge_pages")
     free=$(awk '/^HugePages_Free:/{free=$2} /^HugePages_Rsvd:/{reserved=$2} END{print free-reserved}' /proc/meminfo)
     group=$(sysctl -n vm.hugetlb_shm_group)
     id -G "$PGUSER" | tr ' ' '\n' | grep -qx "$group" || {

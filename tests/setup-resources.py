@@ -35,13 +35,14 @@ declared() { printf 'huge_pages %s\n' "$MODE"; }
 q() {
   case "$1" in
     'SHOW huge_pages_status') cat "$STATE" ;;
+    'SHOW shared_memory_size_in_huge_pages') printf '%s\n' "$NEED" ;;
     *pending_restart*) printf '%s\n' "$PENDING" ;;
     *) : ;;
   esac
 }
 runuser() {
-  [[ "$*" == "-u $PGUSER -- $PGBIN/postgres -D $PGDATA -C shared_memory_size_in_huge_pages" ]]
-  printf '%s\n' "$NEED"
+  echo 'Resource sizing must query the running postmaster, not execute another postgres' >&2
+  return 99
 }
 awk() { if [[ ${@: -1} == /proc/meminfo ]]; then echo "$FREE"; else command awk "$@"; fi; }
 sysctl() { [[ "$*" == '-n vm.hugetlb_shm_group' ]]; echo "$GROUP"; }
