@@ -121,7 +121,7 @@ def verify(config):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--phase', choices=('prepare', 'activate', 'verify'), required=True)
+    parser.add_argument('--phase', choices=('prepare', 'activate', 'verify', 'resources'), required=True)
     args = parser.parse_args()
     config = json.load(sys.stdin)
     if os.geteuid() != 0:
@@ -131,7 +131,7 @@ def main():
             raise ValueError('Invalid identity declaration: ' + field)
     if config['role'] == config['database_owner'] or config['runtime_user'] in ('root', config['pg_os_user']):
         raise ValueError('Runtime must be separate from database administration')
-    if args.phase != 'verify' and not re.fullmatch('[0-9a-f]{64}', config['password']):
+    if args.phase in ('prepare', 'activate') and not re.fullmatch('[0-9a-f]{64}', config['password']):
         raise ValueError('Invalid generated runtime credential')
     state, prefix = Path(config['state']), Path(config['prefix'])
     if not state.is_absolute() or state == Path('/') or state.is_symlink() or state == prefix or state in prefix.parents or prefix in state.parents:
@@ -156,6 +156,41 @@ def main():
 
         if sql('SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=' + literal(database), 'postgres') != owner:
             raise ValueError('The declared application database owner does not match the installation')
+        if args.phase == 'resources':
+            data = Path(sql('SHOW data_directory'))
+            if data.resolve() != Path(config['database_data']).resolve():
+                raise ValueError('The declared application cluster differs from the connected database')
+            resource_keys = {'LAPLACE_PG_SERVING', 'LAPLACE_PG_WORK_NODES', 'LAPLACE_PG_RESERVED', 'LAPLACE_PG_BUFFERS_MAX'}
+            if set(config['resource_settings']) != resource_keys:
+                raise ValueError('Incomplete application resource declaration')
+            environment = dict(os.environ)
+            # A caller's fixture values must never override facts on a serving host.
+            environment = {key: value for key, value in environment.items() if not key.startswith('TUNE_FACT_')}
+            environment.update(config['resource_settings'])
+            environment.update(LAPLACE_PG_PROFILE='app', LAPLACE_PGDATA=str(data), LAPLACE_PGWAL=str(data / 'pg_wal'),
+                LAPLACE_PG_DIR=str(Path(config['pgbin']).parent), LAPLACE_PGUSER=config['pg_os_user'],
+                LAPLACE_PGSERVICE=config['database_service'], TUNE_SOCKET=config['pgsocket'],
+                TUNE_CONN=f"host={config['pgsocket']} port={config['port']} user={config['pg_os_user']} dbname=postgres",
+                TUNE_PGDATA=str(data), PGWAL=str(data / 'pg_wal'), PGBIN=config['pgbin'], PGUSER=config['pg_os_user'],
+                SERVICE=config['database_service'],
+                LAPLACE_CONNINFO=f"host={config['pgsocket']} port={config['port']} user={config['pg_os_user']} dbname={database}")
+            tuner = str(Path(__file__).with_name('tune-pg.sh'))
+            subprocess.run(['bash', '-c', 'source "$1"; tune_validate_plan', 'application-resources', tuner],
+                env=environment, check=True, timeout=30)
+            def recover_resources():
+                subprocess.run(['systemctl', 'restart', config['database_service']], check=True, timeout=60)
+                sync.activate(config['runtime_user'], prefix, config['public_base'])
+            machine = Path(config['machine_file'])
+            with sync.configuration_transaction([machine, data / 'postgresql.auto.conf'], recover_resources):
+                # App-specific names do not retune a co-located knowledge cluster.
+                sync.assignments(machine, {key.replace('LAPLACE_PG_', 'LAPLACE_APP_PG_'): value
+                                          for key, value in config['resource_settings'].items()})
+                subprocess.run(['bash', tuner], env=environment, check=True, timeout=180)
+                sync.activate(config['runtime_user'], prefix, config['public_base'])
+            verify(config)
+            print(json.dumps({'application_resources': 'applied-and-verified', 'database_service': config['database_service'],
+                              'resource_settings': config['resource_settings']}))
+            return
         if args.phase == 'prepare':
             privileged = sql('SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls '
                              'FROM pg_roles WHERE rolname=' + literal(role))

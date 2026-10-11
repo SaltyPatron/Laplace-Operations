@@ -181,11 +181,15 @@ plan() {  # every derived quantity as NAME=value lines; declared() formats them
   # them), the rest for the executor, divided by every backend that may run a sort or a hash at once
   maint_dom_kb=$((private_kb / 4)); mwm_kb=$(max $((maint_dom_kb / 2)) 65536); avwm_kb=$(max $((maint_dom_kb / 2 / avw)) 1024)
   exec_kb=$((private_kb - maint_dom_kb)); backends=$((conns + par)); per_kb=$((exec_kb / backends))
-  work_kb=$(max $((per_kb / 2)) 4096); temp_kb=$(max $((per_kb / 2)) 8192)
+  local work_nodes=${LAPLACE_PG_WORK_NODES:-2}
+  [[ "$work_nodes" =~ ^[1-9][0-9]{0,5}$ ]] || { echo 'tune-pg: LAPLACE_PG_WORK_NODES must be a positive integer (at most six digits)' >&2; return 1; }
+  # work_mem applies to each simultaneous sort/hash node, not once per connection.
+  # This declared population is a workload estimate; arbitrary SQL is not memory-bounded by it.
+  work_kb=$(max $((per_kb / 2 / work_nodes)) 4096); temp_kb=$(max $((per_kb / 2)) 8192)
   # the floors (work_mem 4 MB, temp_buffers 8 MB, maintenance 64 MB, autovacuum 1 MB) are PostgreSQL's useful minimums;
   # when the declared connections at their floors want more than the private quarter, the host is over-committed by
   # its declarations, and the plan says by how much rather than promising what is not there
-  over_kb=$(( backends * (work_kb + temp_kb) + mwm_kb + avw * avwm_kb - private_kb )); [ "$over_kb" -gt 0 ] || over_kb=0
+  over_kb=$(( backends * (work_nodes * work_kb + temp_kb) + mwm_kb + avw * avwm_kb - private_kb )); [ "$over_kb" -gt 0 ] || over_kb=0
   if [ "$rotational" = 1 ]; then eic=2; rpc=4; else eic=$iow; rpc=1.1; fi
   cat <<PLAN
 fact.memory_kb=$ram_kb
@@ -213,6 +217,7 @@ backends=$backends
 mwm_kb=$mwm_kb
 avwm_kb=$avwm_kb
 work_kb=$work_kb
+work_nodes=$work_nodes
 temp_kb=$temp_kb
 eic=$eic
 rpc=$rpc
@@ -222,10 +227,12 @@ PLAN
 }
 mb() { echo "$(( $1 / 1024 ))MB"; }   # kB -> whole MB (every value here is a multiple of 8 kB blocks)
 declared() {
-  local plan; plan=$(plan); v(){ sed -n "s/^$1=//p" <<<"$plan"; }
+  local plan; plan=$(plan) || return 1; v(){ sed -n "s/^$1=//p" <<<"$plan"; }
+  local wal_level=minimal wal_senders=0
+  if [[ "$PROFILE" == app ]]; then wal_level=replica; wal_senders=3; fi
   cat <<SET
-wal_level                        minimal
-max_wal_senders                  0
+wal_level                        $wal_level
+max_wal_senders                  $wal_senders
 shared_buffers                   $(mb "$(v shared_kb)")
 effective_cache_size             $(mb "$(v ecs_kb)")
 work_mem                         $(mb "$(v work_kb)")
@@ -280,7 +287,7 @@ SET
 }
 
 tune_plan() {
-  local p; p=$(plan)
+  local p; p=$(plan) || return 1
   echo "tune-pg: the facts of $(hostname) for the $PROFILE profile"
   sed -n 's/^fact\.//p' <<<"$p" | awk -F= '{printf "  %-24s %s\n", $1, $2}'
   echo "tune-pg: the settings they give"

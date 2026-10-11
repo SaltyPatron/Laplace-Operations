@@ -35,4 +35,13 @@ $env:TUNE_FACT_CORES = '6'
 $env:LAPLACE_PG_RESERVED = '0'
 Remove-Item Env:LAPLACE_PG_BUFFERS_MAX -ErrorAction SilentlyContinue
 TuneValidatePlan
+$env:LAPLACE_PG_WORK_NODES = '0'
+$rejected = $false
+try { TuneApply | Out-Null } catch {
+    if ($_.Exception.Message -notmatch 'LAPLACE_PG_WORK_NODES') { throw }
+    $rejected = $true
+}
+if (-not $rejected -or $script:databaseTouched) { throw 'An invalid operator population reached the database' }
+$env:LAPLACE_PG_WORK_NODES = '4'
+TuneValidatePlan
 'PostgreSQL overcommit refusal before database access: passed'

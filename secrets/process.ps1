@@ -1,4 +1,4 @@
-function Invoke-Program([string]$Program, [string[]]$Arguments, [string]$InputText = '') {
+function Invoke-Program([string]$Program, [string[]]$Arguments, [string]$InputText = '', [int]$TimeoutSeconds = 60) {
     $info = [Diagnostics.ProcessStartInfo]::new($Program)
     $info.UseShellExecute = $false; $info.CreateNoWindow = $true
     $info.RedirectStandardInput = $true; $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
@@ -6,7 +6,7 @@ function Invoke-Program([string]$Program, [string[]]$Arguments, [string]$InputTe
     $process = [Diagnostics.Process]::Start($info)
     $output = $process.StandardOutput.ReadToEndAsync(); $errorText = $process.StandardError.ReadToEndAsync()
     $process.StandardInput.Write($InputText); $process.StandardInput.Close()
-    if (-not $process.WaitForExit(60000)) { $process.Kill($true); throw "$Program timed out" }
+    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) { $process.Kill($true); throw "$Program timed out" }
     $result = $output.GetAwaiter().GetResult()
     if ($process.ExitCode -ne 0) { throw "$Program failed: $($errorText.GetAwaiter().GetResult())" }
     $result

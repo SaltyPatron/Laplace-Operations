@@ -1,7 +1,7 @@
 #Requires -Version 7
 [CmdletBinding()]
 param(
-    [ValidateSet('prepare','activate','verify')][string]$Phase = 'prepare',
+    [ValidateSet('prepare','activate','verify','resources')][string]$Phase = 'prepare',
     [string]$Target = 'production',
     [string]$Installation = "$PSScriptRoot/application-runtime-installation.json"
 )
@@ -34,7 +34,7 @@ if ($Phase -eq 'prepare') {
     }
 }
 $path = "$root/$($config.record)"
-if ($Phase -ne 'verify') {
+if ($Phase -in 'prepare','activate') {
 $names = @(Invoke-Program bao @('kv','list','-format=json',$root) | ConvertFrom-Json)
 if ($config.record -notin $names) {
     $record = @{ database_host=$config.database_host; database=$config.database; role=$config.role; port=$config.port;
@@ -54,8 +54,12 @@ foreach ($file in 'application-runtime.py','knowledge-sync.py') {
     & scp "$PSScriptRoot/$file" "$($config.host):$remote/$file"
     if ($LASTEXITCODE) { throw "Cannot transfer runtime installer $file" }
 }
+if ($Phase -eq 'resources') {
+    & scp "$PSScriptRoot/../tune-pg.sh" "$($config.host):$remote/tune-pg.sh"
+    if ($LASTEXITCODE) { throw 'Cannot transfer the declared database tuner.' }
+}
 $command = (@('sudo','-n','python3',"$remote/application-runtime.py",'--phase',$Phase) | ForEach-Object { Sh $_ }) -join ' '
-Invoke-Program ssh @('-o','BatchMode=yes',$config.host,$command) ($config | ConvertTo-Json -Compress)
+Invoke-Program ssh @('-o','BatchMode=yes',$config.host,$command) ($config | ConvertTo-Json -Compress) -TimeoutSeconds 300
 $config.password = $null
 if ($Phase -eq 'prepare') {
     $arguments = @('sudo','-n','python3',"$remote/knowledge-sync.py",'--host',$config.host,'--credentials',$config.credentials,

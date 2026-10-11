@@ -20,4 +20,9 @@ grep -q 'OVER-COMMITTED' "$work/output"
 export TUNE_FACT_RAM_KB=131799160 TUNE_FACT_THREADS=12 TUNE_FACT_CORES=6 LAPLACE_PG_RESERVED=0
 unset LAPLACE_PG_BUFFERS_MAX
 tune_validate_plan
+export LAPLACE_PG_WORK_NODES=0
+if tune_apply >"$work/output" 2>&1; then echo 'invalid operator population was accepted' >&2; exit 1; fi
+[ ! -e "$work/database-touched" ] || { echo 'invalid operator population reached the database' >&2; exit 1; }
+export LAPLACE_PG_WORK_NODES=4
+tune_validate_plan
 echo 'PostgreSQL overcommit refusal before database access: passed'

@@ -84,6 +84,26 @@ that timer for `LAPLACE_API_USER`. Changed credentials are authenticated before 
 pool recreation. The two-connection application pool and six-connection role allocation include a concurrent
 recovery process and credential checks; these are not an aggregate knowledge-cluster resource budget.
 
+Apply the declared application-cluster resource budget with `./secrets/application-runtime.ps1 -Phase resources`.
+The installer checks the actual database directory, holds the host operation lock, validates the plan before database
+changes, and restores the previous PostgreSQL configuration if tuning or application verification fails. A successful
+apply includes the required database restart and authenticated application verification. Repair repeats the same
+operation. Application tuning failures now fail setup instead of being printed as a successful installation.
+
+The production declaration allocates eight application client connections: two serving, two recovery, and one each
+for credential refresh, backup, migration and operator inspection. PostgreSQL's maintenance/reserved allocation
+brings its connection setting to fourteen. A 1 GB reservation leaves room for other host processes; a 256 MB shared
+buffer ceiling avoids allocating a quarter of this host to its currently small application database. These are
+explicit initial allocations, not measured throughput guarantees. Knowledge runs on a different database host.
+
+`LAPLACE_PG_WORK_NODES` estimates simultaneous sort/hash nodes per backend (default two); the planner charges each
+against `work_mem` with its declared hash multiplier of one. Increasing the estimate reduces per-node memory, and
+plans that exceed the private-memory allocation at minimum settings are refused. This is not an arbitrary-query
+memory cap. [PostgreSQL documents the per-operation and parallel-worker multipliers](https://www.postgresql.org/docs/current/runtime-config-resource.html).
+The application WAL profile retains `replica` for recovery/base-backup compatibility; this does not itself enable
+WAL archiving or prove point-in-time recovery. Application overrides use `LAPLACE_APP_PG_*` in machine.env so they
+do not silently change a co-located knowledge cluster's plan.
+
 Register an existing Stockfish build using its actual selected source path:
 
 ```sh
