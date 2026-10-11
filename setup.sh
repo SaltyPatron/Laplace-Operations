@@ -3,7 +3,7 @@
 #
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
-#                              appdb | backup | site | runtime | agents | idlestop | report
+#                              appdb | backup | site | runtime | modular | agents | idlestop | report
 #   sudo ./setup.sh machine    public declaration permissions only; no packages, database or service changes
 #   sudo ./setup.sh secrets-stack  converge the existing hart-server Vaultwarden/OpenBao stack; not part of all
 #   sudo ./setup.sh secrets-backup install the backup job only and run a checked backup; not part of all
@@ -103,6 +103,7 @@ host      all   $PGUSER        ::1/128            scram-sha-256
 hostssl   all   $PGUSER        $LAPLACE_LAN       scram-sha-256
 include_if_exists pg_hba.remote.conf
 include_if_exists pg_hba.runtime.conf
+include_if_exists pg_hba.modular.conf
 hostnossl all   all            0.0.0.0/0          reject
 "
 # Who operates Laplace on this machine is the shared group: every member connects over the socket as $LAPLACE_ROLE,
@@ -110,6 +111,7 @@ hostnossl all   all            0.0.0.0/0          reject
 operators(){ { getent group "$LAPLACE_GROUP" | cut -d: -f4 | tr , '\n'; echo "$LAPLACE_AGENT_USER"; echo "$PGUSER"; } | grep . | sort -u; }
 ident(){ echo "# who connects over the socket as $LAPLACE_ROLE: the members of $LAPLACE_GROUP, the agent, the server's user"
          echo 'include_if_exists pg_ident.runtime.conf'
+         echo 'include_if_exists pg_ident.modular.conf'
          operators | while read -r u; do printf 'laplace  %-20s %s\n' "$u" "$LAPLACE_ROLE"; done; }
 
 # ------------------------------------------------------------------------------------------------------- the parts

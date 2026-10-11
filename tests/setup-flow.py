@@ -29,6 +29,10 @@ for name in volumes packages rights kernel deps cluster settings access backup l
 done
 appdb_cluster() { stage separate_cluster; }
 python3() {
+  if [[ $# == 2 && $1 == "$here/installation/modular.py" && $2 == install ]]; then
+    stage modular
+    return
+  fi
   [[ $# == 3 && $1 == "$here/installation/runtime.py" && $2 == --manifest && $3 == "$setup_runtime_manifest" ]]
   stage runtime
 }
@@ -47,11 +51,13 @@ printf 'complete:%s\n' "$setup_runtime_verified" >> "$TRACE"
                 self.assertEqual(stages.count('runtime'), 1)
                 self.assertLess(stages.index('site'), stages.index('runtime'))
                 self.assertLess(stages.index('runtime'), stages.index('report'))
+                self.assertLess(stages.index('runtime'), stages.index('modular'))
+                self.assertLess(stages.index('modular'), stages.index('report'))
                 self.assertNotIn('separate_cluster', stages)
                 self.assertEqual(stages[-1], 'complete:1')
 
     def test_failures_stop_before_success_report(self):
-        for failed in ('packages', 'site', 'runtime'):
+        for failed in ('packages', 'site', 'runtime', 'modular'):
             with self.subTest(failed=failed):
                 result, stages = self.run_setup(fail=failed)
                 self.assertEqual(result.returncode, 37, result.stderr)
