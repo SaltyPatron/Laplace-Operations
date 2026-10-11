@@ -33,14 +33,14 @@ CREATE TABLE public.witness(id int); CREATE SCHEMA app; CREATE TABLE app.private
 INSERT INTO public.entity VALUES(1);''')
     sql(name, modular.grants(config))
     sql(name, modular.grants(config))
-    assert sql(name, f'SET ROLE "{name}"; SELECT count(*) FROM public.entity;').splitlines()[-1] == '1'
-    sql(name, f'''SET ROLE "{name}"; BEGIN;
+    assert sql(name, f'SET SESSION AUTHORIZATION "{name}"; SELECT count(*) FROM public.entity;').splitlines()[-1] == '1'
+    sql(name, f'''SET SESSION AUTHORIZATION "{name}"; BEGIN;
 INSERT INTO public.entity VALUES(2); UPDATE public.entity SET id=3 WHERE id=2;
 DELETE FROM public.entity WHERE id=3; TRUNCATE public.entity;
 CREATE TABLE stage.runtime_batch(id int); INSERT INTO stage.runtime_batch VALUES(1); ROLLBACK;''')
     for forbidden in ('SELECT * FROM app.private;', 'SET ROLE laplace;',
                       'CREATE TABLE public.forbidden(id int);', 'ALTER ROLE laplace SUPERUSER;'):
-        sql(name, f'SET ROLE "{name}"; BEGIN; {forbidden} ROLLBACK;', succeeds=False)
+        sql(name, f'SET SESSION AUTHORIZATION "{name}"; BEGIN; {forbidden} ROLLBACK;', succeeds=False)
     attributes = sql(name, f"SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname='{name}';")
     assert attributes == 'f|f|f|f|f', attributes
     print('Actual PostgreSQL grants passed: read/write/staging permitted; private schema, DDL and administrator impersonation denied; rerun idempotent.')
