@@ -31,8 +31,8 @@ identity isolation. Those remain separate acceptance requirements. The database 
 
 ## Default setup and runtime identity installation
 
-On the installed hart-server, with the operator already logged into the existing OpenBao, the normal command
-converges the host and its declared runtime together:
+On the installed hart-server, the normal command converges the host and its declared runtime together.
+An existing workload enrollment authenticates independently of the operator's OpenBao session:
 
 ```sh
 sudo ./setup.sh
