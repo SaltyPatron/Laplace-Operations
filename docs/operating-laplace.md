@@ -210,11 +210,15 @@ and API at `http://localhost:5187` until Ctrl+C. Native artifacts, source and
 build paths come from the existing machine configuration. It starts the normal application background services and
 loads the existing sign-in provider configuration from the declared OpenBao identity reference. OAuth callback
 registration must allow this local origin; an authorization redirect alone does not prove interactive sign-in.
-The Google redirect URI for the default desktop port is `http://localhost:5187/signin-google`.
+The Google redirect URI for the direct development process is `http://localhost:5187/signin-google`.
+This process is separate from the installed IIS site. `verify -Target desktop` reuses an owned running process,
+preserving its PID and browser session; when stopped it starts and stops a temporary verification process.
+It does not establish that IIS works. The `browser-routes` acceptance check exercises the declared browser origins
+in `network/environments.json`, including TLS and the callbacks emitted through IIS/nginx.
 [Google requires the callback to match the OAuth client's registered URI](https://developers.google.com/identity/protocols/oauth2/web-server).
 [Microsoft documents its localhost callback rules](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url).
-`verify -Target desktop` starts that same process, exercises it, writes a receipt and stops it; select a free
-`LAPLACE_API_PORT` when another desktop instance is running. Use `start` or `run` for ongoing browser use. Run `build` after source
+`verify -Target desktop` exercises the owned running instance, or starts and stops a temporary instance if none is running.
+Use `start` or `run` for ongoing browser use. Run `build` after source
 changes. `LAPLACE_API_PORT` selects a different loopback port. `LAPLACE_DEVELOPMENT_INSTALLATION` selects another
 development declaration for both configuration and run; declared database pool sizes are per datasource.
 

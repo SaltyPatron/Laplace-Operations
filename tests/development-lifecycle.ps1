@@ -25,11 +25,20 @@ try {
     $second=Result (Operation start)
     if ($first.pid -ne $second.pid) { throw 'Repeated start created another process.' }
     if ((Invoke-WebRequest $first.url -TimeoutSec 10).StatusCode -ne 200) { throw 'Started application did not serve its UI.' }
+    $verified=Result (Operation verify)
+    if ($verified.status -ne 'verified' -or $verified.pid -ne $first.pid -or -not $verified.reused_running_instance) {
+        throw 'Verification did not use the existing application process.'
+    }
+    if ((Get-Content -LiteralPath $receiptPath -Raw) -cne $originalReceipt -or
+        (Result (Operation status)).pid -ne $first.pid) { throw 'Verification changed the running application or its lifecycle receipt.' }
     foreach ($failure in 'process-start','application-path') {
         $tampered=$originalReceipt | ConvertFrom-Json
         if ($failure -eq 'process-start') { $tampered.process_started_utc=([DateTimeOffset]$tampered.process_started_utc).AddSeconds(1).ToString('o') }
         else { $tampered.api_path=Join-Path (Split-Path $tampered.api_path) 'another-application.dll' }
         $tampered | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $receiptPath
+        $refused=$false
+        try { $null=Operation verify } catch { $refused=$true }
+        if (-not $refused) { throw "Verification accepted a mismatched $failure." }
         $null=Operation stop
         if (-not (Get-Process -Id $first.pid -ErrorAction SilentlyContinue)) { throw "Stop accepted a mismatched $failure." }
         [IO.File]::WriteAllText($receiptPath,$originalReceipt)
@@ -37,6 +46,8 @@ try {
     $null=Operation stop
     if ((Result (Operation status)).status -ne 'stopped' -or (Get-Process -Id $first.pid -ErrorAction SilentlyContinue)) { throw 'Stop left the application running.' }
     $originalReceipt=$null
+    $null=Operation verify
+    if ((Result (Operation status)).status -ne 'stopped') { throw 'Cold verification left an application running.' }
     $listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,$port)
     $listener.Start()
     try {
@@ -46,8 +57,9 @@ try {
         if (-not $listener.Server.IsBound) { throw 'Refusing start disturbed the existing listener.' }
     } finally { $listener.Stop() }
     @{passed=$true;port=$port;revision=$first.revision;run_directory=$first.logs;
-      checks=@('workload-authenticated-start','ui-200','idempotent-start','process-start-mismatch-refused',
-               'application-path-mismatch-refused','stop','occupied-port-refused')} | ConvertTo-Json -Depth 4
+      checks=@('workload-authenticated-start','ui-200','idempotent-start','verify-existing-process',
+               'verification-preserves-process-and-receipt','process-start-mismatch-refused',
+               'application-path-mismatch-refused','stop','cold-verification','occupied-port-refused')} | ConvertTo-Json -Depth 4
 } finally {
     if ($originalReceipt -and $receiptPath) {
         [IO.File]::WriteAllText($receiptPath,$originalReceipt)

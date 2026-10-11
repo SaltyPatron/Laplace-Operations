@@ -578,7 +578,9 @@ site(){ part site
   say "site toolchain" "dotnet $(dotnet --version 2>/dev/null || echo MISSING), node $(node --version 2>/dev/null || echo MISSING), nginx $(nginx -v 2>&1 | sed 's|.*/||'), gh $(gh --version 2>/dev/null | sed -n '1s/.* \([0-9.]*\) .*/\1/p')"
   m=${LAPLACE_MONOREPO:-$LAPLACE_SRC/Laplace}; s=$m/deploy/linux/site-host.sh
   [ -f "$s" ] || { say "site" "no $s: git clone https://github.com/$LAPLACE_GITHUB/Laplace $m"; return 0; }
-  bash "$s"; }
+  bash "$s"
+  python3 "$here/network/install-nginx.py" --apply
+}
 # The repositories' agents: one runner for every repository with a self-hosted workflow (agents.sh, which fails its
 # status when one has none).
 agents(){ part agents; SUDO_USER=$op bash "$here/agents.sh" all; }
