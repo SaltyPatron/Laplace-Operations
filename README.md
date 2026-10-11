@@ -58,6 +58,8 @@ sudo ./setup.sh                                    # once per machine: volumes, 
 tests/tune-pg-plan.sh                              # the rules against every host's measured facts, and the invariants they must keep
 sudo ./setup.sh settings                           # the same declaration, when a pending restart needs root
 sudo ./setup.sh machine                            # repair declaration permissions only; no provisioning
+./setup.sh repair --check                          # validate this host against installation/<hostname>.json; no sudo
+sudo ./setup.sh repair                             # install/repair that declaration and verify the landed application and secrets backups
 sudo ./setup.sh secrets-stack                      # hart-server's existing Vaultwarden/OpenBao services; explicit only
 sudo ./setup.sh secrets-backup                     # install only the backup job and run one checked backup
 sudo ./setup.sh secrets-client                     # host AppRole -> app DB password files and recurring refresh

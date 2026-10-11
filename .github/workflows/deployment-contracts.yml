@@ -75,6 +75,7 @@ jobs:
           python3 tests/cloud-idle.py
           python3 tests/cloud-lease.py
           python3 tests/development-database.py
+          python3 tests/host-repair.py
           pwsh -NoProfile -File tests/deployment-artifacts.ps1
       - name: Verify acceptance result failure boundaries
         shell: pwsh

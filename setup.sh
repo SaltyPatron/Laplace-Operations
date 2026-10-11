@@ -23,6 +23,11 @@
 # declares its own.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
+# Repair has its own complete preflight and host lock before any mutation.
+if [[ ${1:-} == repair ]]; then
+  shift
+  exec python3 "$here/installation/repair.py" "$@"
+fi
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
 . "$here/machine-config.sh"
 machine_config_permissions

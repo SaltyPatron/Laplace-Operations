@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Repair a declared existing host and check backups without changing serving databases."""
+import argparse
+from datetime import datetime, timezone
+import fcntl
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import socket
+import sqlite3
+import subprocess
+import sys
+import tarfile
+import tempfile
+import uuid
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def checked(argv, **kwargs):
+    result = subprocess.run(argv, capture_output=True, **kwargs)
+    if result.returncode:
+        # Commands can include database diagnostics or secret-store output.
+        raise RuntimeError(f'{Path(argv[0]).name} failed (exit {result.returncode}); no success receipt issued')
+    return result.stdout
+
+
+def digest(path):
+    value = hashlib.sha256()
+    with path.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            value.update(chunk)
+    return value.hexdigest()
+
+
+def checked_archive(directory, database):
+    candidates = [p for p in directory.glob('*.dump') if '-' + database + '-' in p.name and not p.is_symlink()]
+    if not candidates:
+        raise ValueError('No application backup in the declared landing directory')
+    archive = max(candidates, key=lambda p: p.stat().st_mtime_ns)
+    actual = digest(archive)
+    checksum = Path(str(archive) + '.sha256')
+    if checksum.is_symlink() or checksum.read_text().split()[0] != actual:
+        raise ValueError('Landed application backup checksum mismatch')
+    return archive, actual
+
+
+def machine_text(path, declarations):
+    parser = load_module('machine_env', ROOT / 'machine-env.py')
+    current = parser.resolve(path, {}, explicit=False)
+    for key, value in declarations.items():
+        if not re.fullmatch(r'LAPLACE_[A-Z0-9_]+', key) or not isinstance(value, str) or '\n' in value:
+            raise ValueError('Invalid public machine declaration')
+        if key in current and current[key] != value:
+            raise ValueError(f'Existing {key} differs from the selected installation; refusing to overwrite it')
+    text = path.read_text() if path.exists() else '# Public installation declaration; secrets remain in their private stores.\n'
+    missing = {k: v for k, v in declarations.items() if k not in current}
+    return text.rstrip() + '\n' + ''.join(k + '=' + shlex.quote(v) + '\n' for k, v in missing.items())
+
+
+def preflight(config):
+    if socket.gethostname().split('.')[0].lower() != config['host']:
+        raise ValueError('The installation declaration belongs to another host')
+    machine = config['machine']
+    for key in ('LAPLACE_SRC', 'LAPLACE_BUILD', 'LAPLACE_WORK', 'LAPLACE_DEPS', 'LAPLACE_DATA',
+                'LAPLACE_INSTALL_PREFIX', 'LAPLACE_PG_DIR', 'LAPLACE_LOCKS'):
+        path = Path(machine[key])
+        if not path.is_absolute() or not path.is_dir():
+            raise ValueError(f'{key} must name an existing absolute directory')
+    for path in config['required_mounts']:
+        checked(['mountpoint', '-q', path], timeout=10)
+    for service in config['required_services']:
+        checked(['systemctl', 'is-active', '--quiet', service], timeout=10)
+    for tool in ('psql', 'pg_restore'):
+        checked([str(Path(machine['LAPLACE_PG_DIR']) / 'bin' / tool), '--version'], timeout=10)
+    return machine_text(Path(config['machine_file']), machine)
+
+
+def restore_landing(config):
+    machine, backup = config['machine'], config['backup']
+    archive, checksum = checked_archive(Path(backup['landing']), backup['source_database'])
+    database = 'laplace_repair_' + uuid.uuid4().hex
+    common = ['runuser', '-u', machine['LAPLACE_PGUSER'], '--']
+    pgbin = Path(machine['LAPLACE_PG_DIR']) / 'bin'
+    connection = ['-h', backup['pgsocket'], '-p', machine['LAPLACE_PGPORT']]
+
+    def sql(statement, target='postgres'):
+        return checked(common + [str(pgbin / 'psql'), '-XwAt', '-v', 'ON_ERROR_STOP=1',
+            *connection, '-d', target, '-f', '-'], input=statement, text=True, timeout=60).strip()
+
+    if Path(sql('SHOW data_directory')).resolve() != Path(machine['LAPLACE_PGDATA']).resolve():
+        raise ValueError('Connected PostgreSQL data directory differs from this installation')
+    created = False
+    try:
+        sql(f'CREATE DATABASE "{database}" TEMPLATE template0;')
+        created = True
+        sql(f'REVOKE ALL ON DATABASE "{database}" FROM PUBLIC;')
+        with archive.open('rb') as stream:
+            checked(common + [str(pgbin / 'pg_restore'), '-w', *connection, '-d', database,
+                '--no-owner', '--no-acl', '--exit-on-error', '--single-transaction'], stdin=stream, timeout=300)
+        tables = int(sql("SELECT count(*) FROM information_schema.tables WHERE table_schema='app'", database))
+        if not tables:
+            raise ValueError('Restored application schema contains no tables')
+        rows = json.loads(sql("SELECT json_build_object('tenants',(SELECT count(*) FROM app.tenants),"
+                              "'users',(SELECT count(*) FROM app.users))", database))
+        if digest(archive) != checksum:
+            raise ValueError('Landed backup changed during the restore rehearsal')
+        return {'archive': str(archive), 'sha256': checksum, 'app_tables': tables, 'rows': rows,
+                'restored_database_removed': True, 'scope': 'database restore and SQL reads; API recovery is a separate check'}
+    finally:
+        if created:
+            # Only the freshly created UUID database is eligible for removal.
+            sql(f'DROP DATABASE "{database}" WITH (FORCE);')
+
+
+def restore_vaultwarden(directory):
+    archives = list((directory / 'vaultwarden').glob('vw-*.tar.gz'))
+    if not archives:
+        raise ValueError('No Vaultwarden backup available')
+    archive = max(archives, key=lambda p: p.stat().st_mtime_ns)
+    with tempfile.TemporaryDirectory(prefix='.restore-', dir=directory) as temporary:
+        database = Path(temporary) / 'db.sqlite3'
+        with tarfile.open(archive, 'r:gz') as tar:
+            members = [m for m in tar.getmembers() if m.name in ('db.sqlite3', './db.sqlite3')]
+            if len(members) != 1 or not members[0].isfile():
+                raise ValueError('Vaultwarden archive must contain one regular database file')
+            with tar.extractfile(members[0]) as source, database.open('wb') as target:
+                import shutil
+                shutil.copyfileobj(source, target)
+        with sqlite3.connect(f'file:{database}?mode=ro', uri=True) as connection:
+            if connection.execute('PRAGMA integrity_check').fetchall() != [('ok',)]:
+                raise ValueError('Restored Vaultwarden database failed its integrity check')
+            tables = connection.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+            if not tables:
+                raise ValueError('Restored Vaultwarden database has no tables')
+        return {'archive': str(archive), 'sha256': digest(archive), 'sqlite_integrity': 'ok', 'tables': tables,
+                'scope': 'extracted SQLite integrity; full Vaultwarden and OpenBao recovery remain separate'}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--installation', type=Path)
+    parser.add_argument('--check', action='store_true', help='Unprivileged installed-host preflight; makes no changes')
+    args = parser.parse_args()
+    declaration = args.installation or Path(__file__).with_name(socket.gethostname().split('.')[0].lower() + '.json')
+    config = json.loads(declaration.read_text())
+    proposed = preflight(config)
+    if args.check:
+        print(json.dumps({'preflight': 'passed', 'host': config['host'], 'installation': str(declaration),
+                          'privileged_installation': 'not run', 'backup_restore': 'not run'}))
+        return
+    if os.geteuid() != 0:
+        parser.error('Use sudo ./setup.sh repair for installation; --check needs no sudo')
+    sync = load_module('knowledge_sync', ROOT / 'secrets/knowledge-sync.py')
+    machine = Path(config['machine_file'])
+    receipt_dir = Path(config['receipt_directory'])
+    receipt_dir.mkdir(parents=True, exist_ok=True, mode=0o755)
+    receipt = receipt_dir / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8] + '.json')
+    result = {'host': config['host'], 'installation_sha256': digest(declaration), 'status': 'failed',
+              'started_utc': datetime.now(timezone.utc).isoformat(), 'scope': 'host configuration and backup repair'}
+    git = ['git', '-c', f'safe.directory={ROOT}', '-C', str(ROOT)]
+    result['operations_revision'] = checked(git + ['rev-parse', 'HEAD'], text=True, timeout=10).strip()
+    result['dirty_source'] = bool(checked(git + ['status', '--porcelain'], text=True, timeout=10).strip())
+    try:
+        with open(Path(config['machine']['LAPLACE_LOCKS']) / 'host-resource.lock', 'a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Recheck after acquiring the same host lock used by deployment and ingestion.
+            proposed = preflight(config)
+            machine.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+            with sync.configuration_transaction([machine], lambda: None):
+                sync.atomic(machine, proposed, 0o644, 0, 0)
+                result['machine_configuration'] = 'installed'
+                print('Checking the landed application backup by restoring into a disposable database...', flush=True)
+                result['landed_application_backup'] = restore_landing(config)
+                print('Repairing the existing secrets backup job and taking a checked backup...', flush=True)
+                checked(['bash', str(ROOT / 'secrets/install-backup.sh')], timeout=300)
+                result['vaultwarden_archive'] = restore_vaultwarden(Path(config['backup']['secrets_directory']))
+                for service in config['required_services']:
+                    checked(['systemctl', 'is-active', '--quiet', service], timeout=10)
+                result['status'] = 'passed'
+    except Exception as error:
+        result['error'] = str(error)
+        result['machine_configuration'] = 'previous configuration restored'
+        raise
+    finally:
+        result['finished_utc'] = datetime.now(timezone.utc).isoformat()
+        sync.atomic(receipt, json.dumps(result, indent=2) + '\n', 0o644, 0, 0)
+        print(f'Repair {result["status"]}; receipt: {receipt}', flush=True)
+
+
+if __name__ == '__main__':
+    main()

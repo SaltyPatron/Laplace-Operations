@@ -1,0 +1,38 @@
+{
+  "host": "hart-server",
+  "machine_file": "/etc/laplace/machine.env",
+  "receipt_directory": "/var/lib/laplace/installation/receipts",
+  "required_mounts": ["/repos", "/data/pgdata", "/backup", "/hosting"],
+  "required_services": ["pgdata", "laplace-api", "laplace-mcp", "openbao", "nginx"],
+  "machine": {
+    "LAPLACE_SRC": "/repos/src",
+    "LAPLACE_BUILD": "/repos/build",
+    "LAPLACE_WORK": "/repos/work",
+    "LAPLACE_DEPS": "/repos/deps",
+    "LAPLACE_DEPSRC": "/repos/src",
+    "LAPLACE_DATA": "/vault/Data",
+    "LAPLACE_INSTALL_PREFIX": "/opt/laplace",
+    "LAPLACE_PG_DIR": "/usr/local/pgsql",
+    "LAPLACE_PGDATA": "/data/pgdata",
+    "LAPLACE_PGWAL": "/data/pgdata/pg_wal",
+    "LAPLACE_PGTEMP": "/data/pgtemp",
+    "LAPLACE_PGUSER": "postgres",
+    "LAPLACE_PGSERVICE": "pgdata",
+    "LAPLACE_PGPORT": "5432",
+    "LAPLACE_ROLE": "laplace",
+    "LAPLACE_AGENT_USER": "laplace-runner",
+    "LAPLACE_GROUP": "laplace-runner",
+    "LAPLACE_PG_GROUP": "postgres-extensions",
+    "LAPLACE_LOCKS": "/run/lock/laplace",
+    "LAPLACE_LAN": "192.168.1.0/24",
+    "LAPLACE_SITE_PORT": "8080",
+    "LAPLACE_API_URL": "http://127.0.0.1:5187",
+    "LAPLACE_MCP_HTTP_PORT": "5190"
+  },
+  "backup": {
+    "landing": "/backup/laplace/hart-prod",
+    "source_database": "laplace-app",
+    "pgsocket": "/tmp",
+    "secrets_directory": "/backup/secrets"
+  }
+}
