@@ -121,7 +121,7 @@ def verify(config):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--phase', choices=('prepare', 'activate', 'verify', 'resources'), required=True)
+    parser.add_argument('--phase', choices=('prepare', 'activate', 'verify', 'resources', 'resources-check'), required=True)
     args = parser.parse_args()
     config = json.load(sys.stdin)
     if os.geteuid() != 0:
@@ -156,10 +156,13 @@ def main():
 
         if sql('SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=' + literal(database), 'postgres') != owner:
             raise ValueError('The declared application database owner does not match the installation')
-        if args.phase == 'resources':
+        if args.phase in ('resources', 'resources-check'):
             data = Path(sql('SHOW data_directory'))
             if data.resolve() != Path(config['database_data']).resolve():
                 raise ValueError('The declared application cluster differs from the connected database')
+            service_pid = subprocess.check_output(['systemctl', 'show', config['database_service'], '-p', 'MainPID', '--value'], text=True).strip()
+            if service_pid == '0' or service_pid != (data / 'postmaster.pid').read_text().splitlines()[0]:
+                raise ValueError('The declared service does not own the connected database process')
             resource_keys = {'LAPLACE_PG_SERVING', 'LAPLACE_PG_WORK_NODES', 'LAPLACE_PG_RESERVED', 'LAPLACE_PG_BUFFERS_MAX'}
             if set(config['resource_settings']) != resource_keys:
                 raise ValueError('Incomplete application resource declaration')
@@ -177,6 +180,11 @@ def main():
             tuner = str(Path(__file__).with_name('tune-pg.sh'))
             subprocess.run(['bash', '-c', 'source "$1"; tune_validate_plan', 'application-resources', tuner],
                 env=environment, check=True, timeout=30)
+            if args.phase == 'resources-check':
+                subprocess.run(['bash', tuner, '--check'], env=environment, check=True, timeout=30)
+                print(json.dumps({'application_resources': 'verified', 'database_service': config['database_service'],
+                                  'resource_settings': config['resource_settings']}))
+                return
             def recover_resources():
                 subprocess.run(['systemctl', 'restart', config['database_service']], check=True, timeout=60)
                 sync.activate(config['runtime_user'], prefix, config['public_base'])

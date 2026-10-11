@@ -89,6 +89,7 @@ The installer checks the actual database directory, holds the host operation loc
 changes, and restores the previous PostgreSQL configuration if tuning or application verification fails. A successful
 apply includes the required database restart and authenticated application verification. Repair repeats the same
 operation. Application tuning failures now fail setup instead of being printed as a successful installation.
+Use `-Phase resources-check` for readback without changing the database or restarting it.
 
 The production declaration allocates eight application client connections: two serving, two recovery, and one each
 for credential refresh, backup, migration and operator inspection. PostgreSQL's maintenance/reserved allocation

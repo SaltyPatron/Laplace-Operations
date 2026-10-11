@@ -1,7 +1,7 @@
 #Requires -Version 7
 [CmdletBinding()]
 param(
-    [ValidateSet('prepare','activate','verify','resources')][string]$Phase = 'prepare',
+    [ValidateSet('prepare','activate','verify','resources','resources-check')][string]$Phase = 'prepare',
     [string]$Target = 'production',
     [string]$Installation = "$PSScriptRoot/application-runtime-installation.json"
 )
@@ -54,7 +54,7 @@ foreach ($file in 'application-runtime.py','knowledge-sync.py') {
     & scp "$PSScriptRoot/$file" "$($config.host):$remote/$file"
     if ($LASTEXITCODE) { throw "Cannot transfer runtime installer $file" }
 }
-if ($Phase -eq 'resources') {
+if ($Phase -in 'resources','resources-check') {
     & scp "$PSScriptRoot/../tune-pg.sh" "$($config.host):$remote/tune-pg.sh"
     if ($LASTEXITCODE) { throw 'Cannot transfer the declared database tuner.' }
 }
