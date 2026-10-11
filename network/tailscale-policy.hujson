@@ -1,0 +1,39 @@
+// Laplace host access. Direct LAN traffic is governed by the local firewalls.
+{
+  "hosts": {
+    "hart-desktop": "100.70.222.78",
+    "hart-desktop-v6": "fd7a:115c:a1e0::be33:de4f",
+    "hart-server": "100.76.181.27",
+    "hart-server-v6": "fd7a:115c:a1e0::6501:b5d3",
+    "hart-prod": "100.124.95.17",
+    "hart-prod-v6": "fd7a:115c:a1e0::6333:5f12",
+    "hart-cloud": "100.103.255.122",
+    "hart-cloud-v6": "fd7a:115c:a1e0::8b33:ff7b",
+    "hart-server-lan": "192.168.1.2",
+    "hart-desktop-lan": "192.168.1.3",
+    "hart-router-lan": "192.168.1.1"
+  },
+  "grants": [
+    // Development: SSH administration, HTTPS, SQL and the installed internal proxy.
+    {"src":["hart-desktop","hart-desktop-v6"],"dst":["hart-server","hart-server-v6","hart-server-lan","hart-prod","hart-prod-v6","hart-cloud","hart-cloud-v6"],"ip":["tcp:22","tcp:443","tcp:5432","tcp:8080"]},
+    // VM knowledge, OpenBao, MCP and restricted SSH backup landing.
+    {"src":["hart-prod","hart-prod-v6","hart-cloud","hart-cloud-v6"],"dst":["hart-server","hart-server-v6","hart-server-lan"],"ip":["tcp:22","tcp:443","tcp:5432","tcp:8080"]},
+    // Server-side deployment and qualification of the selected VM.
+    {"src":["hart-server","hart-server-v6","hart-server-lan"],"dst":["hart-prod","hart-prod-v6","hart-cloud","hart-cloud-v6"],"ip":["tcp:22","tcp:443","tcp:5432","tcp:8080"]},
+    // VM-to-VM verification while cloud is explicitly running.
+    {"src":["hart-prod","hart-prod-v6"],"dst":["hart-cloud","hart-cloud-v6"],"ip":["tcp:22","tcp:443","tcp:5432","tcp:8080"]},
+    {"src":["hart-cloud","hart-cloud-v6"],"dst":["hart-prod","hart-prod-v6"],"ip":["tcp:22","tcp:443","tcp:8080"]},
+    // Named desktop HTTPS verification from the existing server and VMs.
+    {"src":["hart-server","hart-server-v6","hart-prod","hart-prod-v6","hart-cloud","hart-cloud-v6"],"dst":["hart-desktop","hart-desktop-v6","hart-desktop-lan"],"ip":["tcp:443"]},
+    // Private DNS via the advertised LAN route, including TCP and DNS-over-TLS.
+    {"src":["hart-desktop","hart-desktop-v6","hart-prod","hart-prod-v6","hart-cloud","hart-cloud-v6"],"dst":["hart-server","hart-server-v6","hart-server-lan","hart-router-lan"],"ip":["udp:53","tcp:53","tcp:853"]}
+  ],
+  "ssh": [
+    {"action":"check","src":["autogroup:member"],"dst":["autogroup:self"],"users":["autogroup:nonroot","root"]}
+  ],
+  "tests": [
+    {"src":"100.124.95.17","proto":"tcp","accept":["hart-server:5432","hart-server:8080","hart-server-lan:443","hart-server:22","hart-cloud:5432","hart-desktop:443"],"deny":["hart-desktop:3389","hart-server:8200","hart-server:25565","hart-router-lan:80"]},
+    {"src":"100.103.255.122","proto":"tcp","accept":["hart-server:5432","hart-server-lan:443","hart-server:22"],"deny":["hart-desktop:3389","hart-server:8222","hart-server:25565"]},
+    {"src":"100.70.222.78","proto":"tcp","accept":["hart-server:22","hart-server:5432","hart-prod:22","hart-cloud:22"]}
+  ]
+}

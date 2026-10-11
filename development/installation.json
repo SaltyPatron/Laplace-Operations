@@ -2,7 +2,7 @@
   "client": "hart-desktop",
   "bao_address": "https://openbao.hartonomous.com",
   "bao_role": "laplace-hart-desktop-development",
-  "identity_reference": "kv/shared/laplace-auth",
+  "identity_reference": "kv/hosts/hart-desktop/laplace-mono-identity",
   "client_address": "100.70.222.78",
   "database_host": "hart-server",
   "port": 5432,
