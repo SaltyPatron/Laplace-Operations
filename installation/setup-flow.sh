@@ -7,7 +7,7 @@ setup_dispatch() {
   ((${#parts[@]})) || parts=(all)
   for p in "${parts[@]}"; do
     case $p in
-      all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|runtime|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client|knowledge-client) ;;
+      all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|runtime|modular|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client|knowledge-client) ;;
       *) echo "Unknown setup stage: $p" >&2; return 2 ;;
     esac
   done
@@ -16,11 +16,16 @@ setup_dispatch() {
       all)
         volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup
         landing_of_all=1; landing; landing_of_all=
-        site; runtime; agents; idlestop; report
+        site; runtime; modular; agents; idlestop; report
         ;;
       *) "$p" ;;
     esac
   done
+}
+
+modular() {
+  part 'modular runtime'
+  python3 "$here/installation/modular.py" install
 }
 
 runtime() {

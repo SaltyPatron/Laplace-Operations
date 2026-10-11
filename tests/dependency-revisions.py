@@ -16,7 +16,13 @@ class Revisions(unittest.TestCase):
         result = resolver.resolve('owner', 'repository_dispatch', {'client_payload': {
             'repository': 'owner/Laplace-Engine', 'sha': 'b' * 40}},
             lambda path: {'status': 'ahead'} if '/compare/' in path else {'sha': 'a' * 40})
-        self.assertEqual(result, {'native': 'a' * 40, 'postgres': 'a' * 40, 'engine': 'b' * 40})
+        self.assertEqual(result, {'native': 'a' * 40, 'postgres': 'a' * 40, 'engine': 'b' * 40, 'mcp': 'a' * 40})
+
+    def test_modular_mcp_dispatch_preserves_triggering_revision(self):
+        result = resolver.resolve('owner', 'repository_dispatch', {'client_payload': {
+            'repository': 'owner/Laplace-MCP', 'sha': 'c' * 40}},
+            lambda path: {'status': 'ahead'} if '/compare/' in path else {'sha': 'a' * 40})
+        self.assertEqual(result['mcp'], 'c' * 40)
 
     def test_untrusted_payloads_fail_before_api_access(self):
         for repo, sha in [('stranger/Laplace-Native', 'b' * 40), ('owner/Laplace-Native', 'main'),
