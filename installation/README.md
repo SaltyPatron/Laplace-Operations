@@ -81,6 +81,12 @@ retry. A subsequent credential-timer installation failure leaves the verified se
 setup failed, so rerun the same operation. Secret-free receipts are saved alongside repair receipts.
 Fixture/CI success and `--check` are not proof that privileged installation has run.
 
+Modular setup repairs the installed package or resumes the last completed package whose installation
+selection matches. It verifies artifact and dependency hashes before reuse, then checks the runtime
+identity and candidate before changing services. `modular.py deploy` selects a new source revision;
+it requires completed OS/service installation before building. Repeated setup does not implicitly
+upgrade an installed modular release.
+
 Runtime setup also converges the declared local PostgreSQL certificate before changing service identities.
 Its subject is distinct from the OS default server certificate, its SANs cover the declared database endpoints,
 and both API connections and credential refresh use full certificate verification against

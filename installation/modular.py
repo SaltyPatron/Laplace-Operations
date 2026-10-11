@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
 import grp
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -223,13 +224,46 @@ def peer_check(config):
     for database, statement in ((config['database'], 'SET ROLE laplace;'),
                                 (config['database'], 'BEGIN; CREATE TABLE public.modular_boundary_probe(id int); ROLLBACK;'),
                                 ('postgres', 'SELECT 1;')):
-        result = subprocess.run(command + ['-d', database, '-c', statement], capture_output=True, text=True)
+        result = checked(command + ['-d', database, '-c', statement], capture_output=True, check=False)
         if result.returncode == 0:
             raise ValueError('Runtime database privilege boundary was not enforced')
 
 
-def package(config, receipt_path):
+def prepared_package(config, program):
+    """Repair the installed release, or resume the last matching prepared install."""
+    prefix = Path(config['prefix'])
+    current = prefix / 'current'
+    if current.is_symlink():
+        release = current.resolve(strict=True)
+    elif current.exists():
+        raise ValueError('Active release path must be a symlink')
+    else:
+        release = None
+        for prior in sorted(Path(config['receipts']).glob('*/package.json'), reverse=True):
+            selection = prior.with_name('selection.json')
+            if selection.is_file() and json.loads(selection.read_text()) == config:
+                release = Path(json.loads(prior.read_text())['release'])
+                break
+        if release is None:
+            return None
+    if release.parent.resolve() != (prefix / 'releases').resolve() or release.is_symlink():
+        raise ValueError('Prepared release is outside the declared installation')
+    spec = importlib.util.spec_from_file_location('modular_package', program)
+    delivery = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(delivery)
+    receipt = delivery.verify_package(release)
+    return {'release': str(release), 'package_id': release.name, 'revisions': receipt['revisions']}
+
+
+def package(config, receipt_path, repair=False):
     program = Path(config['source']) / 'Laplace-MCP/deployment.py'
+    if repair:
+        prepared = prepared_package(config, program)
+        if prepared:
+            atomic(receipt_path / 'selection.json', json.dumps(config) + '\n')
+            atomic(receipt_path / 'package.json', json.dumps(prepared) + '\n')
+            print('Reusing verified modular package: ' + prepared['package_id'], flush=True)
+            return Path(prepared['release'])
     config_path = receipt_path / 'selection.json'
     atomic(config_path, json.dumps(config) + '\n')
     command = ['bash', '-c', '. "$1/laplace.env"; exec python3 "$2" package --config "$3" --output "$4"',
@@ -270,13 +304,16 @@ def activate(config, release, receipt_path, install):
     prior = {p: p.read_text() if p.exists() else None for p in files}
     legacy_active = install and legacy_command(config, 'is-active', check=False).returncode == 0
     old_active = subprocess.run(['systemctl', 'is-active', '--quiet', UNIT]).returncode == 0
-    old_enabled = subprocess.run(['systemctl', 'is-enabled', '--quiet', UNIT]).returncode == 0
+    old_enabled = subprocess.run(['systemctl', 'is-enabled', '--quiet', UNIT], capture_output=True).returncode == 0
     previous_invocation = checked(['systemctl', 'show', UNIT, '-p', 'InvocationID', '--value'], capture_output=True, check=False).stdout.strip()
+    # Candidate checks do not alter service configuration. A failed preflight
+    # must not stop a service or try to restore a unit that was never installed.
+    if install:
+        peer_check(config)
+        checked(['runuser', '-u', config['runtime_user'], '--', 'python3', program, 'probe',
+                 '--config', config['installed_config'], '--release', release, '--output', Path(config['state']) / 'candidate.json'])
     try:
         if install:
-            peer_check(config)
-            checked(['runuser', '-u', config['runtime_user'], '--', 'python3', program, 'probe',
-                     '--config', config['installed_config'], '--release', release, '--output', Path(config['state']) / 'candidate.json'])
             atomic(unit, unit_text(config))
             atomic(config['environment_file'], environment)
             if not current.exists():
@@ -318,7 +355,7 @@ def activate(config, release, receipt_path, install):
                     path.unlink(missing_ok=True)
                 else:
                     atomic(path, content)
-            checked(['systemctl', 'stop', UNIT], check=False)
+            checked(['systemctl', 'stop', UNIT], check=False, capture_output=True)
             checked(['systemctl', 'daemon-reload'])
             if old_active:
                 checked(['systemctl', 'start', UNIT])
@@ -372,13 +409,16 @@ def main():
             live = config_load(config['installed_config'])
             if any(config[k] != live[k] for k in config if k != 'source'):
                 raise ValueError('Installation configuration changed; run setup before deployment')
+            if not all(path.is_file() for path in (UNITS / UNIT, Path(config['environment_file']),
+                    UNITS / 'laplace-modular-mcp-restart.path')):
+                raise ValueError('Modular installation is incomplete; run sudo ./setup.sh before deployment')
         receipt_path = Path(config['receipts']) / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex[:8])
         receipt_path.mkdir(parents=True)
         if installing:
             operator = pwd.getpwnam(config['operator'])
             os.chown(receipt_path, operator.pw_uid, grp.getgrnam(config['deployment_group']).gr_gid)
         receipt_path.chmod(0o2775)
-        release = package(config, receipt_path)
+        release = package(config, receipt_path, repair=installing)
         activate(config, release, receipt_path, installing)
         if installing:
             restart_units(config)
