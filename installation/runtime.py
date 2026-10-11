@@ -13,6 +13,7 @@ import re
 import secrets
 import shlex
 import socket
+import stat
 import subprocess
 import sys
 import urllib.error
@@ -188,18 +189,15 @@ class Bao:
         if result.returncode:
             if missing and 'No value found at ' in result.stderr:
                 return None
-            raise ValueError('OpenBao operation failed; check the declared operator login and policy')
+            raise ValueError('OpenBao initial enrollment failed during ' + ' '.join(args[:2]) +
+                             '; check the declared operator login and enrollment policy')
         return result.stdout
 
     def record(self, path, selectors):
         prior = self.call(['kv', 'get', '-format=json', '-mount=kv', path], missing=True)
         if prior is not None:
             record = json.loads(prior)['data']['data']
-            if any(str(record.get(k)) != str(v) for k, v in selectors.items()):
-                raise ValueError('Existing OpenBao record selects a different installation: ' + path)
-            if not re.fullmatch(r'[0-9a-f]{64}', record.get('password', '')):
-                raise ValueError('Existing runtime password is not a generated credential')
-            return record
+            return validate_record(record, selectors, path)
         record = dict(selectors, password=secrets.token_hex(32))
         self.call(['kv', 'put', '-mount=kv', path, '-'], json.dumps(record))
         return record
@@ -225,6 +223,74 @@ class Bao:
             return
         secret_id = json.loads(self.call(['write', '-format=json', '-f', f'auth/approle/role/{name}/secret-id']))['data']['secret_id']
         SYNC.atomic(credential, json.dumps({'role_id': role_id, 'secret_id': secret_id}) + '\n', 0o600, 0, 0)
+
+
+def validate_record(record, selectors, path):
+    if any(str(record.get(k)) != str(v) for k, v in selectors.items()):
+        raise ValueError('Existing OpenBao record selects a different installation: ' + path)
+    if not re.fullmatch(r'[0-9a-f]{64}', record.get('password', '')):
+        raise ValueError('Existing runtime password is not a generated credential')
+    return record
+
+
+def enrollment(path):
+    path = Path(path)
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
+        raise ValueError('Workload enrollment must be a root-owned private regular file')
+    value = json.loads(path.read_text())
+    if set(value) != {'role_id', 'secret_id'} or not all(isinstance(v, str) and v for v in value.values()):
+        raise ValueError('Invalid installed AppRole enrollment')
+    return value
+
+
+def runtime_records(config):
+    """Bootstrap once; subsequent repairs read through the installed workload identity."""
+    selections = [(name, {key: item[key] for key in ('database_host', 'database', 'role', 'port')})
+                  for name, item in ((config['record'], config), ('knowledge', config['knowledge']))]
+    if not os.path.lexists(config['credentials']):
+        operator = Bao(config)
+        operator.call(['token', 'lookup', '-field=ttl'])
+        for name, selectors in selections:
+            operator.record(f'hosts/{config["host"]}/{name}', selectors)
+        operator.enroll(config)
+    # Existing invalid enrollment fails here. It never falls back to an operator
+    # token, rewrites policy, rotates credentials, or retrieves another password.
+    credentials = enrollment(config['credentials'])
+    token = None
+
+    def request(path, payload=None):
+        headers = {'Content-Type': 'application/json'}
+        if token:
+            headers['X-Vault-Token'] = token
+        data = json.dumps(payload).encode() if payload is not None else None
+        try:
+            with urllib.request.urlopen(urllib.request.Request(config['bao_address'].rstrip('/') + '/v1/' + path,
+                    data=data, headers=headers), timeout=20) as response:
+                body = response.read(1024 * 1024)
+                return json.loads(body) if body else None
+        except urllib.error.HTTPError as error:
+            raise ValueError(f'OpenBao workload operation {path} failed (HTTP {error.code}); '
+                             'installed AppRole authentication and record access are required') from None
+        except urllib.error.URLError:
+            raise ValueError('OpenBao workload endpoint could not be reached or its TLS identity verified') from None
+
+    try:
+        auth = request('auth/approle/login', credentials)['auth']
+        token = auth['client_token']
+        if auth.get('metadata', {}).get('role_name') != config['bao_role']:
+            raise ValueError('Installed AppRole belongs to another runtime identity')
+        records = {}
+        for name, selectors in selections:
+            path = f'kv/data/hosts/{config["host"]}/{name}'
+            record = request(path)['data']['data']
+            records[name] = validate_record(record, selectors, path)
+            if set(request('sys/capabilities-self', {'paths': [path]})['capabilities']) != {'read'}:
+                raise ValueError('Workload credential access must remain read-only')
+        return records
+    finally:
+        if token:
+            request('auth/token/revoke-self', {})
 
 
 def connection(item, peer=False, socket_path=None):
@@ -274,6 +340,11 @@ def mcp_verify(config):
 
 
 def install(config, lock):
+    print('Authenticating the installed runtime AppRole (operator login is used only for initial enrollment)...', flush=True)
+    records = runtime_records(config)
+    for name, item in ((config['record'], config), ('knowledge', config['knowledge'])):
+        item['password'] = records[name]['password']
+
     def sql(statement):
         return checked(['runuser', '-u', config['pg_os_user'], '--', config['pgbin'] + '/psql',
             '-XwAt', '-v', 'ON_ERROR_STOP=1', '-h', config['pgsocket'], '-p', str(config['port']),
@@ -313,14 +384,7 @@ def install_identities(config, lock):
 
     if Path(sql('SHOW data_directory')).resolve() != Path(config['database_data']).resolve():
         raise ValueError('Connected cluster differs from runtime declaration')
-    bao = Bao(config)
-    bao.call(['token', 'lookup', '-field=ttl'])
-    print('Preparing scoped runtime credentials and database roles...', flush=True)
-    for record_name, item in ((config['record'], config), ('knowledge', config['knowledge'])):
-        record = bao.record(f'hosts/{config["host"]}/{record_name}',
-                            {key: item[key] for key in ('database_host', 'database', 'role', 'port')})
-        item['password'] = record['password']
-    bao.enroll(config)
+    print('Reconciling scoped runtime credentials and database roles...', flush=True)
     helper('application-runtime.py', ['--phase', 'prepare'], config)
     knowledge_config = dict(config['knowledge'], psql=config['pgbin'] + '/psql', admin_socket=config['pgsocket'],
         admin_role=config['pg_os_user'], admin_os_user=config['pg_os_user'], schema_owner=config['database_owner'],
@@ -422,7 +486,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', type=Path, help='Absolute runtime declaration; otherwise use the machine declaration or matching host manifest')
     parser.add_argument('--select', action='store_true', help='Resolve and validate declared topology without changing the installation')
-    parser.add_argument('--check', action='store_true', help='Check existing installation and operator authentication without changes')
+    parser.add_argument('--check', action='store_true', help='Check installed prerequisites; root also verifies the private workload enrollment')
     args = parser.parse_args()
     manifest = selected_manifest(args.manifest)
     if manifest is None:
@@ -434,23 +498,33 @@ def main():
         validate_declaration(config)
         print(manifest)
         return
-    receipt = preflight(config)
-    Bao(config).call(['token', 'lookup', '-field=ttl'])
     if args.check:
+        receipt = preflight(config)
+        if os.path.lexists(config['credentials']):
+            if os.geteuid() == 0:
+                runtime_records(config)
+                receipt['workload_authentication'] = 'verified'
+            else:
+                receipt['workload_authentication'] = 'requires_privileged_check'
+        else:
+            Bao(config).call(['token', 'lookup', '-field=ttl'])
+            receipt['workload_authentication'] = 'initial_enrollment_required'
         print(json.dumps(dict(receipt, preflight='passed', activated=False)))
         return
     if os.geteuid() != 0:
         raise ValueError('Install identities with sudo ./setup.sh runtime; --check does not require sudo')
+    validate_declaration(config)
     with open(config['host_lock'], 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         work = Path(config['work'])
         work.mkdir(parents=True, exist_ok=True)
         started = datetime.now(timezone.utc)
         output = work / (started.strftime('%Y%m%dT%H%M%SZ') + '-runtime-' + uuid.uuid4().hex[:8] + '.json')
-        receipt.update(operation='runtime', started_utc=started.isoformat(),
+        receipt = dict(operation='runtime', host=config['host'], started_utc=started.isoformat(),
                        manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest(),
                        source=checked(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], timeout=10))
         try:
+            receipt.update(preflight(config))
             receipt['verification'] = install(config, lock)
             # The newly enabled timer may fire immediately. Release the installation
             # lock before waiting for its independent credential-refresh operation.

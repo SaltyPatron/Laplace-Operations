@@ -299,6 +299,13 @@
           "evidence": "Resolved plans, live settings and representative concurrent workload measurements."
         },
         {
+          "id": "setup-resource-convergence",
+          "platform": "linux",
+          "argv": ["python3", "tests/setup-resources.py"],
+          "timeout_seconds": 30,
+          "evidence": "Actual setup settings function under isolated OS/database boundaries: adopts an available huge-page reservation once, refuses insufficient pages/access and concurrent ingestion/deployment, fails if adoption did not occur. Live huge_pages_status must be verified separately."
+        },
+        {
           "id": "production-resource-settings",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "secrets/application-runtime.ps1", "-Phase", "resources-check", "-Target", "production"],
@@ -330,14 +337,14 @@
           "platform": "linux",
           "argv": ["python3", "tests/runtime-setup.py"],
           "timeout_seconds": 60,
-          "evidence": "Wrong-host and invalid identity refusal, preserved Bao record selection, activation rollback, nested operation-lock ownership, private failure diagnostics and certificate identity/renewal checks. Fixture evidence does not establish installed runtime identities."
+          "evidence": "Repeat setup with operator authentication forbidden, workload failure receipts before mutation, enrollment access boundaries, wrong-host and invalid identity refusal, preserved Bao selection, activation rollback, operation locking and TLS checks. Fixture evidence does not establish installed runtime identities or credential rotation."
         },
         {
           "id": "runtime-setup-preflight",
           "platform": "linux",
           "argv": ["python3", "installation/runtime.py", "--check"],
           "timeout_seconds": 60,
-          "evidence": "Checks the declared hart-server installation and current operator Bao login without changes. Privileged setup must separately issue a passed runtime installation receipt."
+          "evidence": "Checks the declared installation without activation. Existing private enrollment reports requires_privileged_check for a non-root caller; root also verifies AppRole login and scoped reads. Privileged setup must separately issue a passed runtime installation receipt."
         },
         {
           "id": "production-runtime-identity",

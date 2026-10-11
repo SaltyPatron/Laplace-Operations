@@ -191,15 +191,29 @@ packages(){ part packages
   for u in "$op" "$LAPLACE_AGENT_USER"; do id -nG "$u" | tr ' ' '\n' | grep -qx "$LAPLACE_GROUP" || usermod -aG "$LAPLACE_GROUP" "$u"; id -nG "$u" | tr ' ' '\n' | grep -qx "$LAPLACE_PG_GROUP" || usermod -aG "$LAPLACE_PG_GROUP" "$u"; done
   say "group $LAPLACE_GROUP" "$(getent group "$LAPLACE_GROUP" | cut -d: -f4)"; say "group $LAPLACE_PG_GROUP" "$(getent group "$LAPLACE_PG_GROUP" | cut -d: -f4)"
 }
-kernel(){ part kernel
+hugepage_access_group(){
+  local group
+  group=$(sysctl -n vm.hugetlb_shm_group)
+  if [ "$group" = 0 ]; then id -g "$PGUSER"
+  elif id -G "$PGUSER" | tr ' ' '\n' | grep -qx "$group"; then printf '%s\n' "$group"
+  else echo "vm.hugetlb_shm_group=$group excludes $PGUSER; refusing to replace another workload's access group" >&2; return 1; fi
+}
+kernel()( part kernel
+  . "$here/operation-lock.sh"
+  laplace_host_lock exclusive
   # huge pages: what the server says it needs, 3% over, from the shared_buffers declared above; takes effect at boot
   # and now, as far as free memory allows
-  sb=$(declared | awk '$1=="shared_buffers"{print $2}' | tr -d MB); declared=$((sb / 2 * 103 / 100 + 64))   # 2 MB pages for the buffers declared (MB), 3% and the rest of shared memory over
+  page_kb=$(awk '/^Hugepagesize:/{print $2}' /proc/meminfo)
+  [ "${page_kb:-0}" -gt 0 ] || { echo 'Kernel does not expose a default huge page size' >&2; exit 1; }
+  sb=$(declared | awk '$1=="shared_buffers"{print $2}' | tr -d MB)
+  declared=$(((sb * 1024 * 103 / 100 + 131072 + page_kb - 1) / page_kb))
   need=$(q "SHOW shared_memory_size_in_huge_pages" 2>/dev/null || echo 0); [ "${need:-0}" -gt "$declared" ] || need=$declared
   want=$((need + need * 3 / 100))
-  printf 'vm.nr_hugepages = %s\nkernel.kptr_restrict = 0\nkernel.perf_event_paranoid = 0\n' "$want" > /etc/sysctl.d/60-laplace.conf   # the profilers see the kernel's symbols
+  group=$(hugepage_access_group)
+  printf 'vm.nr_hugepages = %s\nvm.hugetlb_shm_group = %s\nkernel.kptr_restrict = 0\nkernel.perf_event_paranoid = 0\n' "$want" "$group" > /etc/sysctl.d/60-laplace.conf   # the profilers see the kernel's symbols
   sysctl -q -p /etc/sysctl.d/60-laplace.conf; say "vm.nr_hugepages" "$want (the server needs $need)   reserved now: $(awk '/HugePages_Total/{print $2}' /proc/meminfo)"
-}
+  say "huge page access" "$PGUSER via OS group $group"
+)
 deps(){ part dependencies
   set +u; . /opt/intel/oneapi/setvars.sh >/dev/null 2>&1 || true; set -u
   # ICU 78 is a release, not a build: unicode-org's Linux binaries, unpacked under $LAPLACE_ICU_DIR (lib, include)
@@ -341,20 +355,38 @@ drop(){ part drop
   find "$PGDATA" -mindepth 1 -maxdepth 1 ! -path "$PGWAL" -exec rm -rf {} +
   say "drop" "$PGDATA, $PGWAL and $PGTEMP emptied: cluster makes the cluster again"
 }
-settings(){ part settings
+settings()( part settings
+  . "$here/operation-lock.sh"
+  laplace_host_lock exclusive
+  ! ingesting || { echo 'Cannot converge PostgreSQL settings while ingestion is running' >&2; exit 1; }
   # every setting is stated; the server itself says which of them changed and which need a restart
   tune_apply
   pending=$(q "SELECT string_agg(name, ', ') FROM pg_settings WHERE pending_restart")
   say "settings" "$(declared | grep -c .) declared, reloaded"
-  # a restart is never made under a running ingest: it would cut the load off and send the server through recovery
+  huge_mode=$(declared | awk '$1=="huge_pages"{print $2}')
+  # An unchanged huge_pages=try setting does not request a PostgreSQL restart
+  # when setup has just made the kernel pool/access available. Converge actual use.
+  if [ "$huge_mode" != off ] && [ "$(q "SHOW huge_pages_status")" != on ]; then
+    need=$(runuser -u "$PGUSER" -- "$PGBIN/postgres" -D "$PGDATA" -C shared_memory_size_in_huge_pages)
+    free=$(awk '/^HugePages_Free:/{free=$2} /^HugePages_Rsvd:/{reserved=$2} END{print free-reserved}' /proc/meminfo)
+    group=$(sysctl -n vm.hugetlb_shm_group)
+    id -G "$PGUSER" | tr ' ' '\n' | grep -qx "$group" || {
+      echo "Huge page access is not configured for $PGUSER (vm.hugetlb_shm_group=$group); run setup kernel settings" >&2; exit 1;
+    }
+    [ "$need" -gt 0 ] && [ "$free" -ge "$need" ] || {
+      echo "Huge pages unavailable: PostgreSQL needs $need, unreserved free pages $free; no restart performed" >&2; exit 1;
+    }
+    pending="${pending:+$pending, }huge page adoption"
+  fi
   if [ -n "$pending" ]; then
-    if ingesting; then say "restart for $pending" "DEFERRED: an ingest is running; sudo ./setup.sh settings once it is done"
-    else systemctl restart "$SERVICE.service"; ready; say "restarted for" "$pending"; fi
+    systemctl restart "$SERVICE.service"; ready; say "restarted for" "$pending"
   fi
   tune_check
-  [ "$(q "SHOW huge_pages_status")" = on ] || say "huge pages" "NOT IN USE: the server needs $(q "SHOW shared_memory_size_in_huge_pages") pages; sudo ./setup.sh kernel settings"
+  [ "$huge_mode" = off ] || [ "$(q "SHOW huge_pages_status")" = on ] || {
+    echo "PostgreSQL is serving but failed to adopt configured huge pages; inspect $SERVICE.service startup logs" >&2; exit 1;
+  }
   q "SELECT '  '||rpad(name, 46)||current_setting(name) FROM pg_settings WHERE name IN ('shared_buffers','huge_pages_status','effective_cache_size','work_mem','maintenance_work_mem','io_method','max_wal_size','wal_buffers','listen_addresses','ssl') ORDER BY name"
-}
+)
 access(){ part access
   [ "$(q "SELECT count(*) FROM pg_roles WHERE rolname = '$LAPLACE_ROLE'")" = 1 ] || run "CREATE ROLE $LAPLACE_ROLE LOGIN SUPERUSER"
   # the role's password: one canonical copy, root's, in /etc/laplace; adopted from an operator's ~/.pgpass when it

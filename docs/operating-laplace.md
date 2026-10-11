@@ -1,7 +1,8 @@
 # Operating Laplace
 
 For installation or repair of the existing hart-server host, run `sudo ./setup.sh` from its Operations
-checkout with the operator logged into OpenBao. Default setup includes the declared API/MCP identities,
+checkout. An already enrolled host uses its own AppRole; a personal OpenBao login is needed only for initial
+enrollment. Default setup includes the declared API/MCP identities,
 database TLS and permissions, credential refresh and authenticated verification. It fails if those checks
 fail. Individual setup stages are diagnostic options, not additional steps after successful full setup.
 See [installation configuration and receipts](../installation/README.md#default-setup-and-runtime-identity-installation).
