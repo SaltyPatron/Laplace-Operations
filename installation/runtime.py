@@ -303,6 +303,22 @@ def install(config, lock):
         helper('application-runtime.py', ['--phase', 'activate'], config)
         verification = helper('application-runtime.py', ['--phase', 'verify'], config)
         verification['mcp'] = mcp_verify(config)
+        knowledge_args = ['runuser', '-u', config['runtime_user'], '--', config['pgbin'] + '/psql',
+            '-XwAt', '-v', 'ON_ERROR_STOP=1', '-h', config['knowledge']['database_host'],
+            '-p', str(config['port']), '-U', config['knowledge']['role'], '-d', config['knowledge']['database'], '-f', '-']
+        knowledge_env = dict(os.environ, PGPASSFILE=str(Path(config['state']) / '.pgpass'),
+                             PGSSLMODE='require', PGCONNECT_TIMEOUT='10')
+        knowledge_env.pop('PGPASSWORD', None)
+        actual = checked(knowledge_args, env=knowledge_env,
+            input="SELECT current_user; SELECT encode(laplace.perfcache_receipt(),'hex');", timeout=20)
+        if actual.splitlines() != [config['knowledge']['role'], fresh['native_receipt']]:
+            raise ValueError('API knowledge identity/native operation differs from the selected substrate')
+        refused = subprocess.run(knowledge_args, env=knowledge_env, input='SELECT * FROM app.tenants LIMIT 1;',
+                                 text=True, capture_output=True, timeout=20)
+        if not refused.returncode or 'permission denied' not in refused.stderr:
+            raise ValueError('API knowledge login can cross the application data boundary')
+        verification['knowledge'] = {'role': config['knowledge']['role'], 'native_receipt': fresh['native_receipt'],
+                                     'application_data': 'denied'}
         peer_args = ['runuser', '-u', mcp['user'], '--', config['pgbin'] + '/psql', '-XwAt', '-v', 'ON_ERROR_STOP=1',
             '-h', config['pgsocket'], '-p', str(config['port']), '-U', mcp['role'], '-d', config['knowledge']['database'], '-f', '-']
         peer_result = checked(peer_args, input="SELECT current_user; SELECT encode(laplace.perfcache_receipt(),'hex');", timeout=20)
@@ -311,6 +327,11 @@ def install(config, lock):
         denied = subprocess.run(peer_args, input='SELECT * FROM app.tenants LIMIT 1;', text=True, capture_output=True, timeout=20)
         if not denied.returncode or 'permission denied' not in denied.stderr:
             raise ValueError('MCP can cross the application data boundary')
+        runner = pwd.getpwnam(declarations(machine)['LAPLACE_AGENT_USER'])
+        for path, access in ((Path(runner.pw_dir) / '.pgpass', '-r'), (Path(config['credentials']), '-r'),
+                             (prefix / 'app/mcp-runtime/Laplace.Endpoints.Mcp.dll', '-w')):
+            if not path.exists() or subprocess.run(['runuser', '-u', mcp['user'], '--', 'test', access, str(path)]).returncode != 1:
+                raise ValueError('MCP deployment/runtime access boundary failed')
         verification['mcp'].update(database_peer_identity=mcp['role'], native_receipt=fresh['native_receipt'], application_data='denied')
     # This existing setup operation installs a root-owned credential refresh timer.
     # A timer failure leaves verified serving identities in place and is retryable.
