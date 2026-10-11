@@ -47,6 +47,8 @@ def config_load(path):
             raise ValueError('Invalid modular allocation: ' + key)
     if config['bind'] != '127.0.0.1' or max(config['http_port'], config['port']) > 65535:
         raise ValueError('Invalid listener declaration')
+    if config['connection_limit'] < 3 * config['threads'] + 2:
+        raise ValueError('Connection allocation cannot fit the resident reader and Engine bulk writer')
     for key in ('postgres_service', 'legacy_unit'):
         if not re.fullmatch(r'[A-Za-z0-9_.-]+\.service', config[key]):
             raise ValueError('Invalid service name')
@@ -98,8 +100,9 @@ def sysquote(value):
 def unit_text(config):
     template = (Path(config['source']) / 'Laplace-MCP/laplace-modular-mcp.service.in').read_text()
     return template.format(user=config['runtime_user'], group=config['runtime_group'],
-        postgres_service=config['postgres_service'], environment_file=sysquote(config['environment_file']),
-        state=sysquote(config['state']), executable=sysquote(Path(config['prefix']) / 'current/bin/lpm'))
+        postgres_service=config['postgres_service'], environment_file=config['environment_file'].replace('%', '%%'),
+        state=config['state'].replace('%', '%%'), writable_state=sysquote(config['state']),
+        executable=sysquote(Path(config['prefix']) / 'current/bin/lpm'))
 
 
 def runtime_environment(config, release):
@@ -319,7 +322,7 @@ def restart_units(config):
     root = UNITS
     name = 'laplace-modular-mcp-restart'
     signal = sysquote(config['restart_signal'])
-    atomic(root / (name + '.path'), f'[Path]\nPathExists={signal}\n[Install]\nWantedBy=multi-user.target\n')
+    atomic(root / (name + '.path'), f"[Path]\nPathExists={config['restart_signal'].replace('%', '%%')}\n[Install]\nWantedBy=multi-user.target\n")
     atomic(root / (name + '.service'), '[Service]\nType=oneshot\n' +
         f'ExecStart=/usr/bin/rm -f -- {signal}\nExecStart=/usr/bin/systemctl restart {UNIT}\n')
     checked(['systemctl', 'daemon-reload'])

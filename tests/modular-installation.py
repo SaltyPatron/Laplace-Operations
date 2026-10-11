@@ -41,7 +41,7 @@ class Installation(unittest.TestCase):
         for key, value in (('runtime_user', 'root'), ('runtime_user', 'ahart'),
                            ('role', 'x; ALTER ROLE laplace SUPERUSER'), ('bind', '0.0.0.0'),
                            ('http_port', 65536), ('source', '/tmp/../etc'), ('build', self.value['prefix']),
-                           ('threads', 0), ('host', 'wrong-host')):
+                           ('threads', 0), ('connection_limit', 7), ('host', 'wrong-host')):
             with self.subTest(key=key, value=value):
                 original = self.value[key]
                 self.value[key] = value
