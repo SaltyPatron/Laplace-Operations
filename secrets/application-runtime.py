@@ -292,6 +292,7 @@ def main():
                 'LAPLACE_DATA_PROTECTION_KEYS': state / 'keys', 'LAPLACE_AGENTS_CONFIG': state / 'agents.json',
                 'LAPLACE_OUT': state / 'out'})
             sync.atomic(dropin, f'[Service]\nUser={config["runtime_user"]}\nGroup={config["runtime_user"]}\nUMask=0077\n'
+                f'EnvironmentFile=-{prefix}/secrets/agents.env\n'
                 f'Environment="HOME={state}" "PGPASSFILE={state}/.pgpass" "TMPDIR={state}/tmp" "TMP={state}/tmp" "TEMP={state}/tmp"\n', 0o644, 0, 0)
             subprocess.run(['systemctl', 'daemon-reload'], check=True)
             sync.activate(config['runtime_user'], prefix, config['public_base'])

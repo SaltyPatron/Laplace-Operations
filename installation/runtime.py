@@ -296,6 +296,7 @@ def install(config, lock):
         SYNC.assignments(mcp_env, {'LAPLACE_DB': mcp_connection, 'LAPLACE_OPS_LOG_DIR': state / 'logs',
             'LAPLACE_OUT': state / 'out', 'LAPLACE_AGENTS_CONFIG': state / 'agents.json'})
         SYNC.atomic(dropins[1], f'[Service]\nUser={mcp["user"]}\nGroup={mcp["user"]}\nUMask=0077\n'
+            f'EnvironmentFile=-{prefix}/secrets/agents.env\n'
             f'Environment="HOME={state}" "TMPDIR={state}/tmp" "TMP={state}/tmp" "TEMP={state}/tmp"\n', 0o644, 0, 0)
         checked(['systemctl', 'daemon-reload'], timeout=20)
         checked(['systemctl', 'restart', 'laplace-mcp'], timeout=30)
