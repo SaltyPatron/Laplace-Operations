@@ -149,8 +149,6 @@ The nginx template preserves HTTPS from the trusted local tunnel and the public 
 have the correct public origin. [ASP.NET proxy guidance](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/proxy-load-balancer?view=aspnetcore-10.0)
 explains why forwarded scheme and host affect redirects.
 
-For development on HART-DESKTOP, use the same entry point:
-
 Repository administrators can read back the declared public-runner approval policy with
 `./github/runner-policy.ps1`, or converge it with `-Apply`. It requires approval for every external fork's workflow,
 including returning contributors. The saved receipt includes previous and current settings.
@@ -158,6 +156,8 @@ including returning contributors. The saved receipt includes previous and curren
 This does not isolate an approved workflow from a persistent runner's filesystem or network. Privileged promotion
 and untrusted builds still need separate execution contexts, as described in
 [GitHub's self-hosted runner guidance](https://docs.github.com/en/actions/reference/security/secure-use).
+
+For development on HART-DESKTOP, use the same entry point:
 
 ```powershell
 ./laplace.ps1 prepare
