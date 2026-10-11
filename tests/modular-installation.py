@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -36,6 +37,48 @@ class Installation(unittest.TestCase):
         self.assertIn('LAPLACE_WORK="' + config['state'] + '"', environment)
         self.assertNotIn('/repos/build/Laplace-Engine', environment)
         self.assertNotIn('/home/ahart', environment)
+
+    def test_peer_refusals_reach_real_process_execution_with_numeric_port(self):
+        config = self.load()
+        launcher = self.directory / 'runuser'
+        trace = self.directory / 'commands.jsonl'
+        # Isolate only the privileged identity transition and SQL server here.
+        # Real Popen argument handling must execute all four commands. The former
+        # direct subprocess.run raised TypeError before executing the first refusal.
+        launcher.write_text('#!' + sys.executable + '\n' +
+            'import json,os,sys\n' +
+            'with open(os.environ["PEER_TRACE"], "a") as f: f.write(json.dumps(sys.argv[1:])+"\\n")\n' +
+            'if "SELECT current_user" in sys.argv[-1]:\n' +
+            ' print(os.environ["PEER_ROLE"]); sys.exit(0)\n' +
+            'sys.exit(1)\n')
+        launcher.chmod(0o755)
+        with patch.dict(os.environ, PATH=str(self.directory) + os.pathsep + os.environ['PATH'],
+                        PEER_TRACE=str(trace), PEER_ROLE=config['role']):
+            modular.peer_check(config)
+        commands = [json.loads(line) for line in trace.read_text().splitlines()]
+        self.assertEqual(len(commands), 4)
+        self.assertTrue(all(str(config['port']) in command for command in commands))
+        self.assertIn('SET ROLE laplace;', commands[1])
+
+    def test_failed_peer_preflight_never_stops_a_service(self):
+        config = self.load()
+        config['prefix'] = str(self.directory / 'prefix')
+        config['environment_file'] = str(self.directory / 'runtime.env')
+        release = Path(config['prefix']) / 'releases/prepared'
+        release.mkdir(parents=True)
+        called = []
+        def command(args, **kwargs):
+            called.append(args)
+            return subprocess.CompletedProcess(args, 0, stdout='')
+        with patch.object(modular, 'UNITS', self.directory / 'units'), \
+             patch.object(modular, 'checked', side_effect=command), \
+             patch.object(modular, 'legacy_command', return_value=subprocess.CompletedProcess([], 1)), \
+             patch.object(modular, 'peer_check', side_effect=ValueError('denied preflight')), \
+             patch.object(modular.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1)):
+            with self.assertRaisesRegex(ValueError, 'denied preflight'):
+                modular.activate(config, release, self.directory, True)
+        self.assertFalse(any('stop' in args or 'restart' in args or 'daemon-reload' in args for args in called))
+        self.assertFalse((Path(config['prefix']) / 'current').exists())
 
     def test_invalid_declarations_cannot_reach_mutation(self):
         for key, value in (('runtime_user', 'root'), ('runtime_user', 'ahart'),
