@@ -19,6 +19,26 @@ CONFIG = json.loads((ROOT / 'installation/hart-server-runtime.json').read_text()
 
 
 class RuntimeBoundaries(unittest.TestCase):
+    def test_command_diagnostics_do_not_leak_into_public_exception(self):
+        with self.assertRaises(runtime.CommandFailure) as failure:
+            runtime.checked([sys.executable, '-c', "import sys; print('sensitive diagnostic',file=sys.stderr); sys.exit(1)"])
+        self.assertNotIn('sensitive diagnostic', str(failure.exception))
+        self.assertIn('sensitive diagnostic', failure.exception.diagnostics)
+
+    def test_certificate_identity_key_and_renewal_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            key, certificate = root / 'server.key', root / 'server.crt'
+            runtime.TLS.command(['openssl', 'genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048', '-out', str(key)])
+            policy = copy.deepcopy(CONFIG['tls'])
+            runtime.TLS.generate(certificate, key, policy)
+            self.assertTrue(runtime.TLS.desired(certificate, key, policy))
+            policy['ip_addresses'] = ['127.0.0.2']
+            self.assertFalse(runtime.TLS.desired(certificate, key, policy))
+            policy = copy.deepcopy(CONFIG['tls'])
+            policy['renew_before_days'] = policy['valid_days'] + 1
+            self.assertFalse(runtime.TLS.desired(certificate, key, policy))
+
     def test_wrong_host_never_runs_commands(self):
         with patch.object(runtime.socket, 'gethostname', return_value='another-host'), patch.object(runtime, 'checked') as run:
             with self.assertRaisesRegex(ValueError, 'another host'):

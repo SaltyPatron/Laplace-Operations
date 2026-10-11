@@ -56,3 +56,25 @@ configuration and restarts the previous services. Prepared accounts, grants and 
 retry. A subsequent credential-timer installation failure leaves the verified services running and marks
 setup failed, so rerun the same operation. Secret-free receipts are saved alongside repair receipts.
 Fixture/CI success and `--check` are not proof that privileged installation has run.
+
+Runtime setup also converges the declared local PostgreSQL certificate before changing service identities.
+Its subject is distinct from the OS default server certificate, its SANs cover the declared database endpoints,
+and both API connections and credential refresh use full certificate verification against
+`tls.root_certificate`. The original private key is retained; replaced public certificates are backed up in
+the receipt directory. Invalid certificate activation restores the previous certificate and trust file.
+A successful certificate repair remains installed if a later identity step fails. The `valid_days` and
+`renew_before_days` policy is evaluated when setup runs; automatic certificate renewal remains separate work.
+Existing CA-issued certificates are refused rather than replaced by a local self-signed certificate.
+
+If service activation fails, the receipt points to root-private diagnostics containing the verifier failure
+and the API journal for that attempt. Password inputs and process environments are not logged. Public
+receipts contain no diagnostic output. The setup operator uses the existing Bao login; runtime refresh uses
+the root-private AppRole enrollment. That enrollment is long-lived and may issue five-minute tokens with
+read access to the two named host runtime records. It is not a user authentication bypass or a secret-reading
+HTTP endpoint. Existing serving identities remain unchanged until activation passes.
+
+The TLS regression runs a disposable PostgreSQL cluster with the installed Npgsql assembly:
+build `tests/runtime-db-probe/runtime-db-probe.csproj` with `-p:NpgsqlAssembly=/path/to/Npgsql.dll`, then run
+`python3 tests/runtime-tls.py --pgbin /path/to/postgresql/bin --probe /path/to/runtime-db-probe.dll`.
+It reproduces the same-name certificate collision, verifies the repaired connection with `VerifyFull`,
+rejects the wrong CA, and checks key preservation, idempotence and failed-rotation rollback.

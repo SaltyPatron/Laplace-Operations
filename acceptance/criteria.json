@@ -315,7 +315,7 @@
           "platform": "linux",
           "argv": ["python3", "tests/runtime-setup.py"],
           "timeout_seconds": 60,
-          "evidence": "Wrong-host and invalid identity refusal, preserved Bao record selection, activation rollback and nested operation-lock ownership. Fixture evidence does not establish installed runtime identities."
+          "evidence": "Wrong-host and invalid identity refusal, preserved Bao record selection, activation rollback, nested operation-lock ownership, private failure diagnostics and certificate identity/renewal checks. Fixture evidence does not establish installed runtime identities."
         },
         {
           "id": "runtime-setup-preflight",

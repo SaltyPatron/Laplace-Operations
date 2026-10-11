@@ -92,6 +92,8 @@ def verify(config):
     if config['database_owner'] in roles or config['role'] not in roles:
         raise ValueError('Runtime pgpass contains the wrong credential roles')
     environment = dict(os.environ, PGPASSFILE=str(pgpass), PGSSLMODE='require', PGCONNECT_TIMEOUT='10')
+    if config.get('root_certificate'):
+        environment.update(PGSSLMODE='verify-full', PGSSLROOTCERT=config['root_certificate'])
     environment.pop('PGPASSWORD', None)
 
     def runtime_sql(statement, database=config['database']):
@@ -280,8 +282,10 @@ def main():
         machine, api = Path(config['machine_file']), prefix / 'app/laplace-api.env'
         dropin = Path('/etc/systemd/system/laplace-api.service.d/runtime-identity.conf')
         dropin.parent.mkdir(parents=True, exist_ok=True)
+        tls = (f"SSL Mode=VerifyFull;Root Certificate={config['root_certificate']};"
+               if config.get('root_certificate') else 'SSL Mode=Require;')
         runtime_db = (f"Host={config['database_host']};Port={config['port']};Database={database};Username={role};"
-                      f"SSL Mode=Require;Maximum Pool Size={int(config['pool_max'])}")
+                      f"{tls}Maximum Pool Size={int(config['pool_max'])}")
         with sync.configuration_transaction([machine, api, dropin],
                 lambda: (subprocess.run(['systemctl', 'daemon-reload'], check=True), sync.activate(prior_user, prefix, config['public_base']))):
             sync.assignments(machine, {'LAPLACE_API_USER': config['runtime_user'], 'LAPLACE_API_STATE_DIR': state,
