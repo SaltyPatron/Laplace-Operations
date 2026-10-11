@@ -83,6 +83,10 @@ def main():
     source_db = source_match.group(1).strip()
     if source_db != args.source_database:
         raise ValueError('The declared recovery database differs from the installed application database')
+    role_match = re.search(r'(?i)(?:^|;)\s*Username\s*=\s*([a-zA-Z0-9_-]+)\s*(?:;|$)', app_connection)
+    if not role_match:
+        raise ValueError('The installed application must declare its runtime database role')
+    runtime_role = role_match.group(1)
     database = 'laplace_restore_' + uuid.uuid4().hex[:16]
     token = uuid.uuid4().hex
     args.work_dir.mkdir(parents=True, exist_ok=True)
@@ -118,6 +122,14 @@ def main():
         pg('psql', '-X', '-v', 'ON_ERROR_STOP=1', '-d', 'postgres', '-c', f'COMMENT ON DATABASE "{database}" IS \'restore-drill:{token}\'')
         pg('pg_restore', '--exit-on-error', '--single-transaction', '--no-owner', '--role=' + args.database_owner,
            '-d', database, str(archive))
+        # Old backups may predate the restricted login. Keep schema ownership on
+        # the migration owner and grant the current serving identity data access.
+        pg('psql', '-X', '-v', 'ON_ERROR_STOP=1', '-d', database, '-c',
+            f'GRANT CONNECT ON DATABASE "{database}" TO "{runtime_role}"; '
+            f'GRANT USAGE ON SCHEMA app TO "{runtime_role}"; '
+            f'GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA app TO "{runtime_role}"; '
+            f'GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA app TO "{runtime_role}";')
+        receipt['runtime_database_role'] = runtime_role
         tables = pg('psql', '-XAt', '-v', 'ON_ERROR_STOP=1', '-d', database, '-c',
                     "SELECT tablename FROM pg_tables WHERE schemaname='app' ORDER BY tablename").splitlines()
         if not {'tenants', 'users', 'api_keys', 'billing_entitlements'}.issubset(tables):

@@ -1,9 +1,16 @@
 """Exercise the real selector's Tier-0 preflight without credentials or a live DB."""
 import importlib.util
+import io
+import json
+import os
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("knowledge_sync", ROOT / "secrets/knowledge-sync.py")
@@ -12,6 +19,76 @@ spec.loader.exec_module(selector)
 
 
 class KnowledgeCompatibility(unittest.TestCase):
+    def exercise_refresh(self, *, prior=False, application_failure=False, activation_failure=False):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            credentials = root / 'approle.json'
+            credentials.write_text('{}')
+            credentials.chmod(0o600)
+            knowledge = dict(database_host='knowledge', database='knowledge_db', role='reader', port=5432, password='a' * 64)
+            application = dict(database_host='127.0.0.1', database='application', role='runtime', port=5432, password='b' * 64)
+            expected = 'knowledge:5432:knowledge_db:reader:' + knowledge['password'] + '\n127.0.0.1:5432:application:runtime:' + application['password'] + '\n'
+            pgpass = root / '.pgpass'
+            original = expected if prior else 'previous:5432:application:runtime:old\n'
+            pgpass.write_text(original)
+            pgpass.chmod(0o600)
+            requests, activations = [], []
+            def request(req, **kwargs):
+                path = req.full_url.split('/v1/', 1)[1]
+                requests.append(path)
+                if path == 'auth/approle/login': body = {'auth': {'client_token': 'test-token'}}
+                elif path.endswith('/knowledge'): body = {'data': {'data': knowledge}}
+                elif path.endswith('/application-runtime'): body = {'data': {'data': application}}
+                else: body = {}
+                return io.BytesIO(json.dumps(body).encode())
+            def run(arguments, **kwargs):
+                self.assertEqual(pgpass.read_text(), original, 'Credential publication occurred before all authentication checks')
+                role = arguments[arguments.index('-U') + 1]
+                failed = application_failure and role == 'runtime'
+                return subprocess.CompletedProcess(arguments, int(failed), role + ('|receipt' if role == 'reader' else '') + '\n', '')
+            def activate(*args):
+                activations.append(pgpass.read_text())
+                if activation_failure and len(activations) == 1:
+                    raise RuntimeError('new credential activation failed')
+            argv = ['knowledge-sync', '--host', 'consumer', '--credentials', str(credentials), '--user', 'runtime',
+                    '--prefix', str(root), '--machine-file', str(root / 'machine.env'), '--lock', str(root / 'lock'),
+                    '--bao-address', 'https://bao.invalid', '--application-record', 'application-runtime',
+                    '--restart-on-change', '--verification-base', 'https://api.invalid']
+            account = SimpleNamespace(pw_dir=str(root), pw_uid=os.getuid(), pw_gid=os.getgid())
+            with patch.object(sys, 'argv', argv), patch.object(selector.pwd, 'getpwnam', return_value=account), \
+                    patch.object(selector.urllib.request, 'urlopen', side_effect=request), \
+                    patch.object(selector.subprocess, 'run', side_effect=run), patch.object(selector, 'activate', side_effect=activate), \
+                    patch.object(sys, 'stdout', io.StringIO()):
+                if application_failure:
+                    with self.assertRaisesRegex(ValueError, 'not published'): selector.main()
+                elif activation_failure:
+                    with self.assertRaisesRegex(RuntimeError, 'activation failed'): selector.main()
+                else:
+                    selector.main()
+            self.assertEqual(requests[-1], 'auth/token/revoke-self')
+            self.assertEqual(pgpass.stat().st_mode & 0o777, 0o600)
+            if application_failure:
+                self.assertEqual(pgpass.read_text(), original)
+                self.assertEqual(activations, [])
+            elif activation_failure:
+                self.assertEqual(pgpass.read_text(), original)
+                self.assertEqual(activations, [original + expected, original])
+            else:
+                self.assertEqual(pgpass.read_text(), expected if prior else original + expected)
+                self.assertEqual(len(activations), 0 if prior else 1)
+
+    def test_both_logins_authenticate_before_credentials_are_published(self):
+        self.exercise_refresh()
+
+    def test_application_authentication_failure_preserves_previous_credentials(self):
+        self.exercise_refresh(application_failure=True)
+
+    def test_unchanged_credentials_do_not_restart_the_api(self):
+        self.exercise_refresh(prior=True)
+
+    def test_failed_refresh_restores_credentials_before_recovering_service(self):
+        self.exercise_refresh(activation_failure=True)
+
     def test_failed_activation_restores_all_configuration_before_recovery(self):
         with tempfile.TemporaryDirectory() as directory:
             paths = [Path(directory) / name for name in ('machine.env', 'api.env', 'pgpass')]

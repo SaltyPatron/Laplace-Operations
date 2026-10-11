@@ -283,6 +283,13 @@
           "evidence": "Positive/negative authorization and refresh/revocation tests using the intended workload identity."
         },
         {
+          "id": "production-runtime-identity",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "secrets/application-runtime.ps1", "-Phase", "verify", "-Target", "production"],
+          "timeout_seconds": 120,
+          "evidence": "Live API OS/database boundaries, two-record read-only workload AppRole, refused migration/shared secrets and denied use after token revocation. Does not establish runner isolation or password-rotation recovery."
+        },
+        {
           "id": "desktop-database-identities",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "development/verify-identities.ps1"],

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refresh a consumer's knowledge credential using its existing host AppRole."""
+"""Authenticate and refresh a consumer's declared runtime credentials through OpenBao."""
 import argparse
 from contextlib import contextmanager
 import fcntl
@@ -61,10 +61,23 @@ def configuration_transaction(paths, recover):
 def activate(user, prefix, base):
     subprocess.run(["systemctl", "restart", "laplace-api"], check=True, timeout=30)
     verifier = prefix / "app/operations/scripts/verify-application-release.py"
+    env = dict(os.environ)
+    logs = prefix / 'app/logs'
+    for line in (prefix / 'app/laplace-api.env').read_text().splitlines():
+        key, sep, value = line.partition('=')
+        if sep and key == 'LAPLACE_OPS_LOG_DIR':
+            logs = Path(shlex.split(value)[0] if value.startswith(('"', "'")) else value.strip())
+    # systemd supplies this to the API from its root-read EnvironmentFile. The
+    # verifier runs as the API identity without access to deployment credentials.
+    for line in (prefix / 'secrets/operator.env').read_text().splitlines():
+        key, sep, value = line.partition('=')
+        if sep and key == 'LAPLACE_OPERATOR_TOKEN':
+            parsed = shlex.split(value)
+            env[key] = parsed[0] if parsed else ''
     result = subprocess.run(["runuser", "-u", user, "--", "python3", str(verifier),
         "--base", base, "--timeout-seconds", "10", "--state-file",
-        str(prefix / "app/logs/knowledge-selection-verification.json")],
-        capture_output=True, text=True, timeout=60)
+        str(logs / "knowledge-selection-verification.json")],
+        capture_output=True, text=True, timeout=60, env=env)
     if result.returncode:
         raise ValueError("Selected knowledge failed installed application verification; configuration will be restored")
 
@@ -99,10 +112,14 @@ def main():
     parser.add_argument("--lock", type=Path, default=Path("/run/lock/laplace/host-resource.lock"))
     parser.add_argument("--bao-address", required=True)
     parser.add_argument("--select", action="store_true", help="Select the credential's knowledge target and restart the API")
+    parser.add_argument("--application-record", help="Additional host KV record for the API's restricted application login")
+    parser.add_argument("--restart-on-change", action="store_true", help="Reload pools after verified credentials change")
     parser.add_argument("--verification-base", help="Required with --select: the installed API URL to verify after activation")
     args = parser.parse_args()
-    if args.select and (not args.verification_base or not args.verification_base.startswith(("https://", "http://127.0.0.1:", "http://localhost:"))):
-        parser.error("--select requires --verification-base (HTTPS or local HTTP)")
+    if (args.select or args.restart_on_change) and (not args.verification_base or not args.verification_base.startswith(("https://", "http://127.0.0.1:", "http://localhost:"))):
+        parser.error("Selection/restart requires --verification-base (HTTPS or local HTTP)")
+    if args.application_record and not re.fullmatch(r'[a-z][a-z0-9_-]*', args.application_record):
+        parser.error('Invalid application record name')
     if not re.fullmatch(r"[a-zA-Z0-9._-]+", args.host) or not args.bao_address.startswith("https://"):
         raise ValueError("Expected a declared host and HTTPS Bao address")
     if args.credentials.stat().st_mode & 0o077:
@@ -146,11 +163,25 @@ def main():
         previous = pgpass.read_text().splitlines() if pgpass.exists() else []
         lines = [line for line in previous if not line.startswith(prefix)]
         lines.append(prefix + record["password"])
+        if args.application_record:
+            application = request('kv/data/hosts/' + args.host + '/' + args.application_record)['data']['data']
+            ahost, adb, arole = (application[name] for name in ('database_host', 'database', 'role'))
+            aport = int(application['port'])
+            if not all(isinstance(v, str) and re.fullmatch(r'[a-zA-Z0-9._-]+', v) for v in (ahost, adb, arole)) or not 1 <= aport <= 65535 or not re.fullmatch(r'[0-9a-f]{64}', application['password']):
+                raise ValueError('Invalid application runtime credential')
+            appcheck = subprocess.run(['psql', '-X', '-w', '-h', ahost, '-p', str(aport), '-U', arole, '-d', adb,
+                '-Atqc', 'SELECT current_user'], env=dict(env, PGPASSWORD=application['password']), capture_output=True, text=True, timeout=20)
+            if appcheck.returncode or appcheck.stdout.strip() != arole:
+                raise ValueError('Application runtime authentication failed; credentials were not published')
+            appprefix = f'{ahost}:{aport}:{adb}:{arole}:'
+            lines = [line for line in lines if not line.startswith(appprefix)]
+            lines.append(appprefix + application['password'])
+        changed = previous != lines
         paths = [pgpass]
         if args.select:
             paths += [args.machine_file, args.prefix / "app/laplace-api.env"]
         def recover():
-            if args.select:
+            if args.select or (args.restart_on_change and changed):
                 activate(args.user, args.prefix, args.verification_base)
         with configuration_transaction(paths, recover):
             atomic(pgpass, "\n".join(lines) + "\n", 0o600, account.pw_uid, account.pw_gid)
@@ -161,12 +192,18 @@ def main():
                 assignments(args.prefix / "app/laplace-api.env", {"LAPLACE_DB":
                     f"Host={host};Port={port};Username={role};Database={database};SSL Mode=Require"})
                 activate(args.user, args.prefix, args.verification_base)
+            elif args.restart_on_change and changed:
+                activate(args.user, args.prefix, args.verification_base)
         print(json.dumps({"host": args.host, "knowledge_host": host, "database": database, "role": role,
             "authenticated": True, "native_receipt": check.stdout.strip().split("|", 1)[1],
-            "selection_updated": args.select}))
+            "selection_updated": args.select, "credentials_changed": changed,
+            "application_credential": bool(args.application_record)}))
     finally:
-        if token:
-            request("auth/token/revoke-self", {})
+        try:
+            if token:
+                request("auth/token/revoke-self", {})
+        finally:
+            lock.close()
 
 
 if __name__ == "__main__":
