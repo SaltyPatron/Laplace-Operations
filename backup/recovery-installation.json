@@ -1,0 +1,17 @@
+{
+  "production": {
+    "host": "hart-prod",
+    "archive-directory": "/var/backups/laplace",
+    "source-database": "laplace-app",
+    "pgbin": "/usr/lib/postgresql/18/bin",
+    "pgsocket": "/var/run/postgresql",
+    "pgport": 5432,
+    "pg-os-user": "postgres",
+    "database-owner": "laplace",
+    "runtime-user": "laplace-runner",
+    "app-dir": "/opt/laplace/app",
+    "prefix": "/opt/laplace",
+    "work-dir": "/repos/work/application-recovery",
+    "api-port": 15187
+  }
+}

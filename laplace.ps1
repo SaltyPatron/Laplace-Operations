@@ -9,7 +9,7 @@ Operate the installed Laplace application through its delivery workflows.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('status','runs','verify','deploy','components','prepare','build','test')][string]$Operation = 'status',
+    [ValidateSet('status','runs','verify','deploy','components','prepare','build','test','recovery')][string]$Operation = 'status',
     [ValidateSet('staging','production','knowledge')][string]$Target = 'staging',
     [string]$Revision = 'main',
     [string]$Repository = 'SaltyPatron/Laplace',
@@ -17,6 +17,10 @@ param(
     [switch]$Wait
 )
 $ErrorActionPreference = 'Stop'
+if ($Operation -eq 'recovery') {
+    & pwsh -NoProfile -File "$PSScriptRoot/backup/recovery.ps1" -Target $Target
+    exit $LASTEXITCODE
+}
 if ($Operation -in 'prepare','build','test') {
     $localArgs = @('-NoProfile','-File',"$PSScriptRoot/dev.ps1",'-Operation',$Operation)
     if ($SourcePath) { $localArgs += @('-SourcePath',$SourcePath) }
