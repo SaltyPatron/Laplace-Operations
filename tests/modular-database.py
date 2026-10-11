@@ -35,6 +35,8 @@ INSERT INTO public.entity VALUES(1);''')
     sql(name, modular.grants(config))
     assert sql(name, f'SET SESSION AUTHORIZATION "{name}"; SELECT count(*) FROM public.entity;').splitlines()[-1] == '1'
     sql(name, f'''SET SESSION AUTHORIZATION "{name}"; BEGIN;
+CREATE SCHEMA IF NOT EXISTS stage;
+SET LOCAL session_replication_role=replica;
 INSERT INTO public.entity VALUES(2); UPDATE public.entity SET id=3 WHERE id=2;
 DELETE FROM public.entity WHERE id=3; TRUNCATE public.entity;
 CREATE TABLE stage.runtime_batch(id int); INSERT INTO stage.runtime_batch VALUES(1); ROLLBACK;''')
@@ -46,4 +48,6 @@ CREATE TABLE stage.runtime_batch(id int); INSERT INTO stage.runtime_batch VALUES
     print('Actual PostgreSQL grants passed: read/write/staging permitted; private schema, DDL and administrator impersonation denied; rerun idempotent.')
 finally:
     sql('postgres', f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE);')
+    sql('postgres', f'''DO $$ BEGIN IF EXISTS(SELECT FROM pg_roles WHERE rolname='{name}') THEN
+EXECUTE 'REVOKE SET ON PARAMETER session_replication_role FROM "{name}"'; END IF; END $$;''')
     sql('postgres', f'DROP ROLE IF EXISTS "{name}";')
