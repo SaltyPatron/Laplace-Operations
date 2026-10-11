@@ -151,6 +151,14 @@ explains why forwarded scheme and host affect redirects.
 
 For development on HART-DESKTOP, use the same entry point:
 
+Repository administrators can read back the declared public-runner approval policy with
+`./github/runner-policy.ps1`, or converge it with `-Apply`. It requires approval for every external fork's workflow,
+including returning contributors. The saved receipt includes previous and current settings.
+[GitHub documents the repository policy API](https://docs.github.com/en/rest/actions/permissions#set-fork-pr-contributor-approval-permissions-for-a-repository).
+This does not isolate an approved workflow from a persistent runner's filesystem or network. Privileged promotion
+and untrusted builds still need separate execution contexts, as described in
+[GitHub's self-hosted runner guidance](https://docs.github.com/en/actions/reference/security/secure-use).
+
 ```powershell
 ./laplace.ps1 prepare
 ./laplace.ps1 build

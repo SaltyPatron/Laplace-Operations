@@ -435,6 +435,13 @@
           "platform": "any",
           "argv": null,
           "evidence": "Harmless negative-access probes from the actual runner contexts."
+        },
+        {
+          "id": "fork-workflow-policy",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "github/runner-policy.ps1"],
+          "timeout_seconds": 120,
+          "evidence": "github/runner-policy.ps1 reads back every declared public runner repository's all-external-contributors approval policy and records before/after values. This configuration does not prove runner isolation."
         }
       ]
     },
