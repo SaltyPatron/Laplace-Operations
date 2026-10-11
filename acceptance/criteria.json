@@ -261,6 +261,13 @@
           "platform": "any",
           "argv": null,
           "evidence": "Resolved plans, live settings and representative concurrent workload measurements."
+        },
+        {
+          "id": "production-resource-settings",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "secrets/application-runtime.ps1", "-Phase", "resources-check", "-Target", "production"],
+          "timeout_seconds": 120,
+          "evidence": "Read back application-cluster tuning against measured host facts and declared allocations, including service/data-directory identity and no pending restart. This is configuration convergence, not workload saturation or aggregate knowledge-host proof."
         }
       ]
     },

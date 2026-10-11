@@ -40,7 +40,10 @@ while IFS=$'\t' read -r name profile ram threads cores wal shared rot reserved c
   check "shared_buffers a quarter of what the server may use" "$(v shared_kb)" $(( $(v usable_kb) / 4 ))
   check "effective_cache_size within what the server may use" "$(v ecs_kb)" "$(v usable_kb)"
   # the private quarter: every backend's work_mem and temp_buffers, one maintenance operation, every autovacuum worker
-  private=$(( $(v backends) * ( $(v work_kb) + $(v temp_kb) ) + $(v mwm_kb) + $(v avw) * $(v avwm_kb) ))
+  private=$(( $(v backends) * ( $(v work_nodes) * $(v work_kb) + $(v temp_kb) ) + $(v mwm_kb) + $(v avw) * $(v avwm_kb) ))
+  actual_wal=$(awk '$1 == "wal_level" {print $2}' <<<"$d")
+  expected_wal=minimal; [[ "$profile" != app ]] || expected_wal=replica
+  [[ "$actual_wal" == "$expected_wal" ]] || { echo 'FAIL WAL mode differs from recovery profile'; fail=1; }
   # at PostgreSQL's floors (work_mem 4 MB, temp_buffers 8 MB) the declared backends may want more than the quarter: then the
   # plan says by how much (over_kb) instead of promising it, and nothing beyond that is promised
   over=$(( private - $(v private_kb) )); [ "$over" -gt 0 ] || over=0

@@ -451,9 +451,13 @@ appdb(){ part "application database"
   if command -v ufw >/dev/null && ufw status | grep -q "^Status: active"; then ufw status | grep -q "$port/tcp.*$LAPLACE_LAN" || { ufw allow from "$LAPLACE_LAN" to any port "$port" proto tcp >/dev/null; say "ufw" "$port/tcp from $LAPLACE_LAN"; }; fi
   # its settings: tune-pg.sh's rules from this machine's memory, cores and disk, with the app profile (the API's pool,
   # no ingest fan); the PostgreSQL project's cluster has its socket in /var/run/postgresql and its own unit
-  LAPLACE_PG_PROFILE=app TUNE_SOCKET=/var/run/postgresql TUNE_CONN="host=/var/run/postgresql port=$port user=postgres dbname=postgres" \
+  LAPLACE_PG_PROFILE=app LAPLACE_PG_SERVING="${LAPLACE_APP_PG_SERVING:-${LAPLACE_PG_SERVING:-}}" \
+    LAPLACE_PG_WORK_NODES="${LAPLACE_APP_PG_WORK_NODES:-${LAPLACE_PG_WORK_NODES:-2}}" \
+    LAPLACE_PG_RESERVED="${LAPLACE_APP_PG_RESERVED:-${LAPLACE_PG_RESERVED:-0}}" \
+    LAPLACE_PG_BUFFERS_MAX="${LAPLACE_APP_PG_BUFFERS_MAX:-${LAPLACE_PG_BUFFERS_MAX:-}}" \
+    TUNE_SOCKET=/var/run/postgresql TUNE_CONN="host=/var/run/postgresql port=$port user=postgres dbname=postgres" \
     TUNE_PGDATA=$data PGWAL=$data/pg_wal PGBIN=/usr/lib/postgresql/$ver/bin PGUSER=postgres SERVICE=postgresql@$ver-$cl LAPLACE_CONNINFO="host=127.0.0.1 port=$port user=$LAPLACE_ROLE dbname=$name" \
-    bash "$here/tune-pg.sh" 2>&1 | sed 's/^/  /' || say "settings" "the application cluster does not match its declaration (above)"
+    bash "$here/tune-pg.sh" 2>&1 | sed 's/^/  /'
   say "database $name" "$(aq "SELECT pg_size_pretty(pg_database_size('$name'))") on 127.0.0.1:$port and $LAPLACE_LAN"
 }
 # A host that is started for a job and pays by the minute (hart-cloud) stops itself when nothing has run on it for

@@ -92,15 +92,18 @@ function TunePlan {   # every derived quantity, tune-pg.sh's plan(): the same na
     $reservedConns = 3; $conns = $ingest + $serving + $avw + $reservedConns
     $maintDomKB = [int64]($privateKB / 4); $mwmKB = [math]::Max([int64]($maintDomKB / 2), 65536); $avwmKB = [math]::Max([int64]($maintDomKB / 2 / $avw), 1024)
     $execKB = $privateKB - $maintDomKB; $backends = $conns + $par; $perKB = [int64]($execKB / $backends)
-    $workKB = [math]::Max([int64]($perKB / 2), 4096); $tempKB = [math]::Max([int64]($perKB / 2), 8192)
-    $overKB = [math]::Max([int64]($backends * ($workKB + $tempKB) + $mwmKB + $avw * $avwmKB - $privateKB), 0)
+    $workNodesText = if ($env:LAPLACE_PG_WORK_NODES) { $env:LAPLACE_PG_WORK_NODES } else { '2' }
+    if ($workNodesText -notmatch '^[1-9][0-9]{0,5}$') { throw 'tune-pg: LAPLACE_PG_WORK_NODES must be a positive integer (at most six digits)' }
+    $workNodes = [int]$workNodesText
+    $workKB = [math]::Max([int64][math]::Floor($perKB / 2 / $workNodes), 4096); $tempKB = [math]::Max([int64]($perKB / 2), 8192)
+    $overKB = [math]::Max([int64]($backends * ($workNodes * $workKB + $tempKB) + $mwmKB + $avw * $avwmKB - $privateKB), 0)
     if ($rotational -eq 1) { $eic = 2; $rpc = '4' } else { $eic = $iow; $rpc = '1.1' }
     [ordered]@{
         'fact.memory_kb' = $ramKB; 'fact.reserved_kb' = $reservedKB; 'fact.threads' = $threads; 'fact.cores' = $cores
         'fact.wal_volume_bytes' = $walBytes; 'fact.wal_volume_shared' = $shared; 'fact.data_rotational' = $rotational; 'fact.profile' = $TuneProfile
         usable_kb = $usableKB; shared_kb = $sharedKB; ecs_kb = $ecsKB; private_kb = $privateKB; wal_mb = $walMB; min_wal_mb = $minWalMB; wal_buf_kb = $walBufKB
         par = $par; gather = $gather; avw = $avw; iow = $iow; mwp = $mwp; conns = $conns; backends = $backends
-        mwm_kb = $mwmKB; avwm_kb = $avwmKB; work_kb = $workKB; temp_kb = $tempKB; eic = $eic; rpc = $rpc; locks = $locks; over_kb = $overKB
+        mwm_kb = $mwmKB; avwm_kb = $avwmKB; work_kb = $workKB; work_nodes = $workNodes; temp_kb = $tempKB; eic = $eic; rpc = $rpc; locks = $locks; over_kb = $overKB
     }
 }
 function TuneMBs([int64]$kb) { "$([int64]($kb / 1024))MB" }
@@ -118,8 +121,8 @@ function TuneDeclared {
         [bool]$found
     })
     $s = [ordered]@{
-        wal_level                        = 'minimal'
-        max_wal_senders                  = '0'
+        wal_level                        = $(if ($TuneProfile -eq 'app') { 'replica' } else { 'minimal' })
+        max_wal_senders                  = $(if ($TuneProfile -eq 'app') { '3' } else { '0' })
         shared_buffers                   = TuneMBs $p.shared_kb
         effective_cache_size             = TuneMBs $p.ecs_kb
         work_mem                         = TuneMBs $p.work_kb
