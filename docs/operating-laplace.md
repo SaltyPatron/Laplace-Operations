@@ -48,6 +48,9 @@ application/site installer use the same reader contract; `LAPLACE_CONFIG_SOURCE`
 
 The first command verifies the installed site. The second regenerates its declared runtime configuration and
 restarts it. Shared host locks prevent these operations from racing deployment or ingestion.
+The component delivery workflow waits for another repository's host operation for up to 3,600 seconds; the
+repository variable `LAPLACE_HOST_LOCK_WAIT_SECONDS` configures this deadline. Operations shell commands accept
+the same variable and default to zero (immediate refusal). A timeout fails before shared-runtime changes.
 
 Install API operator and existing OAuth provider credentials from OpenBao on an SSH-accessible target:
 
