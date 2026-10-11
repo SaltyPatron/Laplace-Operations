@@ -1,6 +1,6 @@
 """Exercise HTTP ingestion and replay with scoped SQL rights in a disposable database.
 
-Usage: python3 tests/modular-ingestion.py --config DECLARATION --release PACKAGE
+Usage: python3 tests/modular-ingestion.py --config DECLARATION --release PACKAGE --admin-role ROLE
        [--candidate-upgrade path/to/laplace--old--new.sql]
 The optional SQL is applied only inside this fixture, before shared installation.
 """
@@ -28,6 +28,7 @@ def module(name, path):
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--config', required=True)
 parser.add_argument('--release', required=True)
+parser.add_argument('--admin-role', required=True, help='Explicit fixture administrator, authenticated by the configured local socket')
 parser.add_argument('--candidate-upgrade')
 args = parser.parse_args()
 config = json.loads(Path(args.config).read_text())
@@ -36,9 +37,14 @@ ops = module('modular', ROOT / 'installation/modular.py')
 deploy = module('mcp', Path(config['source']) / 'Laplace-MCP/deployment.py')
 deploy.verify_package(release)
 name = 'modular_admit_' + uuid.uuid4().hex[:12]
-config.update(database=name, role=name, connection='host=/tmp port=5432 user=laplace dbname=' + name)
+def connquote(value):
+    return "'" + str(value).replace('\\', '\\\\').replace("'", "\\'") + "'"
+
+
+config.update(database=name, role=name,
+    connection=f"host={connquote(config['socket'])} port={config['port']} user={connquote(args.admin_role)} dbname={name}")
 psql = [str(Path(config['pgbin']) / 'psql'), '-XwAt', '-v', 'ON_ERROR_STOP=1',
-        '-h', config['socket'], '-p', str(config['port']), '-U', 'laplace', '-f', '-']
+        '-h', config['socket'], '-p', str(config['port']), '-U', args.admin_role, '-f', '-']
 
 
 def sql(database, statement):
