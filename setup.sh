@@ -579,7 +579,6 @@ site(){ part site
   m=${LAPLACE_MONOREPO:-$LAPLACE_SRC/Laplace}; s=$m/deploy/linux/site-host.sh
   [ -f "$s" ] || { say "site" "no $s: git clone https://github.com/$LAPLACE_GITHUB/Laplace $m"; return 0; }
   bash "$s"
-  python3 "$here/network/install-nginx.py" --apply
 }
 # The repositories' agents: one runner for every repository with a self-hosted workflow (agents.sh, which fails its
 # status when one has none).
