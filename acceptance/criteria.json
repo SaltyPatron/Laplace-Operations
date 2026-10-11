@@ -158,14 +158,14 @@
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "desktop"],
           "timeout_seconds": 180,
-          "evidence": "Start the built Windows application with declared OpenBao-backed runtime identities, separate development application state and selected remote knowledge; execute the same authenticated SQL/native/SPA verifier as deployment."
+          "evidence": "Verify an existing owned desktop process without restarting it, or temporarily start the built Windows application when stopped; exercise the authenticated SQL/native/SPA verifier with enrolled workload credentials. This loopback check does not establish IIS/browser routing."
         },
         {
           "id": "desktop-lifecycle",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "tests/development-lifecycle.ps1"],
           "timeout_seconds": 300,
-          "evidence": "Actual built desktop on an unused port: workload-authenticated start, SPA response, idempotent start, refused stale process time/wrong application, stop and refusal to replace another listener."
+          "evidence": "Actual built desktop on an unused port: workload-authenticated start, SPA response, idempotent start, verification preserving process and receipt, refused stale process time/wrong application, stop, cold verification and refusal to replace another listener."
         },
         {
           "id": "site-live-production",
@@ -393,6 +393,13 @@
           "platform": "any",
           "argv": null,
           "evidence": "Client-to-service probes plus renewal/distribution evidence."
+        },
+        {
+          "id": "browser-routes",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "network/verify-routes.ps1"],
+          "timeout_seconds": 180,
+          "evidence": "Real client DNS/TLS, named IIS/nginx browser route, SPA, health and Google/Microsoft callback origin. Provider registration and certificate renewal are separate requirements."
         },
         {
           "id": "private-dns",

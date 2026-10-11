@@ -1,6 +1,6 @@
 #Requires -Version 7
 [CmdletBinding()]
-param([ValidateSet('start','stop','status','logs')][string]$Operation='status', [string]$SourcePath,
+param([ValidateSet('start','stop','status','logs','verify')][string]$Operation='status', [string]$SourcePath,
     [string]$Installation=$(if ($env:LAPLACE_DEVELOPMENT_INSTALLATION) {$env:LAPLACE_DEVELOPMENT_INSTALLATION} else {"$PSScriptRoot/installation.json"}))
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot/../laplace.env.ps1"
@@ -40,6 +40,54 @@ try {
     if (-not $locked) { throw 'Another desktop lifecycle operation is in progress.' }
     $active=ActiveRun
     switch ($Operation) {
+        'verify' {
+            if (-not $active) {
+                & "$PSScriptRoot/run.ps1" -SourcePath $SourcePath -Installation $Installation -Verify
+                if ($LASTEXITCODE) { throw 'Desktop verification failed.' }
+                break
+            }
+            # Authenticate only to the listener owned by the recorded instance.
+            # Verification never starts or stops an already-running application.
+            $listeners=@(Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue |
+                Where-Object { $_.LocalAddress -in '127.0.0.1','::1' })
+            if (-not $listeners.Count -or @($listeners | Where-Object OwningProcess -ne $active.record.process_id).Count) {
+                throw 'The desktop listener does not belong to the recorded application.'
+            }
+            . "$PSScriptRoot/credentials.ps1"
+            $work=Join-Path $operations ('desktop-verification-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
+            [void](New-Item -ItemType Directory -Path $work -Force)
+            $verification=[ordered]@{status='failed';url=$active.record.base_url;pid=$active.record.process_id;
+                process_started_utc=$active.record.process_started_utc;revision=$active.record.revision;
+                source=$SourcePath;run_directory=$active.directory;verification_directory=$work;
+                started_utc=[DateTime]::UtcNow.ToString('o');reused_running_instance=$true}
+            $savedOperator=$env:LAPLACE_OPERATOR_TOKEN; $savedKey=$env:LAPLACE_API_KEY; $token=$null
+            try {
+                $token=New-DevelopmentBaoSession $config
+                $path=(Get-DevelopmentSecretPaths $config)['laplace-api'] -replace '^kv/', 'kv/data/'
+                $env:LAPLACE_OPERATOR_TOKEN=(Invoke-DevelopmentBao $config GET $path $token).data.data.operator_token
+                if (-not $env:LAPLACE_OPERATOR_TOKEN) { throw 'The enrolled desktop verification identity is missing.' }
+                Remove-Item Env:LAPLACE_API_KEY -ErrorAction SilentlyContinue
+                $null=Invoke-Program py @('-3',(Join-Path $SourcePath 'scripts/verify-application-release.py'),
+                    '--base',$active.record.base_url,'--state-file',"$work/verification.json",'--timeout-seconds','60') -TimeoutSeconds 90
+                $auth=Invoke-RestMethod "$($active.record.base_url)/v1/auth/config" -TimeoutSec 10
+                $verification.sign_in_providers=@($auth.providers | ForEach-Object { $_.id })
+                if (-not $verification.sign_in_providers.Count) { throw 'The desktop has no configured sign-in provider.' }
+                $observed=ActiveRun
+                if (-not $observed -or $observed.record.process_id -ne $active.record.process_id) {
+                    throw 'The desktop instance changed during verification.'
+                }
+                $verification.status='verified'
+            } finally {
+                $env:LAPLACE_OPERATOR_TOKEN=$savedOperator; $env:LAPLACE_API_KEY=$savedKey
+                try { if ($token) { $null=Invoke-DevelopmentBao $config POST 'auth/token/revoke-self' $token @{} } }
+                catch { $verification.status='failed'; throw }
+                finally {
+                    $verification.finished_utc=[DateTime]::UtcNow.ToString('o')
+                    $verification | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$work/receipt.json"
+                }
+            }
+            $verification | ConvertTo-Json -Depth 4
+        }
         'start' {
             if ($active) { Write-Host "Laplace is already running: $($active.record.base_url)"; break }
             $runId=[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8)
@@ -83,7 +131,7 @@ try {
             Get-Content -LiteralPath (Join-Path $active.directory 'api.stderr.log') -Tail 20
         }
     }
-    if ($active) {
+    if ($active -and $Operation -ne 'verify') {
         [ordered]@{status='running';url=$active.record.base_url;pid=$active.record.process_id;revision=$active.record.revision;
             source=$active.record.source;logs=$active.directory} | ConvertTo-Json
     } elseif ($Operation -eq 'status') { @{status='stopped';url="http://localhost:$port"} | ConvertTo-Json }

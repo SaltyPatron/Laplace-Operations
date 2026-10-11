@@ -17,7 +17,7 @@ param(
     [switch]$Wait
 )
 $ErrorActionPreference = 'Stop'
-if ($Operation -in 'start','stop','logs' -or ($Operation -eq 'status' -and $Target -eq 'desktop')) {
+if ($Operation -in 'start','stop','logs' -or ($Operation -in 'status','verify' -and $Target -eq 'desktop')) {
     if ($PSBoundParameters.ContainsKey('Target') -and $Target -ne 'desktop') { throw "$Operation is a desktop lifecycle operation; use the deployment operator for another target." }
     $localArgs=@('-NoProfile','-File',"$PSScriptRoot/development/control.ps1",'-Operation',$Operation)
     if ($SourcePath) { $localArgs+=@('-SourcePath',$SourcePath) }
@@ -32,13 +32,12 @@ if ($Operation -eq 'configure-development') {
     & pwsh -NoProfile -File "$PSScriptRoot/development/configure.ps1"
     exit $LASTEXITCODE
 }
-if ($Operation -eq 'run' -or ($Operation -eq 'verify' -and $Target -eq 'desktop')) {
+if ($Operation -eq 'run') {
     if ($Operation -eq 'run' -and $PSBoundParameters.ContainsKey('Target') -and $Target -ne 'desktop') {
         throw 'run starts the desktop development process; use deploy for a deployment target.'
     }
     $localArgs = @('-NoProfile','-File',"$PSScriptRoot/development/run.ps1")
     if ($SourcePath) { $localArgs += @('-SourcePath',$SourcePath) }
-    if ($Operation -eq 'verify') { $localArgs += '-Verify' }
     & pwsh @localArgs
     exit $LASTEXITCODE
 }
