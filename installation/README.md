@@ -59,11 +59,15 @@ sudo ./setup.sh runtime
 ```
 
 `hart-server-runtime.json` declares the current hart-server installation; `--manifest /absolute/path.json` selects another
-declaration. The preflight checks the actual machine, mounts, services, installed paths and operator login.
+declaration. The preflight checks the actual machine, mounts, services and installed paths. A non-root
+check reports `workload_authentication=requires_privileged_check` when the private enrollment exists;
+it does not claim authentication was tested. A root check also authenticates the installed AppRole.
 The privileged operation creates separate API and MCP OS accounts and restricted database roles, enrolls
 an API AppRole with read-only access to two host runtime records, verifies authentication, and activates
 the services. Existing Bao records must match the declared target; rerunning preserves their passwords
-and the host's enrollment. Runtime refresh uses that enrollment rather than the operator's login.
+and the host's enrollment. Only first enrollment needs the operator's Bao login. Both repeated setup and
+runtime refresh authenticate through the root-private AppRole. Rejected existing enrollment fails without
+falling back to an operator token, rewriting policy or generating replacement credentials.
 
 This step preserves application data in `laplace-mono.app` and pins its application connection separately
 from knowledge selection. It does not move application data to a separate physical database. MCP uses
@@ -88,8 +92,7 @@ Existing CA-issued certificates are refused rather than replaced by a local self
 
 If service activation fails, the receipt points to root-private diagnostics containing the verifier failure
 and the API journal for that attempt. Password inputs and process environments are not logged. Public
-receipts contain no diagnostic output. The setup operator uses the existing Bao login; runtime refresh uses
-the root-private AppRole enrollment. That enrollment is long-lived and may issue five-minute tokens with
+receipts contain no diagnostic output. The root-private AppRole enrollment is long-lived and may issue five-minute tokens with
 read access to the two named host runtime records. It is not a user authentication bypass or a secret-reading
 HTTP endpoint. Existing serving identities remain unchanged until activation passes.
 

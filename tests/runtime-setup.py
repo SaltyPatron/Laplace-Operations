@@ -2,6 +2,7 @@
 import copy
 import fcntl
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +21,130 @@ CONFIG = json.loads((ROOT / 'installation/hart-server-runtime.json').read_text()
 
 
 class RuntimeBoundaries(unittest.TestCase):
+    def workload_fixture(self, temporary, *, failure=None, conflict=False):
+        config = copy.deepcopy(CONFIG)
+        credential = Path(temporary) / 'approle.json'
+        credential.write_text('{}')
+        credential.chmod(0o600)
+        config['credentials'] = str(credential)
+        calls = []
+
+        def request(req, **kwargs):
+            path = req.full_url.split('/v1/', 1)[1]
+            payload = json.loads(req.data) if req.data else None
+            calls.append((path, req.get_method(), payload))
+            if path == failure:
+                raise urllib.error.HTTPError(req.full_url, 403, 'private-server-error', {},
+                    io.BytesIO(b'do-not-print-this-response'))
+            if path == 'auth/approle/login':
+                value = {'auth': {'client_token': 'workload-token', 'metadata': {'role_name': config['bao_role']}}}
+            elif path == 'auth/token/revoke-self':
+                return io.BytesIO(b'')
+            elif path == 'sys/capabilities-self':
+                value = {'capabilities': ['read']}
+            else:
+                name = path.rsplit('/', 1)[1]
+                item = config if name == config['record'] else config['knowledge']
+                record = {key: item[key] for key in ('database_host', 'database', 'role', 'port')}
+                record['password'] = 'a' * 64
+                if conflict:
+                    record['database'] = 'another-installation'
+                value = {'data': {'data': record}}
+            return io.BytesIO(json.dumps(value).encode())
+        return config, calls, request
+
+    def test_repeat_setup_never_uses_an_expired_operator_session(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config, calls, request = self.workload_fixture(temporary)
+            with patch.object(runtime, 'Bao', side_effect=AssertionError('operator session must not be used')), \
+                 patch.object(runtime, 'enrollment', return_value={'role_id': 'role', 'secret_id': 'secret'}), \
+                 patch.object(runtime.urllib.request, 'urlopen', side_effect=request):
+                first = runtime.runtime_records(config)
+                second = runtime.runtime_records(config)
+            self.assertEqual(first, second)
+            self.assertEqual([v[0] for v in calls].count('auth/approle/login'), 2)
+            self.assertEqual([v[0] for v in calls].count('auth/token/revoke-self'), 2)
+            self.assertTrue(all(method == 'GET' for path, method, _ in calls if path.startswith('kv/')))
+            self.assertFalse(any('policy' in path or '/role/' in path for path, _, _ in calls))
+
+    def test_rejected_or_conflicting_workload_never_falls_back_to_operator(self):
+        for failure, conflict in (('auth/approle/login', False),
+                                  ('kv/data/hosts/hart-server/application-runtime', False), (None, True)):
+            with self.subTest(failure=failure, conflict=conflict), tempfile.TemporaryDirectory() as temporary:
+                config, calls, request = self.workload_fixture(temporary, failure=failure, conflict=conflict)
+                with patch.object(runtime, 'Bao', side_effect=AssertionError('forbidden fallback')), \
+                     patch.object(runtime, 'enrollment', return_value={'role_id': 'role', 'secret_id': 'secret'}), \
+                     patch.object(runtime.urllib.request, 'urlopen', side_effect=request):
+                    with self.assertRaises(ValueError) as error:
+                        runtime.runtime_records(config)
+                self.assertNotIn('private-server-error', str(error.exception))
+                self.assertNotIn('do-not-print', str(error.exception))
+                if failure != 'auth/approle/login':
+                    self.assertEqual(calls[-1][0], 'auth/token/revoke-self')
+
+    def test_enrollment_rejects_links_and_unprivileged_ownership(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            credential = Path(temporary) / 'approle.json'
+            credential.write_text('{"role_id":"role","secret_id":"secret"}')
+            credential.chmod(0o644)
+            with self.assertRaisesRegex(ValueError, 'root-owned private'):
+                runtime.enrollment(credential)
+            link = Path(temporary) / 'link.json'
+            link.symlink_to(credential)
+            with self.assertRaisesRegex(ValueError, 'root-owned private'):
+                runtime.enrollment(link)
+
+    def test_only_missing_enrollment_invokes_operator_bootstrap(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config, calls, request = self.workload_fixture(temporary)
+            Path(config['credentials']).unlink()
+            with patch.object(runtime, 'Bao') as operator, \
+                 patch.object(runtime, 'enrollment', return_value={'role_id': 'role', 'secret_id': 'secret'}), \
+                 patch.object(runtime.urllib.request, 'urlopen', side_effect=request):
+                runtime.runtime_records(config)
+                operator.return_value.call.assert_called_once_with(['token', 'lookup', '-field=ttl'])
+                operator.return_value.enroll.assert_called_once_with(config)
+                self.assertEqual(operator.return_value.record.call_count, 2)
+            self.assertEqual(calls[-1][0], 'auth/token/revoke-self')
+
+    def test_authentication_failure_receipt_is_saved_before_mutation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config, calls, request = self.workload_fixture(temporary, failure='auth/approle/login')
+            config.update(work=temporary, host_lock=str(Path(temporary) / 'host.lock'))
+            manifest = Path(temporary) / 'manifest.json'
+            manifest.write_text(json.dumps(config))
+            with patch.object(sys, 'argv', ['runtime.py', '--manifest', str(manifest)]), \
+                 patch.object(runtime.os, 'geteuid', return_value=0), \
+                 patch.object(runtime, 'validate_declaration'), patch.object(runtime, 'preflight', return_value={}), \
+                 patch.object(runtime, 'Bao', side_effect=AssertionError('forbidden operator session')), \
+                 patch.object(runtime, 'enrollment', return_value={'role_id': 'role', 'secret_id': 'secret'}), \
+                 patch.object(runtime.urllib.request, 'urlopen', side_effect=request), \
+                 patch.object(runtime, 'checked', return_value='a' * 40) as command, \
+                 patch.object(runtime.SYNC, 'atomic', side_effect=lambda path, text, *args: path.write_text(text)):
+                with self.assertRaisesRegex(ValueError, 'workload operation'):
+                    runtime.main()
+            receipt = json.loads(next(Path(temporary).glob('*-runtime-*.json')).read_text())
+            self.assertEqual(receipt['status'], 'failed')
+            self.assertIn('HTTP 403', receipt['error'])
+            self.assertNotIn('verification', receipt)
+            self.assertEqual(command.call_count, 1)  # source identity only; no SQL/service mutation
+
+    def test_nonroot_preflight_does_not_claim_workload_authentication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config, _, _ = self.workload_fixture(temporary)
+            manifest = Path(temporary) / 'manifest.json'
+            manifest.write_text(json.dumps(config))
+            output = io.StringIO()
+            with patch.object(sys, 'argv', ['runtime.py', '--manifest', str(manifest), '--check']), \
+                 patch.object(sys, 'stdout', output), patch.object(runtime.os, 'geteuid', return_value=1000), \
+                 patch.object(runtime, 'preflight', return_value={}), \
+                 patch.object(runtime, 'Bao', side_effect=AssertionError('forbidden operator session')), \
+                 patch.object(runtime, 'runtime_records', side_effect=AssertionError('private enrollment')):
+                runtime.main()
+            receipt = json.loads(output.getvalue())
+            self.assertEqual(receipt['workload_authentication'], 'requires_privileged_check')
+            self.assertFalse(receipt['activated'])
+
     def test_manifest_selection_honors_explicit_process_and_machine_configuration(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
