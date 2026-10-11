@@ -13,15 +13,20 @@ Run these from this Operations checkout on HART-DESKTOP, using your existing Git
 ./laplace.ps1 status -Target production -Wait
 ./laplace.ps1 verify -Target staging -Wait
 ./laplace.ps1 verify -Target production -Wait
-./laplace.ps1 deploy -Wait
+./laplace.ps1 prepare -Target desktop
+./laplace.ps1 build -Target desktop
+./laplace.ps1 deploy -Target staging -Wait
+./laplace.ps1 deploy -Target production -Wait
 ./laplace.ps1 recovery -Target production
 ```
 
 `staging` selects hart-server; `production` selects hart-prod; `knowledge` selects hart-cloud when it is running.
 `status` inspects installed revisions, configuration and connectivity; `runs` lists workflow history. `verify` executes the installed application. With `-Wait`, status and verification receipts are downloaded under `$LAPLACE_WORK/operations/<run-id>`.
-`deploy` delivers `main` through the same chain used by a merge: build and run on hart-server, then start hart-cloud,
-build the production bundle, publish on hart-prod and verify it. The cloud lease is released afterward so the
-existing idle-stop mechanism can stop the VM. HART-DESKTOP remains the development and optional GPU machine.
+`deploy -Target staging` builds and runs `main` on hart-server and stops there. This is also the default for `deploy`.
+`deploy -Target production` first verifies staging, then starts hart-cloud, builds the production bundle, publishes
+on hart-prod and verifies it. The cloud lease is released afterward so the existing idle-stop mechanism can stop
+the VM. Automatic main delivery retains this production chain. `prepare`, `build` and `test` select desktop by
+default and reject remote targets. HART-DESKTOP remains the development and optional GPU machine.
 
 Workflow operations return a GitHub run link. `-Wait` follows that run and returns failure if it fails. The GitHub
 **Product — maintenance** workflow offers the same controls. `-Revision` selects a published ref; local uncommitted
