@@ -25,7 +25,12 @@ UNITS = Path('/etc/systemd/system')
 
 def checked(command, **kwargs):
     kwargs.setdefault('check', True)
-    return subprocess.run([str(v) for v in command], text=True, **kwargs)
+    try:
+        return subprocess.run([str(v) for v in command], text=True, **kwargs)
+    except subprocess.CalledProcessError as error:
+        if error.stderr:
+            print(error.stderr.strip()[-4000:], file=sys.stderr)
+        raise
 
 
 def config_load(path):
@@ -252,6 +257,8 @@ def switch_link(path, target):
 def activate(config, release, receipt_path, install):
     prefix = Path(config['prefix'])
     current = prefix / 'current'
+    if release.parent.resolve() != (prefix / 'releases').resolve() or release.is_symlink():
+        raise ValueError('Selected release is outside the declared release directory')
     previous = os.readlink(current) if current.is_symlink() else None
     program = Path(config['source']) / 'Laplace-MCP/deployment.py'
     # The service environment points through current, so a release switch includes
@@ -262,6 +269,7 @@ def activate(config, release, receipt_path, install):
     prior = {p: p.read_text() if p.exists() else None for p in files}
     legacy_active = install and legacy_command(config, 'is-active', check=False).returncode == 0
     old_active = subprocess.run(['systemctl', 'is-active', '--quiet', UNIT]).returncode == 0
+    old_enabled = subprocess.run(['systemctl', 'is-enabled', '--quiet', UNIT]).returncode == 0
     previous_invocation = checked(['systemctl', 'show', UNIT, '-p', 'InvocationID', '--value'], capture_output=True, check=False).stdout.strip()
     try:
         if install:
@@ -302,6 +310,8 @@ def activate(config, release, receipt_path, install):
         elif current.is_symlink():
             current.unlink()
         if install:
+            if not old_enabled:
+                checked(['systemctl', 'disable', '--now', UNIT], check=False, capture_output=True)
             for path, content in prior.items():
                 if content is None:
                     path.unlink(missing_ok=True)
