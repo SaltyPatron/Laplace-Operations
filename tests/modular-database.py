@@ -30,6 +30,8 @@ try:
     sql(name, '''CREATE TABLE public.entity(id int PRIMARY KEY);
 CREATE TABLE public.physicality(id int); CREATE TABLE public.consensus(id int);
 CREATE TABLE public.witness(id int); CREATE SCHEMA app; CREATE TABLE app.private(id int);
+CREATE FUNCTION public.laplace_clean_pending_list(regclass) RETURNS bigint LANGUAGE SQL AS 'SELECT 0::bigint';
+REVOKE ALL ON FUNCTION public.laplace_clean_pending_list(regclass) FROM PUBLIC;
 INSERT INTO public.entity VALUES(1);''')
     sql(name, modular.grants(config))
     sql(name, modular.grants(config))
