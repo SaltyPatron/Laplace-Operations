@@ -2,6 +2,7 @@
 [CmdletBinding()]
 param(
     [string]$SourcePath,
+    [ValidatePattern('^[a-zA-Z0-9-]+$')][string]$RunId,
     [string]$Installation = $(if ($env:LAPLACE_DEVELOPMENT_INSTALLATION) { $env:LAPLACE_DEVELOPMENT_INSTALLATION } else { "$PSScriptRoot/installation.json" }),
     [switch]$Verify
 )
@@ -29,7 +30,7 @@ if (-not (Test-Path -LiteralPath $env:LAPLACE_PERFCACHE_BIN)) { throw 'The confi
 $app = Split-Path $api
 [void](New-Item -ItemType Directory -Path "$app/wwwroot" -Force)
 Get-ChildItem -LiteralPath $web | Copy-Item -Destination "$app/wwwroot" -Recurse -Force
-$stamp = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')
+$stamp = if ($RunId) { $RunId } else { [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8) }
 $work = Join-Path $env:LAPLACE_WORK "operations/desktop-run-$stamp"
 [void](New-Item -ItemType Directory -Path $work -Force)
 $root = "kv/hosts/$($config.client)"
@@ -76,6 +77,9 @@ try {
     $process = Start-Process -FilePath (Get-Command dotnet).Source -ArgumentList @(('"' + $api + '"')) -WorkingDirectory $app -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput "$work/api.stdout.log" -RedirectStandardError "$work/api.stderr.log"
     $receipt.process_id = $process.Id
+    $receipt.process_started_utc = $process.StartTime.ToUniversalTime().ToString('o')
+    $receipt.api_path = $api
+    $receipt.control_version = 1
     Write-Host "Logs and receipt: $work"
     & py -3 (Join-Path $SourcePath 'scripts/verify-application-release.py') --base $env:LAPLACE_PUBLIC_BASE_URL --state-file "$work/verification.json" --timeout-seconds 60
     if ($LASTEXITCODE) { throw "Desktop runtime verification failed; inspect $work" }
@@ -89,8 +93,14 @@ try {
         Write-Host 'Press Ctrl+C to stop this development process.'
         $receipt.status = 'running'
         $receipt | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$work/receipt.json"
-        while (-not $process.WaitForExit(500)) { }
-        if ($process.ExitCode -ne 0) { throw "API exited with $($process.ExitCode); inspect $work" }
+        while (-not $process.WaitForExit(500)) {
+            if (Test-Path -LiteralPath (Join-Path $work 'stop.request')) {
+                $receipt.status = 'stopped'
+                $process.Kill($true); $process.WaitForExit()
+                break
+            }
+        }
+        if ($process.ExitCode -ne 0 -and $receipt.status -ne 'stopped') { throw "API exited with $($process.ExitCode); inspect $work" }
         $receipt.status = 'stopped'
     }
 } catch {
