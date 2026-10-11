@@ -29,16 +29,36 @@ behavior on the restored database, a complete Vaultwarden recovery, OpenBao unse
 identity isolation. Those remain separate acceptance requirements. The database restore uses PostgreSQL's
 [documented transactional restore options](https://www.postgresql.org/docs/18/app-pgrestore.html).
 
-## Runtime identity installation
+## Default setup and runtime identity installation
 
-On hart-server, with the operator already logged into the existing OpenBao:
+On the installed hart-server, with the operator already logged into the existing OpenBao, the normal command
+converges the host and its declared runtime together:
+
+```sh
+sudo ./setup.sh
+```
+
+The default `all` sequence runs runtime setup after the site units and before its final report. It verifies
+API/MCP behavior, database permissions, OpenBao boundaries and credential refresh. A failed runtime stage
+fails the whole command; it cannot print the final success message. A stopped API/MCP can be repaired as
+long as the service units and application release are installed. A missing release fails explicitly; setup
+does not build or ingest an application implicitly.
+
+Runtime selection uses `LAPLACE_RUNTIME_MANIFEST` from the machine declaration (or process override), otherwise
+`installation/<hostname>-runtime.json` in this checkout. Explicit paths must be absolute. The declaration is
+validated against the actual host and effective machine configuration before provisioning. Conflicting database
+names, ports or cluster paths fail. The declared local runtime uses its configured PostgreSQL cluster;
+`LAPLACE_APP_DBNAME` alone does not request a second packaged cluster on that host. Hosts without a runtime
+declaration retain their existing infrastructure setup and explicitly report that no runtime was verified.
+
+The individual stage remains available for diagnosis and focused repair:
 
 ```sh
 ./setup.sh runtime --check
 sudo ./setup.sh runtime
 ```
 
-`hart-server-runtime.json` declares the installation; `--manifest /absolute/path.json` selects another
+`hart-server-runtime.json` declares the current hart-server installation; `--manifest /absolute/path.json` selects another
 declaration. The preflight checks the actual machine, mounts, services, installed paths and operator login.
 The privileged operation creates separate API and MCP OS accounts and restricted database roles, enrolls
 an API AppRole with read-only access to two host runtime records, verifies authentication, and activates
