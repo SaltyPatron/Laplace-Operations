@@ -345,6 +345,13 @@
           "platform": "any",
           "argv": null,
           "evidence": "Actual restore/recovery operation receipts without overwriting serving data."
+        },
+        {
+          "id": "application-recovery",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "recovery", "-Target", "production"],
+          "timeout_seconds": 300,
+          "evidence": "Restore the declared production application backup into a disposable database, execute installed API/key issuance and native operations, verify the restored database actually received the key, and clean up. Does not claim knowledge or infrastructure-secret recovery."
         }
       ]
     },

@@ -7,6 +7,7 @@ Run these from this Operations checkout on HART-DESKTOP, using your existing Git
 ./laplace.ps1 verify -Target staging -Wait
 ./laplace.ps1 verify -Target production -Wait
 ./laplace.ps1 deploy -Wait
+./laplace.ps1 recovery -Target production
 ```
 
 `staging` selects hart-server; `production` selects hart-prod; `knowledge` selects hart-cloud when it is running.
@@ -15,9 +16,16 @@ Run these from this Operations checkout on HART-DESKTOP, using your existing Git
 build the production bundle, publish on hart-prod and verify it. The cloud lease is released afterward so the
 existing idle-stop mechanism can stop the VM. HART-DESKTOP remains the development and optional GPU machine.
 
-Every operation returns a GitHub run link. `-Wait` follows that run and returns failure if it fails. The GitHub
+Workflow operations return a GitHub run link. `-Wait` follows that run and returns failure if it fails. The GitHub
 **Product — maintenance** workflow offers the same controls. `-Revision` selects a published ref; local uncommitted
 changes are not uploaded by this command. No repository or build directory is mounted on a deployment target.
+
+`recovery` is an administrator SSH operation using the existing host key. It verifies the newest declared application
+backup's SHA-256, restores into a uniquely named disposable database, and runs the installed API on a separate loopback
+port with background provider/bootstrap services disabled. It tests authenticated SQL and native operations using the
+restored application state, then removes its temporary database, process and credential file. Its JSON receipt is saved
+under `$LAPLACE_WORK/operations`. `backup/recovery-installation.json` declares paths, identities and the port. This proves
+application-data recovery with the selected knowledge still available; knowledge and OpenBao recovery are separate checks.
 
 The installed-runtime check requires API/web responses, MCP authentication when installed, authenticated SQL
 execution, native decomposition/storage invariants, compatible loaded Tier-0 artifacts, and the configured Stockfish
