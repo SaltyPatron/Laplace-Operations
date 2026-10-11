@@ -30,6 +30,21 @@ try {
     if ($Operation -eq 'build') {
         Run 'dotnet' @('build','app/Laplace.slnx','-c','Release','-p:Platform=Any CPU','--nologo')
         $result.checks.managed_build = 'passed'
+        # env.cmd declares the executable consumed by seed scripts and API/MCP.
+        # A normal build does not create this separate ReadyToRun publish tree.
+        if (-not [IO.Path]::IsPathFullyQualified($env:LAPLACE_CLI_EXE) -or
+            [IO.Path]::GetFileName($env:LAPLACE_CLI_EXE) -ne 'Laplace.Cli.exe') {
+            throw 'LAPLACE_CLI_EXE must select an absolute Laplace.Cli.exe publish path.'
+        }
+        $cliOutput=Split-Path $env:LAPLACE_CLI_EXE
+        Run 'dotnet' @('publish','app/Laplace.Cli/Laplace.Cli.csproj','-c','Release','-p:Platform=AnyCPU',
+            '-p:PublishReadyToRun=true','--no-self-contained','-o',$cliOutput,'--nologo')
+        if (-not (Test-Path -LiteralPath $env:LAPLACE_CLI_EXE)) { throw 'CLI publication did not produce the configured executable.' }
+        Run $env:LAPLACE_CLI_EXE @('--help')
+        Set-Content -LiteralPath ($env:LAPLACE_CLI_EXE + '.r2r-stamp') -Value ('r2r ' + [DateTime]::UtcNow.ToString('o'))
+        $result.checks.ingest_cli_publish = 'passed'
+        $result.cli_path = $env:LAPLACE_CLI_EXE
+        $result.cli_sha256 = (Get-FileHash -LiteralPath $env:LAPLACE_CLI_EXE -Algorithm SHA256).Hash.ToLowerInvariant()
         Push-Location web
         try {
             $lockHash = (Get-FileHash -LiteralPath package-lock.json -Algorithm SHA256).Hash
