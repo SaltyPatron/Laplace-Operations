@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import urllib.request
 
-COMPONENTS = {'native': 'Laplace-Native', 'postgres': 'Laplace-postgres', 'engine': 'Laplace-Engine'}
+COMPONENTS = {'native': 'Laplace-Native', 'postgres': 'Laplace-postgres', 'engine': 'Laplace-Engine', 'mcp': 'Laplace-MCP'}
 
 
 def resolve(owner, event_name, event, request):

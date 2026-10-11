@@ -20,6 +20,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 UNIT = 'laplace-modular-mcp.service'
+UNITS = Path('/etc/systemd/system')
 
 
 def checked(command, **kwargs):
@@ -252,7 +253,7 @@ def activate(config, release, receipt_path, install):
     # The service environment points through current, so a release switch includes
     # Engine and recipes atomically and recurring deployment needs no root write.
     environment = runtime_environment(config, current)
-    unit = Path('/etc/systemd/system') / UNIT
+    unit = UNITS / UNIT
     files = [unit, Path(config['environment_file'])]
     prior = {p: p.read_text() if p.exists() else None for p in files}
     legacy_active = install and legacy_command(config, 'is-active', check=False).returncode == 0
@@ -265,6 +266,8 @@ def activate(config, release, receipt_path, install):
                      '--config', config['installed_config'], '--release', release, '--output', Path(config['state']) / 'candidate.json'])
             atomic(unit, unit_text(config))
             atomic(config['environment_file'], environment)
+            if not current.exists():
+                switch_link(current, release)
             checked(['systemd-analyze', 'verify', unit], capture_output=True)
             checked(['systemctl', 'daemon-reload'])
             if legacy_active:
@@ -312,7 +315,7 @@ def activate(config, release, receipt_path, install):
 
 
 def restart_units(config):
-    root = Path('/etc/systemd/system')
+    root = UNITS
     name = 'laplace-modular-mcp-restart'
     signal = sysquote(config['restart_signal'])
     atomic(root / (name + '.path'), f'[Path]\nPathExists={signal}\n[Install]\nWantedBy=multi-user.target\n')

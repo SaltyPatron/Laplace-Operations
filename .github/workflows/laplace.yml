@@ -58,6 +58,7 @@ jobs:
       native: ${{ steps.refs.outputs.native }}
       postgres: ${{ steps.refs.outputs.postgres }}
       engine: ${{ steps.refs.outputs.engine }}
+      mcp: ${{ steps.refs.outputs.mcp }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -97,6 +98,8 @@ jobs:
             echo "$key=$sha" >> "$GITHUB_OUTPUT"
             echo "- $repo: $sha" >> "$GITHUB_STEP_SUMMARY"
           done
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-MCP", ref: "${{ needs.resolve.outputs.mcp }}", path: Laplace-MCP, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - name: the reseed policy
         id: policy
         env:
@@ -155,6 +158,8 @@ jobs:
         with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
+      - name: Deploy and verify the installed modular runtime
+        run: python3 ./Laplace-Operations/installation/modular.py deploy --source "$GITHUB_WORKSPACE"
   # Cloud verification uses the exact dependency revisions captured in staging. It runs only
   # after deployment readback AND staging runtime reads pass, on explicit cloud dispatch.
   cloud-acquire:

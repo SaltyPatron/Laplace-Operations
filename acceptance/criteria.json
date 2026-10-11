@@ -93,6 +93,13 @@
           "evidence": "Execute the default/all dispatcher, runtime invocation and app-cluster routing with external provisioning isolated; injected failures must stop before success. A privileged full setup receipt is separate evidence."
         },
         {
+          "id": "modular-installation",
+          "platform": "linux",
+          "argv": ["python3", "tests/modular-installation.py"],
+          "timeout_seconds": 60,
+          "evidence": "Alternate paths, distinct identities, invalid declaration refusal and actual symlink rollback after failed activation. Native candidate and privileged installation evidence are separate."
+        },
+        {
           "id": "installer-windows",
           "platform": "windows",
           "argv": null,

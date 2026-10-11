@@ -83,6 +83,44 @@ class Installation(unittest.TestCase):
             modular.atomic(link / 'configuration', 'bad')
         self.assertFalse((elsewhere / 'configuration').exists())
 
+    def test_failed_install_restores_service_configuration_and_legacy_listener(self):
+        config = self.load()
+        config['prefix'] = str(self.directory / 'prefix')
+        config['environment_file'] = str(self.directory / 'runtime.env')
+        config['state'] = str(self.directory / 'state')
+        prefix = Path(config['prefix'])
+        old, new = prefix / 'releases/old', prefix / 'releases/new'
+        old.mkdir(parents=True)
+        new.mkdir()
+        (prefix / 'current').symlink_to(old)
+        units = self.directory / 'units'
+        units.mkdir()
+        unit = units / modular.UNIT
+        unit.write_text('old unit')
+        Path(config['environment_file']).write_text('old configuration')
+        called, legacy = [], []
+
+        def command(args, **kwargs):
+            called.append([str(v) for v in args])
+            if 'systemd-analyze' in args:
+                raise RuntimeError('injected unit verification failure')
+            return subprocess.CompletedProcess(args, 0, stdout='old invocation')
+
+        def legacy_command(config, *args, **kwargs):
+            legacy.append(args)
+            return subprocess.CompletedProcess(args, 0)
+
+        with patch.object(modular, 'UNITS', units), patch.object(modular, 'checked', side_effect=command), \
+             patch.object(modular, 'legacy_command', side_effect=legacy_command), patch.object(modular, 'peer_check'), \
+             patch.object(modular, 'unit_text', return_value='new unit'), \
+             patch.object(modular.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
+            with self.assertRaisesRegex(RuntimeError, 'injected'):
+                modular.activate(config, new, self.directory, True)
+        self.assertEqual(unit.read_text(), 'old unit')
+        self.assertEqual(Path(config['environment_file']).read_text(), 'old configuration')
+        self.assertEqual((prefix / 'current').resolve(), old)
+        self.assertIn(('start',), legacy)
+
 
 if __name__ == '__main__':
     unittest.main()
