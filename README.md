@@ -3,6 +3,23 @@
 For the current monorepo application's staging-to-production delivery and installed-runtime checks, use
 [Operating Laplace](docs/operating-laplace.md). The commands below describe the older split-repository deployment.
 
+The modular MCP is a separate installed service: `laplace-modular-mcp.service`,
+with its matching Engine packaged beside it. `sudo ./setup.sh` includes it when
+`installation/<hostname>-modular.json` declares that host; `sudo ./setup.sh modular`
+runs just that installation. `LAPLACE_MODULAR_MANIFEST` selects an alternate declaration.
+The declaration owns its source/build/release/state paths, OS/database identities,
+prepared artifacts, listener and resource allocation. Installation grants local peer
+access to its selected database and retires the declared old user service only after
+candidate verification. It does not ingest sources.
+
+After installation, `python3 installation/modular.py deploy` builds, packages,
+activates and verifies it without sudo. The Operations pipeline invokes the same
+command with immutable MCP/Native/Engine revisions. Failed activation restores the
+previous release. Receipts go to the declared `receipts` directory. Inspect the
+service with `systemctl status laplace-modular-mcp` and its logs with
+`journalctl -u laplace-modular-mcp`. This service is distinct from the monorepo's
+`laplace-mcp` and from Refactor; its acceptance does not establish either of those.
+
 The machine Laplace runs on, and Laplace on it, from nothing: one environment file, four scripts, and the agents. The
 code is in Laplace-Native, Laplace-postgres and Laplace-Engine, side by side under one source root; this repository
 holds what installs, sets up, deploys, repairs and runs them (Operations in the Wiki).

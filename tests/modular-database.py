@@ -35,7 +35,6 @@ INSERT INTO public.entity VALUES(1);''')
     sql(name, modular.grants(config))
     assert sql(name, f'SET SESSION AUTHORIZATION "{name}"; SELECT count(*) FROM public.entity;').splitlines()[-1] == '1'
     sql(name, f'''SET SESSION AUTHORIZATION "{name}"; BEGIN;
-CREATE SCHEMA IF NOT EXISTS stage;
 SET LOCAL session_replication_role=replica;
 INSERT INTO public.entity VALUES(2); UPDATE public.entity SET id=3 WHERE id=2;
 DELETE FROM public.entity WHERE id=3; TRUNCATE public.entity;
