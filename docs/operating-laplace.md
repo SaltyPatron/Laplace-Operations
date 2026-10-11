@@ -113,7 +113,27 @@ For development on HART-DESKTOP, use the same entry point:
 ./laplace.ps1 prepare
 ./laplace.ps1 build
 ./laplace.ps1 test
+./laplace.ps1 configure-development
+./laplace.ps1 run
+./laplace.ps1 verify -Target desktop
 ```
+
+`configure-development` provisions the identities declared in `development/installation.json` using the existing
+operator Bao login and authorized database administration connection. On this installation the desktop uses
+hart-server's `laplace-mono` knowledge and a separate `laplace-desktop-app` database. The application schema has a
+non-login owner; the API uses a separate login with data access and no schema-creation or administrator privileges.
+Knowledge and application credentials are distinct OpenBao records under `kv/hosts/hart-desktop`; the run command
+fetches them into the child process and never writes connection passwords into the source tree or logs.
+
+`run` serves the built web application and API at `http://localhost:5187` until Ctrl+C. Native artifacts, source and
+build paths come from the existing machine configuration. It starts the normal application background services and
+loads the existing sign-in provider configuration from the declared OpenBao identity reference. OAuth callback
+registration must allow this local origin; an authorization redirect alone does not prove interactive sign-in.
+[Google requires the callback to match the OAuth client's registered URI](https://developers.google.com/identity/protocols/oauth2/web-server).
+[Microsoft documents its localhost callback rules](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url).
+`verify -Target desktop` starts that same process, exercises it, writes a receipt and stops it. Run `build` after source
+changes. `LAPLACE_API_PORT` selects a different loopback port. `LAPLACE_DEVELOPMENT_INSTALLATION` selects another
+development declaration for both configuration and run; declared database pool sizes are per datasource.
 
 `./setup.ps1` prepares this development profile by default. `./setup.ps1 deps` installs dependencies from the
 toolchain manifest; `./setup.ps1 all` explicitly includes a local PostgreSQL server and its service/access setup.

@@ -1,0 +1,20 @@
+{
+  "client": "hart-desktop",
+  "identity_reference": "kv/shared/laplace-auth",
+  "client_address": "100.70.222.78",
+  "database_host": "hart-server",
+  "port": 5432,
+  "knowledge_database": "laplace-mono",
+  "knowledge_role": "laplace_desktop_knowledge",
+  "application_database": "laplace-desktop-app",
+  "application_role": "laplace_desktop_app",
+  "application_owner": "laplace_desktop_owner",
+  "psql": "/usr/local/pgsql/bin/psql",
+  "admin_socket": "/tmp",
+  "admin_role": "laplace",
+  "host_lock": "/run/lock/laplace/host-resource.lock",
+  "migrator": "/opt/laplace/app/migrations/Laplace.Migrations.dll",
+  "remote_work": "/repos/work/desktop-application",
+  "api_port": 5187,
+  "pool_max": 4
+}

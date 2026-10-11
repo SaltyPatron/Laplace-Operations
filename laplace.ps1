@@ -9,14 +9,29 @@ Operate the installed Laplace application through its delivery workflows.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('status','runs','verify','deploy','components','prepare','build','test','recovery')][string]$Operation = 'status',
-    [ValidateSet('staging','production','knowledge')][string]$Target = 'staging',
+    [ValidateSet('status','runs','run','configure-development','verify','deploy','components','prepare','build','test','recovery')][string]$Operation = 'status',
+    [ValidateSet('desktop','staging','production','knowledge')][string]$Target = 'staging',
     [string]$Revision = 'main',
     [string]$Repository = 'SaltyPatron/Laplace',
     [string]$SourcePath,
     [switch]$Wait
 )
 $ErrorActionPreference = 'Stop'
+if ($Operation -eq 'configure-development') {
+    & pwsh -NoProfile -File "$PSScriptRoot/development/configure.ps1"
+    exit $LASTEXITCODE
+}
+if ($Operation -eq 'run' -or ($Operation -eq 'verify' -and $Target -eq 'desktop')) {
+    if ($Operation -eq 'run' -and $PSBoundParameters.ContainsKey('Target') -and $Target -ne 'desktop') {
+        throw 'run starts the desktop development process; use deploy for a deployment target.'
+    }
+    $localArgs = @('-NoProfile','-File',"$PSScriptRoot/development/run.ps1")
+    if ($SourcePath) { $localArgs += @('-SourcePath',$SourcePath) }
+    if ($Operation -eq 'verify') { $localArgs += '-Verify' }
+    & pwsh @localArgs
+    exit $LASTEXITCODE
+}
+if ($Target -eq 'desktop') { throw 'Desktop supports run and verify; use prepare/build/test for source development.' }
 if ($Operation -eq 'recovery') {
     & pwsh -NoProfile -File "$PSScriptRoot/backup/recovery.ps1" -Target $Target
     exit $LASTEXITCODE
