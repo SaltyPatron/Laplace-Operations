@@ -146,6 +146,13 @@
           "evidence": "Start the built Windows application with declared OpenBao-backed runtime identities, separate development application state and selected remote knowledge; execute the same authenticated SQL/native/SPA verifier as deployment."
         },
         {
+          "id": "desktop-lifecycle",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/development-lifecycle.ps1"],
+          "timeout_seconds": 300,
+          "evidence": "Actual built desktop on an unused port: workload-authenticated start, SPA response, idempotent start, refused stale process time/wrong application, stop and refusal to replace another listener."
+        },
+        {
           "id": "site-live-production",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "production", "-Wait"],

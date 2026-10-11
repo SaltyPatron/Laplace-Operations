@@ -164,7 +164,10 @@ For development on HART-DESKTOP, use the same entry point:
 ./laplace.ps1 build
 ./laplace.ps1 test
 ./laplace.ps1 configure-development
-./laplace.ps1 run
+./laplace.ps1 start -Target desktop
+./laplace.ps1 status -Target desktop
+./laplace.ps1 logs -Target desktop
+./laplace.ps1 stop -Target desktop
 ./laplace.ps1 verify -Target desktop
 ```
 
@@ -189,7 +192,13 @@ not a cached administrator token; do not copy it to another user or computer. En
 file. Its SecretID remains valid until explicitly revoked, while each issued token lasts at most ten minutes.
 `development/verify-enrollment.ps1` tests the actual read/deny/revocation boundaries without operator credentials.
 
-`run` verifies the SQL/native/application path before reporting readiness, then serves the built web application
+`start` starts the application in the background and returns after SQL/native/application verification.
+Repeated `start` reports the existing instance. `status` shows its address, source revision, process and log directory;
+`logs` prints recent application output. `stop` requests shutdown through the launcher after checking the recorded
+process start time and application path. It does not stop another process that happens to use the selected port.
+The workload enrollment makes these commands independent of an operator Bao login. No administrator session is needed.
+
+`run` provides the foreground alternative: it verifies the SQL/native/application path, then serves the built web application
 and API at `http://localhost:5187` until Ctrl+C. Native artifacts, source and
 build paths come from the existing machine configuration. It starts the normal application background services and
 loads the existing sign-in provider configuration from the declared OpenBao identity reference. OAuth callback
@@ -197,8 +206,8 @@ registration must allow this local origin; an authorization redirect alone does 
 The Google redirect URI for the default desktop port is `http://localhost:5187/signin-google`.
 [Google requires the callback to match the OAuth client's registered URI](https://developers.google.com/identity/protocols/oauth2/web-server).
 [Microsoft documents its localhost callback rules](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url).
-`verify -Target desktop` starts that same process, exercises it, writes a receipt and stops it; use `run` when you
-want the browser application to stay available. Run `build` after source
+`verify -Target desktop` starts that same process, exercises it, writes a receipt and stops it; select a free
+`LAPLACE_API_PORT` when another desktop instance is running. Use `start` or `run` for ongoing browser use. Run `build` after source
 changes. `LAPLACE_API_PORT` selects a different loopback port. `LAPLACE_DEVELOPMENT_INSTALLATION` selects another
 development declaration for both configuration and run; declared database pool sizes are per datasource.
 

@@ -9,7 +9,7 @@ Operate the installed Laplace application through its delivery workflows.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('status','runs','run','configure-development','enroll-development','verify','deploy','components','prepare','build','test','recovery')][string]$Operation = 'status',
+    [ValidateSet('status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','prepare','build','test','recovery')][string]$Operation = 'status',
     [ValidateSet('desktop','staging','production','knowledge')][string]$Target = 'staging',
     [string]$Revision = 'main',
     [string]$Repository = 'SaltyPatron/Laplace',
@@ -17,6 +17,13 @@ param(
     [switch]$Wait
 )
 $ErrorActionPreference = 'Stop'
+if ($Operation -in 'start','stop','logs' -or ($Operation -eq 'status' -and $Target -eq 'desktop')) {
+    if ($PSBoundParameters.ContainsKey('Target') -and $Target -ne 'desktop') { throw "$Operation is a desktop lifecycle operation; use the deployment operator for another target." }
+    $localArgs=@('-NoProfile','-File',"$PSScriptRoot/development/control.ps1",'-Operation',$Operation)
+    if ($SourcePath) { $localArgs+=@('-SourcePath',$SourcePath) }
+    & pwsh @localArgs
+    exit $LASTEXITCODE
+}
 if ($Operation -eq 'enroll-development') {
     & pwsh -NoProfile -File "$PSScriptRoot/development/enroll.ps1"
     exit $LASTEXITCODE
@@ -35,7 +42,7 @@ if ($Operation -eq 'run' -or ($Operation -eq 'verify' -and $Target -eq 'desktop'
     & pwsh @localArgs
     exit $LASTEXITCODE
 }
-if ($Target -eq 'desktop') { throw 'Desktop supports run and verify; use prepare/build/test for source development.' }
+if ($Target -eq 'desktop') { throw 'Desktop supports start, stop, status, logs, run and verify; use prepare/build/test for source development.' }
 if ($Operation -eq 'recovery') {
     & pwsh -NoProfile -File "$PSScriptRoot/backup/recovery.ps1" -Target $Target
     exit $LASTEXITCODE
