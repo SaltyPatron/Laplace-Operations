@@ -95,6 +95,20 @@
           "platform": "linux",
           "argv": null,
           "evidence": "Real Linux installation/repair/upgrade/failure-recovery evidence."
+        },
+        {
+          "id": "host-repair-boundaries",
+          "platform": "linux",
+          "argv": ["python3", "tests/host-repair.py"],
+          "timeout_seconds": 60,
+          "evidence": "Configuration conflict preservation, checksum refusal before DB access, failed-restore cleanup and safe SQLite extraction. Fixtures do not establish installed repair."
+        },
+        {
+          "id": "host-repair-preflight",
+          "platform": "linux",
+          "argv": ["python3", "installation/repair.py", "--check"],
+          "timeout_seconds": 60,
+          "evidence": "Actual declared-host paths, mounts and running services; no privileged repair or restoration is performed by this check."
         }
       ]
     },
