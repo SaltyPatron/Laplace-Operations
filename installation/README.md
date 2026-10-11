@@ -28,3 +28,31 @@ This proves landed database restoration and extracted SQLite integrity. It does 
 behavior on the restored database, a complete Vaultwarden recovery, OpenBao unseal/recovery, or runner/runtime
 identity isolation. Those remain separate acceptance requirements. The database restore uses PostgreSQL's
 [documented transactional restore options](https://www.postgresql.org/docs/18/app-pgrestore.html).
+
+## Runtime identity installation
+
+On hart-server, with the operator already logged into the existing OpenBao:
+
+```sh
+./setup.sh runtime --check
+sudo ./setup.sh runtime
+```
+
+`hart-server-runtime.json` declares the installation; `--manifest /absolute/path.json` selects another
+declaration. The preflight checks the actual machine, mounts, services, installed paths and operator login.
+The privileged operation creates separate API and MCP OS accounts and restricted database roles, enrolls
+an API AppRole with read-only access to two host runtime records, verifies authentication, and activates
+the services. Existing Bao records must match the declared target; rerunning preserves their passwords
+and the host's enrollment. Runtime refresh uses that enrollment rather than the operator's login.
+
+This step preserves application data in `laplace-mono.app` and pins its application connection separately
+from knowledge selection. It does not move application data to a separate physical database. MCP uses
+local PostgreSQL peer authentication; the API uses distinct TLS application and knowledge logins.
+Mutable state is declared under `/hosting/laplace/runtime`; no build mount is created.
+
+API readiness/native operations, database privilege refusals, Bao policy/refusal/revocation and an
+authenticated MCP substrate-counts tool call must pass. Failed activation restores prior service
+configuration and restarts the previous services. Prepared accounts, grants and Bao records remain for
+retry. A subsequent credential-timer installation failure leaves the verified services running and marks
+setup failed, so rerun the same operation. Secret-free receipts are saved alongside repair receipts.
+Fixture/CI success and `--check` are not proof that privileged installation has run.

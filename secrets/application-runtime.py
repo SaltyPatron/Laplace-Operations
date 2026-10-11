@@ -142,7 +142,10 @@ def main():
     spec = importlib.util.spec_from_file_location('knowledge_sync', Path(__file__).with_name('knowledge-sync.py'))
     sync = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(sync)
-    with open(config['host_lock'], 'a') as lock:
+    inherited = os.environ.get('LAPLACE_HOST_LOCK_FD')
+    with (os.fdopen(os.dup(int(inherited)), 'a') if inherited else open(config['host_lock'], 'a')) as lock:
+        if not os.path.samestat(os.fstat(lock.fileno()), os.stat(config['host_lock'])):
+            raise ValueError('Inherited operation lock belongs to a different installation')
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         database, role, owner = (config[name] for name in ('database', 'role', 'database_owner'))
 
@@ -250,12 +253,16 @@ def main():
             if account.pw_uid == 0 or Path(account.pw_dir) != state:
                 raise ValueError('Existing OS identity does not match the declared runtime home')
             for directory in (state, state / 'logs', state / 'tmp', state / 'keys', state / 'out'):
+                if any(path.is_symlink() for path in (directory, *directory.parents)):
+                    raise ValueError('Runtime state must not traverse symbolic links')
                 directory.mkdir(parents=True, exist_ok=True)
                 directory.chmod(0o700)
                 os.chown(directory, account.pw_uid, account.pw_gid)
             old_keys = prefix / 'secrets/data-protection'
             for old in old_keys.glob('*.xml'):
                 target = state / 'keys' / old.name
+                if target.is_symlink():
+                    raise ValueError('Runtime key destination must not be a symbolic link')
                 if not target.exists():
                     shutil.copyfile(old, target)
                     target.chmod(0o600)
@@ -284,7 +291,7 @@ def main():
             sync.assignments(api, {'LAPLACE_APP_DB': runtime_db, 'LAPLACE_OPS_LOG_DIR': state / 'logs',
                 'LAPLACE_DATA_PROTECTION_KEYS': state / 'keys', 'LAPLACE_AGENTS_CONFIG': state / 'agents.json',
                 'LAPLACE_OUT': state / 'out'})
-            sync.atomic(dropin, f'[Service]\nUser={config["runtime_user"]}\nGroup={config["runtime_user"]}\n'
+            sync.atomic(dropin, f'[Service]\nUser={config["runtime_user"]}\nGroup={config["runtime_user"]}\nUMask=0077\n'
                 f'Environment="HOME={state}" "PGPASSFILE={state}/.pgpass" "TMPDIR={state}/tmp" "TMP={state}/tmp" "TEMP={state}/tmp"\n', 0o644, 0, 0)
             subprocess.run(['systemctl', 'daemon-reload'], check=True)
             sync.activate(config['runtime_user'], prefix, config['public_base'])
