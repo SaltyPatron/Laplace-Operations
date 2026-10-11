@@ -80,7 +80,7 @@ jobs:
         run: pwsh -NoProfile -File tests/acceptance-runner.ps1
       - name: Verify named Linux acceptance checks
         shell: pwsh
-        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check storage-linux,resource-refusal-linux -Output "$env:RUNNER_TEMP/acceptance-linux.json"
+        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check config-linux,storage-linux,resource-refusal-linux -Output "$env:RUNNER_TEMP/acceptance-linux.json"
       - name: Preserve Linux acceptance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
