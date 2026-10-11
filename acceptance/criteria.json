@@ -125,6 +125,13 @@
           "evidence": "Actual staging workflow execution through the human entry point; does not by itself prove replacement-runner installation."
         },
         {
+          "id": "desktop-runtime",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "desktop"],
+          "timeout_seconds": 180,
+          "evidence": "Start the built Windows application with declared OpenBao-backed runtime identities, separate development application state and selected remote knowledge; execute the same authenticated SQL/native/SPA verifier as deployment."
+        },
+        {
           "id": "site-live-production",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "production", "-Wait"],
@@ -274,6 +281,13 @@
           "platform": "any",
           "argv": null,
           "evidence": "Positive/negative authorization and refresh/revocation tests using the intended workload identity."
+        },
+        {
+          "id": "desktop-database-identities",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "development/verify-identities.ps1"],
+          "timeout_seconds": 120,
+          "evidence": "Actual desktop runtime logins: permitted data reads, denied administrator impersonation and application DDL, denied cross-database connections. Does not establish OpenBao policy revocation."
         }
       ]
     },
