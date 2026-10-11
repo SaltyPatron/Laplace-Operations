@@ -9,10 +9,21 @@ Microsoft callback URLs with the existing registration and reads back the result
 the runtime identity. Google web-client registration is managed in Google Auth Platform, project
 `gen-lang-client-0624169393`; the gcloud IAM OAuth-client commands manage Workforce Identity Federation clients.
 
-`setup.sh site` installs the private nginx HTTPS route for a matching host from this declaration. The existing
-hart-server wildcard certificate is used in place. It validates certificate coverage, nginx configuration and an
-actual HTTPS health request, restoring the prior nginx configuration on failure. It does not issue a certificate or
-claim renewal is configured. It leaves the internal service listener and other nginx sites in place.
+The monorepo owns its nginx HTTPS installation in `deploy/linux/site-host.sh` and
+`deploy/private-origins.json`. Operations' legacy `setup.sh site` delegates to that host script;
+it must not install a second browser route afterward. `network/install-nginx.py` is a compatibility
+entry point which resolves the monorepo through `LAPLACE_MONOREPO` or `LAPLACE_SRC` and runs its
+installer. It forwards `LAPLACE_PRIVATE_ORIGINS` or an explicit `--configuration` to the owning
+installer. No nginx settings in this repository override the monorepo declaration.
+
+From the configured monorepo checkout, the focused admin repair is:
+
+```sh
+sudo bash deploy/linux/site-host.sh --routing-only
+```
+
+The monorepo validates the existing certificate, nginx configuration and the named HTTPS health
+endpoint, and rolls back a failed activation. Certificate issuance and renewal remain separate.
 
 IIS installation, publication and verification must consume the same machine declaration: `LAPLACE_IIS_API`,
 `LAPLACE_IIS_SITE`, `LAPLACE_IIS_POOL`, `LAPLACE_PUBLIC_BASE_URL` and `LAPLACE_IIS_CERTIFICATE_THUMBPRINT`.
