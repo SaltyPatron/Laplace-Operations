@@ -167,13 +167,30 @@ non-login owner; the API uses a separate login with data access and no schema-cr
 Knowledge and application credentials are distinct OpenBao records under `kv/hosts/hart-desktop`; the run command
 fetches them into the child process and never writes connection passwords into the source tree or logs.
 
-`run` serves the built web application and API at `http://localhost:5187` until Ctrl+C. Native artifacts, source and
+Configuration also enrolls `laplace-hart-desktop-development`. For an already configured desktop, run
+`./laplace.ps1 enroll-development` once with an authorized operator Bao login. Subsequent runs authenticate with
+this workload role, read exactly the two database records, development API identity and declared shared OAuth
+record, then revoke the short-lived Bao session. Operator token expiry no longer prevents a restart. The role
+cannot modify these records or read another host's credentials. This follows
+[OpenBao's application authentication contract](https://openbao.org/docs/auth/approle/).
+
+The enrollment is encrypted with [Windows user-bound DPAPI](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/convertfrom-securestring)
+under `%LOCALAPPDATA%/Laplace/credentials/<client>.json`, with access limited to the current Windows user and SYSTEM.
+`LAPLACE_DEVELOPMENT_CREDENTIALS` selects an absolute alternate file. It contains the encrypted AppRole enrollment,
+not a cached administrator token; do not copy it to another user or computer. Enrollment preserves an existing
+file. Its SecretID remains valid until explicitly revoked, while each issued token lasts at most ten minutes.
+`development/verify-enrollment.ps1` tests the actual read/deny/revocation boundaries without operator credentials.
+
+`run` verifies the SQL/native/application path before reporting readiness, then serves the built web application
+and API at `http://localhost:5187` until Ctrl+C. Native artifacts, source and
 build paths come from the existing machine configuration. It starts the normal application background services and
 loads the existing sign-in provider configuration from the declared OpenBao identity reference. OAuth callback
 registration must allow this local origin; an authorization redirect alone does not prove interactive sign-in.
+The Google redirect URI for the default desktop port is `http://localhost:5187/signin-google`.
 [Google requires the callback to match the OAuth client's registered URI](https://developers.google.com/identity/protocols/oauth2/web-server).
 [Microsoft documents its localhost callback rules](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url).
-`verify -Target desktop` starts that same process, exercises it, writes a receipt and stops it. Run `build` after source
+`verify -Target desktop` starts that same process, exercises it, writes a receipt and stops it; use `run` when you
+want the browser application to stay available. Run `build` after source
 changes. `LAPLACE_API_PORT` selects a different loopback port. `LAPLACE_DEVELOPMENT_INSTALLATION` selects another
 development declaration for both configuration and run; declared database pool sizes are per datasource.
 

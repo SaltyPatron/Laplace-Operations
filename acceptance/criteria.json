@@ -297,6 +297,20 @@
           "evidence": "Live API OS/database boundaries, two-record read-only workload AppRole, refused migration/shared secrets and denied use after token revocation. Does not establish runner isolation or password-rotation recovery."
         },
         {
+          "id": "desktop-enrollment-storage",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/development-credentials.ps1"],
+          "timeout_seconds": 60,
+          "evidence": "Real Windows DPAPI encryption, preservation of an existing enrollment, wrong-target refusal and corrupt-file refusal. Live policy enforcement is a separate check."
+        },
+        {
+          "id": "desktop-workload-enrollment",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "development/verify-enrollment.ps1"],
+          "timeout_seconds": 120,
+          "evidence": "Actual encrypted workload enrollment: read four declared records without operator authentication; verify read-only capabilities, deny another host credential, revoke a token and authenticate a fresh session."
+        },
+        {
           "id": "desktop-database-identities",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "development/verify-identities.ps1"],

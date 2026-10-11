@@ -33,3 +33,4 @@ Remote "$PSScriptRoot/application-database.py" ($common + @{database=$applicatio
 $null = Record 'laplace-api' @{operator_token=(Password)}
 $knowledge = $null; $application = $null
 Write-Host "Development identities provisioned for $($config.client). Credentials remain in OpenBao at $root."
+& "$PSScriptRoot/enroll.ps1" -Installation $Installation

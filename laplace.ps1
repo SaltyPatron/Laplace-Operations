@@ -9,7 +9,7 @@ Operate the installed Laplace application through its delivery workflows.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('status','runs','run','configure-development','verify','deploy','components','prepare','build','test','recovery')][string]$Operation = 'status',
+    [ValidateSet('status','runs','run','configure-development','enroll-development','verify','deploy','components','prepare','build','test','recovery')][string]$Operation = 'status',
     [ValidateSet('desktop','staging','production','knowledge')][string]$Target = 'staging',
     [string]$Revision = 'main',
     [string]$Repository = 'SaltyPatron/Laplace',
@@ -17,6 +17,10 @@ param(
     [switch]$Wait
 )
 $ErrorActionPreference = 'Stop'
+if ($Operation -eq 'enroll-development') {
+    & pwsh -NoProfile -File "$PSScriptRoot/development/enroll.ps1"
+    exit $LASTEXITCODE
+}
 if ($Operation -eq 'configure-development') {
     & pwsh -NoProfile -File "$PSScriptRoot/development/configure.ps1"
     exit $LASTEXITCODE
