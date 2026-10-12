@@ -186,6 +186,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--configuration', type=Path, default=Path(__file__).with_name('protection.json'))
     parser.add_argument('--check', action='store_true')
+    parser.add_argument('--discard-flood-log', action='store_true',
+                        help='Discard only the closed incident audit log and its archive after verifying OpenBao released it')
     args = parser.parse_args()
     c = json.loads(args.configuration.read_text())
     if socket.gethostname().split('.')[0].lower() != c['host'].lower():
@@ -265,21 +267,42 @@ def main():
             receipt['rotation'] = {'audit_max_mib': c['audit_rotate_mib'], 'audit_retained': c['audit_rotate_count'], 'check_interval_seconds': 60}
             receipt['archives'] = []
             atomic(receipt_path, json.dumps(receipt, indent=2) + '\n')
-            for path in closed:
-                receipt['archives'].append(archive(c, path))
-                atomic(receipt_path, json.dumps(receipt, indent=2) + '\n')
+            if args.discard_flood_log:
+                receipt['discarded_flood_files'] = discard_flood(c, closed)
+            elif closed:
+                raise RuntimeError('Oversized audit log closed and retained. Use --discard-flood-log to discard the incident log; automatic archival is disabled.')
             if status(c, '/v1/sys/health') != 200:
                 raise RuntimeError('Final OpenBao health check failed')
             receipt['var_free_bytes'] = shutil.disk_usage(Path(c['audit_log']).parent).free
             atomic('/etc/laplace/secrets-protection.json', json.dumps(c, indent=2) + '\n')
             receipt['status'] = 'passed'
-        except Exception as error:
+        except BaseException as error:
             receipt['status'] = 'failed'
-            receipt['error'] = str(error)
+            receipt['error'] = str(error) or type(error).__name__
             raise
         finally:
             atomic(receipt_path, json.dumps(receipt, indent=2) + '\n')
             print('Secrets protection receipt: ' + str(receipt_path), flush=True)
+
+
+def discard_flood(c, closed):
+    """Remove only this recovery operation's closed files, including an interrupted archive."""
+    audit = Path(c['audit_log'])
+    directory = Path(c['overflow_archive_directory'])
+    selected = list(closed)
+    pattern = re.compile(re.escape(audit.name) + r'\.recovery-[a-f0-9]{32}\.gz(?:\.json|\.part-[a-f0-9]{32})?$')
+    if directory.exists():
+        selected += [path for path in directory.iterdir() if pattern.fullmatch(path.name)]
+    if not open_file(c, audit):
+        raise RuntimeError('OpenBao is not holding the new active audit file; no incident files discarded')
+    for path in selected:
+        if path.is_symlink() or not path.is_file() or path.resolve() == audit.resolve() or open_file(c, path):
+            raise RuntimeError('Incident file is not a closed regular file: ' + str(path))
+    result = []
+    for path in selected:
+        result.append({'path': str(path), 'bytes': path.stat().st_size})
+        path.unlink()
+    return result
 
 
 if __name__ == '__main__':
