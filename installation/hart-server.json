@@ -3,6 +3,7 @@
   "machine_file": "/etc/laplace/machine.env",
   "receipt_directory": "/var/lib/laplace/installation/receipts",
   "log_archive_directory": "/logs/hart-server/archive",
+  "storage_report_roots": ["/var", "/logs", "/hosting"],
   "required_mounts": ["/repos", "/data/pgdata", "/backup", "/hosting"],
   "required_services": ["pgdata", "laplace-api", "laplace-mcp", "openbao", "nginx"],
   "machine": {

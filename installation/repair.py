@@ -46,6 +46,60 @@ def digest(path):
     return value.hexdigest()
 
 
+def storage_report(config):
+    """Measure the existing host's allocated storage without reading file contents."""
+    if socket.gethostname().split('.')[0].lower() != config['host']:
+        raise ValueError('The installation declaration belongs to another host')
+    if os.geteuid() != 0:
+        raise ValueError('Use sudo ./setup.sh repair --storage-report to include protected files and open deleted files')
+    roots = [Path(path) for path in config['storage_report_roots']]
+    for path in roots:
+        if not path.is_absolute() or '..' in path.parts or not path.is_dir():
+            raise ValueError('Storage report roots must be existing absolute directories')
+    result = {'host': config['host'], 'observed_utc': datetime.now(timezone.utc).isoformat(),
+              'scope': 'allocated storage and open-file metadata; no contents, deletion or service changes',
+              'roots': {}, 'status': 'complete'}
+    for path in roots:
+        usage = shutil.disk_usage(path)
+        measurements = {}
+        commands = {
+            'filesystem': ['findmnt', '--json', '--target', str(path), '--output', 'TARGET,SOURCE,FSTYPE,SIZE,USED,AVAIL,USE%'],
+            'directory_bytes': ['du', '--one-file-system', '--block-size=1', '--max-depth=2', str(path)],
+            'large_files': ['find', str(path), '-xdev', '-type', 'f', '-size', '+256M', '-printf', '%b\t%s\t%u\t%g\t%p\n'],
+        }
+        for name, command in commands.items():
+            try:
+                observed = subprocess.run(command, capture_output=True, text=True, timeout=180)
+                measurements[name] = {'exit': observed.returncode, 'output': observed.stdout, 'errors': observed.stderr}
+                if observed.returncode:
+                    result['status'] = 'incomplete'
+            except subprocess.TimeoutExpired:
+                measurements[name] = {'error': 'measurement exceeded 180 seconds'}
+                result['status'] = 'incomplete'
+        result['roots'][str(path)] = {'total_bytes': usage.total, 'used_bytes': usage.used,
+                                     'free_bytes': usage.free, **measurements}
+    # lsof's field output contains process names, file sizes and paths, not arguments or file contents.
+    try:
+        deleted = subprocess.run(['lsof', '-nP', '+L1', '-Fpcfns'], capture_output=True, text=True, timeout=60)
+        result['unlinked_open_files'] = {'exit': deleted.returncode, 'output': deleted.stdout, 'errors': deleted.stderr}
+        if deleted.returncode not in (0, 1) or (deleted.returncode == 1 and deleted.stderr):
+            result['status'] = 'incomplete'
+    except (OSError, subprocess.TimeoutExpired) as error:
+        result['unlinked_open_files'] = {'error': str(error)}
+        result['status'] = 'incomplete'
+    directory = Path(config['machine']['LAPLACE_WORK']) / 'logs/storage'
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8] + '.json')
+    with target.open('x') as stream:
+        os.chmod(target, 0o600)
+        stream.write(json.dumps(result, indent=2) + '\n')
+    if os.environ.get('SUDO_UID', '').isdigit():
+        os.chown(target, int(os.environ['SUDO_UID']), -1)
+    print('Storage metadata report (' + result['status'] + '): ' + str(target), flush=True)
+    if result['status'] != 'complete':
+        raise ValueError('Some storage measurements failed; inspect the saved report')
+
+
 def archive_rotated_log(config, source, destination, check=False):
     """Move an explicitly selected closed rotation after durable, exact copying."""
     if config['host'] != socket.gethostname().split('.')[0].lower():
@@ -222,11 +276,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--installation', type=Path)
     parser.add_argument('--check', action='store_true', help='Unprivileged installed-host preflight; makes no changes')
+    parser.add_argument('--storage-report', action='store_true', help='Save allocated-space and open-file metadata from declared existing volumes; no deletion or service changes')
     parser.add_argument('--archive-rotated-log', type=Path, help='Preserve one explicitly selected closed log rotation on another filesystem to recover space')
     parser.add_argument('--archive-directory', type=Path, help='Log archive destination; defaults to this host declaration\'s log_archive_directory')
     args = parser.parse_args()
     declaration = args.installation or Path(__file__).with_name(socket.gethostname().split('.')[0].lower() + '.json')
     config = json.loads(declaration.read_text())
+    if args.storage_report:
+        if args.check or args.archive_rotated_log or args.archive_directory:
+            parser.error('--storage-report cannot be combined with repair or archive options')
+        storage_report(config)
+        return
     if args.archive_rotated_log:
         print(json.dumps(archive_rotated_log(config, args.archive_rotated_log, args.archive_directory, args.check)))
         return
