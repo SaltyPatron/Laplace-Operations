@@ -6,6 +6,9 @@ Run the monorepo's `sudo bash deploy/linux/site-host.sh` from its own checkout f
 The explicit Operations `site` and `runtime` stages remain compatibility entry points;
 they are not part of `all`. Refactor has its own installer in its own repository.
 
+Start with the [installation map](docs/installation-map.md): repositories, environments, executable
+locations and known broken entry points. It distinguishes observed installations from intended behavior.
+
 For the current monorepo application's staging-to-production delivery and installed-runtime checks, use
 [Operating Laplace](docs/operating-laplace.md). The commands below describe the older split-repository deployment.
 
@@ -87,7 +90,7 @@ Each deployment step writes under `$LAPLACE_WORK/logs/deploy`. `./deploy.sh drop
 ./grammars.sh fetch                                # every grammar grammars.tsv declares, cloned from its origin at the latest
 ```
 
-A host receives no copy of another host's data. `data.tsv` declares each data set the recipes read: its directory under `$LAPLACE_DATA`, how it is fetched (a mirror of the publisher's directory, a file, a GitHub listing, the latest GitHub release), its origin and where under the set it lands, and `data.sh fetch` pulls it from there at the machine's own network speed, as the publisher serves it. `grammars.tsv` and `grammars.sh` do the same for the tree-sitter grammars. `data.sh record` and `grammars.sh record` are the record of what a machine holds. Dev, staging and production are the same by construction: each fetched the same declarations from the same origins.
+A host receives no copy of another host's data. `data.tsv` declares each data set the recipes read: its directory under `$LAPLACE_DATA`, how it is fetched (a mirror of the publisher's directory, a file, a GitHub listing, the latest GitHub release), its origin and where under the set it lands, and `data.sh fetch` pulls it from there at the machine's own network speed, as the publisher serves it. `grammars.tsv` and `grammars.sh` do the same for the tree-sitter grammars. `data.sh record` and `grammars.sh record` are the record of what a machine holds. Fetching the same declarations or origins does not establish identical versions, contents or deployments. Compare selected artifact identities and installed configuration.
 
 ```sh
 ./ingest.sh                                        # every source, in recipes/order
@@ -122,7 +125,7 @@ The report records failures explicitly, including inaccessible or changing files
 
 `setup.sh` is the one step that needs root. It is not a sequence of patches: the top of the file declares the machine as sets — the volumes Laplace keeps apart (heap, WAL, temporary files, repositories, data), the packages, the dependencies built from `$LAPLACE_SRC`, the server's settings from Operations: Database, who may connect and how (`postgres` over the socket by peer, and `laplace` by peer through the `laplace` map for the operator and the runners; `laplace` and `postgres` with scram from this host, and from `$LAPLACE_LAN` over TLS only) — and each part compares its set with the machine and makes only what is missing. Run again on a finished machine it changes nothing and reports. What it did is kept under `$LAPLACE_WORK/logs/root`; the role's password is in the operator's `~/.pgpass`. Then `./deploy.sh`.
 
-Every name of the machine's is a variable of `laplace.env` with this installation's value as its default: the paths (`LAPLACE_PREFIX`, `LAPLACE_PG_DIR`, `LAPLACE_PGDATA`, `LAPLACE_PGWAL`, `LAPLACE_PGTEMP`), the users and groups (`LAPLACE_PGUSER`, `LAPLACE_ROLE`, `LAPLACE_GROUP`, `LAPLACE_PG_GROUP`), the service (`LAPLACE_PGSERVICE`), the volumes (`LAPLACE_VOLUMES`), the network (`LAPLACE_LAN`) and the agent. Another machine declares what differs in `/etc/laplace/machine.env`, which `laplace.env` reads first, so its units, runners and tools all see one declaration; the file is every user's to read (`setup.sh` makes it so; a declaration that exists and cannot be read is an error, never hart-server's defaults), and holds no secret: the passwords are `/etc/laplace/pgpass`, root's. hart-cloud (the production host, a Google Compute c3 with one disk) declares:
+Every name of the machine's is a variable of `laplace.env` with this installation's value as its default: the paths (`LAPLACE_PREFIX`, `LAPLACE_PG_DIR`, `LAPLACE_PGDATA`, `LAPLACE_PGWAL`, `LAPLACE_PGTEMP`), the users and groups (`LAPLACE_PGUSER`, `LAPLACE_ROLE`, `LAPLACE_GROUP`, `LAPLACE_PG_GROUP`), the service (`LAPLACE_PGSERVICE`), the volumes (`LAPLACE_VOLUMES`), the network (`LAPLACE_LAN`) and the agent. Another machine declares what differs in `/etc/laplace/machine.env`, which `laplace.env` reads first, so its units, runners and tools all see one declaration; the file is every user's to read (`setup.sh` makes it so; a declaration that exists and cannot be read is an error, never hart-server's defaults), and holds no secret: the passwords are `/etc/laplace/pgpass`, root's. The following historical hart-cloud example describes its C3 build/knowledge configuration. hart-cloud is the on-demand development and AVX-512 qualification host, normally stopped; hart-prod serves production:
 
 ```sh
 LAPLACE_LAN=100.64.0.0/10                                    # the tailnet: hart-server and the laptop reach it there

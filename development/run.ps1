@@ -7,6 +7,7 @@ param(
     [switch]$Verify
 )
 $ErrorActionPreference = 'Stop'
+if ($SourcePath) { $env:LAPLACE_ROOT = [IO.Path]::GetFullPath($SourcePath) }
 . "$PSScriptRoot/../laplace.env.ps1"
 . "$PSScriptRoot/../secrets/process.ps1"
 . "$PSScriptRoot/credentials.ps1"
@@ -79,6 +80,10 @@ try {
     $receipt.process_id = $process.Id
     $receipt.process_started_utc = $process.StartTime.ToUniversalTime().ToString('o')
     $receipt.api_path = $api
+    $receipt.api_sha256 = (Get-FileHash -LiteralPath $api -Algorithm SHA256).Hash.ToLowerInvariant()
+    $receipt.checkout_revision = $receipt.revision
+    $receipt.revision_kind = 'checkout_at_start'
+    $receipt.cli_path = $env:LAPLACE_CLI_EXE
     $receipt.control_version = 1
     Write-Host "Logs and receipt: $work"
     & py -3 (Join-Path $SourcePath 'scripts/verify-application-release.py') --base $env:LAPLACE_PUBLIC_BASE_URL --state-file "$work/verification.json" --timeout-seconds 60

@@ -3,6 +3,7 @@
 param([ValidateSet('start','stop','status','logs','verify')][string]$Operation='status', [string]$SourcePath,
     [string]$Installation=$(if ($env:LAPLACE_DEVELOPMENT_INSTALLATION) {$env:LAPLACE_DEVELOPMENT_INSTALLATION} else {"$PSScriptRoot/installation.json"}))
 $ErrorActionPreference='Stop'
+if ($SourcePath) { $env:LAPLACE_ROOT=[IO.Path]::GetFullPath($SourcePath) }
 . "$PSScriptRoot/../laplace.env.ps1"
 if (-not $SourcePath) { $SourcePath=Join-Path $env:LAPLACE_SRC 'Laplace' }
 $SourcePath=(Resolve-Path -LiteralPath $SourcePath).Path

@@ -28,6 +28,10 @@ try {
     Run 'cmd.exe' @('/d','/c','scripts\win\build-engine.cmd','laplace_core','laplace_syzygy','laplace_dynamics','laplace_synthesis','laplace_t0_perfcache','laplace_highway_perfcache')
     $result.checks.native_build = 'passed'
     if ($Operation -eq 'build') {
+        Run 'pwsh' @('-NoProfile','-File',(Join-Path $SourcePath 'scripts/win/publish-cli.ps1'))
+        $result.checks.ingest_cli_publish = 'passed'
+        $result.cli_path = $env:LAPLACE_CLI_EXE
+        $result.cli_sha256 = (Get-FileHash -LiteralPath $env:LAPLACE_CLI_EXE -Algorithm SHA256).Hash.ToLowerInvariant()
         Run 'dotnet' @('build','app/Laplace.slnx','-c','Release','-p:Platform=Any CPU','--nologo')
         $result.checks.managed_build = 'passed'
         Push-Location web
