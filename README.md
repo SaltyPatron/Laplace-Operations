@@ -106,12 +106,19 @@ tests/tune-pg-plan.sh                              # the rules against every hos
 sudo ./setup.sh settings                           # the same declaration, when a pending restart needs root
 sudo ./setup.sh machine                            # repair declaration permissions only; no provisioning
 ./setup.sh repair --check                          # validate this host against installation/<hostname>.json; no sudo
+sudo ./setup.sh repair --storage-report            # measure declared existing volumes, protected files and deleted-open files
 sudo ./setup.sh repair                             # install/repair that declaration and verify the landed application and secrets backups
 sudo ./setup.sh secrets-stack                      # hart-server's existing Vaultwarden/OpenBao services; explicit only
 sudo ./setup.sh secrets-backup                     # install only the backup job and run one checked backup
 sudo ./setup.sh secrets-client                     # host AppRole -> app DB password files and recurring refresh
 sudo LAPLACE_DROP=$LAPLACE_PGDATA ./setup.sh drop all   # the cluster emptied and made again (never part of all)
 ```
+
+`repair --storage-report` saves metadata under the declared work directory's
+`logs/storage`, readable by the sudo caller. It reads no file contents and changes
+no services, retention settings or stored data. `storage_report_roots` selects the
+existing directories to measure; hart-server selects `/var`, `/logs` and `/hosting`.
+The report records failures explicitly, including inaccessible or changing files.
 
 `setup.sh` is the one step that needs root. It is not a sequence of patches: the top of the file declares the machine as sets — the volumes Laplace keeps apart (heap, WAL, temporary files, repositories, data), the packages, the dependencies built from `$LAPLACE_SRC`, the server's settings from Operations: Database, who may connect and how (`postgres` over the socket by peer, and `laplace` by peer through the `laplace` map for the operator and the runners; `laplace` and `postgres` with scram from this host, and from `$LAPLACE_LAN` over TLS only) — and each part compares its set with the machine and makes only what is missing. Run again on a finished machine it changes nothing and reports. What it did is kept under `$LAPLACE_WORK/logs/root`; the role's password is in the operator's `~/.pgpass`. Then `./deploy.sh`.
 
