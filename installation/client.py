@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import socket
+import subprocess
 import sys
 
 
@@ -23,12 +24,14 @@ def selected(configuration):
     role = profile['role']
     if not re.fullmatch(r'[a-z_][a-z0-9_-]{0,62}', role):
         raise ValueError('Invalid client database identity')
-    if role == host['role']:
+    if role == host.get('role'):
         raise ValueError('The human client requires its own database identity, not the MCP peer identity')
     work = Path(profile['work'])
     if not work.is_absolute() or '..' in work.parts or work == Path('/'):
         raise ValueError('Client work directory must be absolute')
     for key in ('prefix', 'state', 'pgdata'):
+        if key not in host:
+            continue
         protected = Path(host[key]).resolve()
         if work.resolve().is_relative_to(protected) or protected.is_relative_to(work.resolve()):
             raise ValueError('Client work directory overlaps installed runtime or database state')
@@ -37,17 +40,25 @@ def selected(configuration):
         raise ValueError('Client data directory must be absolute')
     if not data.is_dir():
         raise ValueError('Missing declared client data directory: ' + str(data))
-    release = (Path(host['prefix']) / 'current').resolve(strict=True)
+    release = Path(host['release']).resolve(strict=True) if host.get('release') else (Path(host['prefix']) / 'current').resolve(strict=True)
+    if not release.is_relative_to(Path(host['prefix']).resolve()):
+        raise ValueError('Release is outside the declared installation')
     package = json.loads((release / 'package.json').read_text())
     if package.get('schema') != 'laplace.modular-package/v1':
         raise ValueError('Selected release is not a modular Laplace package')
-    executable = release / 'bin/laplace'
+    executable = release / ('bin/laplace.exe' if os.name == 'nt' else 'bin/laplace')
     if not executable.is_file():
         raise ValueError('Installed Engine is missing: ' + str(executable))
     def conn(value):
         return "'" + str(value).replace('\\', '\\\\').replace("'", "\\'") + "'"
-    connection = ' '.join(key + '=' + conn(value) for key, value in (
-        ('host', host['socket']), ('port', host['port']), ('dbname', host['database']), ('user', role)))
+    target = {'host': host['socket'], 'port': host['port'], 'dbname': host['database'], 'user': role}
+    options = profile.get('connection', {})
+    if set(options) - {'hostaddr', 'sslmode', 'sslrootcert', 'passfile', 'connect_timeout'}:
+        raise ValueError('Unsupported client connection option; passwords belong in the credential store')
+    target.update(options)
+    if os.name == 'nt' and target.get('sslmode') != 'verify-full':
+        raise ValueError('The Windows network client requires full database certificate verification')
+    connection = ' '.join(key + '=' + conn(value) for key, value in target.items())
     environment = {
         'LAPLACE_CONNINFO': connection, 'LAPLACE_TIER0': host['tier0'], 'LAPLACE_FLAGS': host['flags'],
         'LAPLACE_HIGHWAY': host['highway'], 'LAPLACE_GRAMMARS': host['grammars'], 'LAPLACE_UCD': host['ucd'],
@@ -66,6 +77,10 @@ def process_environment(environment):
     # The named client controls selection; do not inherit another implementation's
     # LAPLACE_* values from a developer shell. libpq uses the human's own credential store.
     inherited = {k: v for k, v in os.environ.items() if not k.startswith('LAPLACE_')}
+    # Intel's explicit affinity selection takes precedence; do not also request
+    # the contradictory OpenMP binding setting inherited from a developer shell.
+    if inherited.get('KMP_AFFINITY'):
+        inherited.pop('OMP_PROC_BIND', None)
     return {**inherited, **environment}
 
 
@@ -77,6 +92,8 @@ def main():
         print(json.dumps(description, indent=2))
         return
     Path(environment['LAPLACE_WORK']).mkdir(parents=True, exist_ok=True)
+    if os.name == 'nt':
+        sys.exit(subprocess.run([str(executable), *sys.argv[1:]], env=process_environment(environment)).returncode)
     os.execve(executable, [str(executable), *sys.argv[1:]], process_environment(environment))
 
 
