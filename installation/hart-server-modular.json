@@ -34,5 +34,12 @@
   "batch_mb": 64,
   "connection_limit": 8,
   "legacy_user": "ahart",
-  "legacy_unit": "laplace-mcp.service"
+  "legacy_unit": "laplace-mcp.service",
+  "operator_client": {
+    "role": "laplace",
+    "work": "/repos/work/clients/ahart/laplace",
+    "data": "/vault/Data",
+    "command": "/home/ahart/.local/bin/laplace",
+    "configuration": "/home/ahart/.config/laplace/client.json"
+  }
 }
