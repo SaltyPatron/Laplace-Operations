@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # hart-server secrets stack: Vaultwarden (people) + OpenBao (machines).
 # Both listen on 127.0.0.1 only; nginx publishes them LAN/Tailscale-only with the *.hartonomous.com wildcard.
-#   sudo bash install.sh               install everything, test nginx config, do NOT reload nginx
-#   sudo bash install.sh --reload      same, then reload nginx (wait until the Laplace deploys finish)
+#   sudo bash install.sh               converge the stack, traffic limits and log rotation; verify live ingress
+#   sudo bash install.sh --reload      retained compatibility spelling for the same complete installation
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run with sudo"; exit 1; }
 [[ $(hostname -s) == hart-server ]] || { echo 'This declares the existing hart-server secrets stack; wrong host.' >&2; exit 1; }
@@ -133,8 +133,7 @@ server {
 }
 EOF
 ln -sf /etc/nginx/sites-available/secrets-lan /etc/nginx/sites-enabled/secrets-lan
-nginx -t
-if [[ $RELOAD -eq 1 ]]; then systemctl reload nginx; echo "nginx reloaded"; else echo "nginx config OK, NOT reloaded (run: sudo systemctl reload nginx once the Laplace deploys finish)"; fi
+python3 "$HERE/protection.py"
 
 bash "$HERE/install-backup.sh"
 

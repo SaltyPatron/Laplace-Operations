@@ -16,6 +16,9 @@ setup_dispatch() {
       all)
         volumes; packages; rights; kernel; deps; cluster; postgres; settings; access; appdb; backup
         landing_of_all=1; landing; landing_of_all=
+        if [[ -f /etc/laplace/secrets-protection.json ]]; then
+          python3 "$here/secrets/protection.py" --configuration /etc/laplace/secrets-protection.json
+        fi
         modular; agents; idlestop; report
         ;;
       *) "$p" ;;
