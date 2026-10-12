@@ -37,14 +37,18 @@ Audit rotation checks run every minute, at 64 MiB with 16 rotations. Nginx retai
 existing daily policy with an added 32 MiB size threshold and the same minute checks.
 Size thresholds can overshoot between checks; they are not filesystem quotas. Audit
 rotation signals OpenBao to reopen the file, without copytruncate or discarding records.
-The large incident archive is preserved separately, outside ordinary retention.
+The flood incident log is disposable; it is not application data or a required backup.
 
-The existing /logs volume has insufficient space for a worst-case 67 GB archive.
-The declared /hosting/openbao/audit-archive uses the existing volume with adequate space.
-Setup closes the oversized audit file, checks that OpenBao has released it, compresses
-it using four threads, decompresses and hashes the full result, and only then removes
-that exact closed source file. Interrupted recovery retains the original. It never
-truncates the active audit log or changes OpenBao data, policies or initialization.
+To discard the closed incident log and the abandoned archive attempt:
+
+```bash
+sudo ./setup.sh secrets-protection --discard-flood-log
+```
+
+Setup verifies that OpenBao holds the new active audit file and has released the old
+file before removing the closed incident log and its matching complete/partial archive.
+It creates no backup. It never truncates the active audit log or changes OpenBao data,
+policies or initialization. Interrupted setup records failure. The cleanup is repeatable.
 
 Secrets-stack installation includes these controls. After first installation, ordinary
 setup reruns reconcile `/etc/laplace/secrets-protection.json` as well. Receipts under the

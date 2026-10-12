@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install abuse controls and bounded rotation; preserve an oversized closed audit log."""
+"""Install abuse controls, bounded rotation and explicit closed-flood-log cleanup."""
 import argparse
 import concurrent.futures
 import datetime
@@ -130,68 +130,18 @@ def close_oversized_audit(c):
     return closed
 
 
-def archive(c, path):
-    if path.is_symlink() or not path.is_file() or open_file(c, path):
-        raise RuntimeError('Audit archive input must be a closed regular file')
-    directory = Path(c['overflow_archive_directory'])
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(directory, 0o700)
-    before = path.stat()
-    required = int(before.st_size * 1.01) + c['archive_reserve_mib'] * 1024**2
-    if shutil.disk_usage(directory).free < required:
-        raise RuntimeError('Archive volume lacks worst-case compressed capacity plus its reserve; source preserved')
-    destination = directory / (path.name + '.gz')
-    partial = directory / (path.name + '.gz.part-' + uuid.uuid4().hex)
-    digest = hashlib.sha256()
-    print(f'Preserving {before.st_size} audit bytes in {destination} ...', flush=True)
-    with open(partial, 'xb') as output:
-        os.chmod(partial, 0o600)
-        process = subprocess.Popen(['pigz', '-1', '-p', str(c['compression_threads']), '-c'],
-                                   stdin=subprocess.PIPE, stdout=output, stderr=subprocess.PIPE)
-        try:
-            with path.open('rb') as source:
-                while chunk := source.read(4 * 1024**2):
-                    digest.update(chunk)
-                    process.stdin.write(chunk)
-            process.stdin.close()
-            if process.wait() != 0:
-                raise RuntimeError('Audit compression failed; source preserved')
-            output.flush()
-            os.fsync(output.fileno())
-        finally:
-            if process.poll() is None:
-                process.kill()
-                process.wait()
-    verify = hashlib.sha256()
-    process = subprocess.Popen(['pigz', '-d', '-c', str(partial)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    count = 0
-    while chunk := process.stdout.read(4 * 1024**2):
-        count += len(chunk)
-        verify.update(chunk)
-    if process.wait() or count != before.st_size or verify.digest() != digest.digest():
-        raise RuntimeError('Compressed audit readback differs; source preserved')
-    after = path.stat()
-    if (before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns) or open_file(c, path):
-        raise RuntimeError('Closed audit changed during archival; source preserved')
-    os.replace(partial, destination)
-    metadata = {'source': str(path), 'archive': str(destination), 'source_bytes': count,
-                'compressed_bytes': destination.stat().st_size, 'sha256': digest.hexdigest(), 'readback': 'passed'}
-    atomic(str(destination) + '.json', json.dumps(metadata, indent=2) + '\n', 0o600)
-    # Delete only the exact closed input after complete decompression/hash verification.
-    path.unlink()
-    return metadata
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--configuration', type=Path, default=Path(__file__).with_name('protection.json'))
     parser.add_argument('--check', action='store_true')
+    parser.add_argument('--discard-flood-log', action='store_true',
+                        help='Discard only the closed incident audit log and its archive after verifying OpenBao released it')
     args = parser.parse_args()
     c = json.loads(args.configuration.read_text())
     if socket.gethostname().split('.')[0].lower() != c['host'].lower():
         raise RuntimeError('Wrong host for secrets protection declaration')
     http, server, site = configurations(c, Path(c['site']).read_text())
-    for binary in ('nginx', 'logrotate', 'systemctl', 'curl', 'pigz'):
+    for binary in ('nginx', 'logrotate', 'systemctl', 'curl'):
         if not shutil.which(binary):
             raise RuntimeError('Required installed program missing: ' + binary)
     if args.check:
@@ -265,21 +215,42 @@ def main():
             receipt['rotation'] = {'audit_max_mib': c['audit_rotate_mib'], 'audit_retained': c['audit_rotate_count'], 'check_interval_seconds': 60}
             receipt['archives'] = []
             atomic(receipt_path, json.dumps(receipt, indent=2) + '\n')
-            for path in closed:
-                receipt['archives'].append(archive(c, path))
-                atomic(receipt_path, json.dumps(receipt, indent=2) + '\n')
+            if args.discard_flood_log:
+                receipt['discarded_flood_files'] = discard_flood(c, closed)
+            elif closed:
+                raise RuntimeError('Oversized audit log closed and retained. Use --discard-flood-log to discard the incident log; automatic archival is disabled.')
             if status(c, '/v1/sys/health') != 200:
                 raise RuntimeError('Final OpenBao health check failed')
             receipt['var_free_bytes'] = shutil.disk_usage(Path(c['audit_log']).parent).free
             atomic('/etc/laplace/secrets-protection.json', json.dumps(c, indent=2) + '\n')
             receipt['status'] = 'passed'
-        except Exception as error:
+        except BaseException as error:
             receipt['status'] = 'failed'
-            receipt['error'] = str(error)
+            receipt['error'] = str(error) or type(error).__name__
             raise
         finally:
             atomic(receipt_path, json.dumps(receipt, indent=2) + '\n')
             print('Secrets protection receipt: ' + str(receipt_path), flush=True)
+
+
+def discard_flood(c, closed):
+    """Remove only this recovery operation's closed files, including an interrupted archive."""
+    audit = Path(c['audit_log'])
+    directory = Path(c['overflow_archive_directory'])
+    selected = list(closed)
+    pattern = re.compile(re.escape(audit.name) + r'\.recovery-[a-f0-9]{32}\.gz(?:\.json|\.part-[a-f0-9]{32})?$')
+    if directory.exists():
+        selected += [path for path in directory.iterdir() if pattern.fullmatch(path.name)]
+    if not open_file(c, audit):
+        raise RuntimeError('OpenBao is not holding the new active audit file; no incident files discarded')
+    for path in selected:
+        if path.is_symlink() or not path.is_file() or path.resolve() == audit.resolve() or open_file(c, path):
+            raise RuntimeError('Incident file is not a closed regular file: ' + str(path))
+    result = []
+    for path in selected:
+        result.append({'path': str(path), 'bytes': path.stat().st_size})
+        path.unlink()
+    return result
 
 
 if __name__ == '__main__':
