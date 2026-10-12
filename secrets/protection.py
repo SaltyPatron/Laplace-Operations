@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install abuse controls and bounded rotation; preserve an oversized closed audit log."""
+"""Install abuse controls, bounded rotation and explicit closed-flood-log cleanup."""
 import argparse
 import concurrent.futures
 import datetime
@@ -130,58 +130,6 @@ def close_oversized_audit(c):
     return closed
 
 
-def archive(c, path):
-    if path.is_symlink() or not path.is_file() or open_file(c, path):
-        raise RuntimeError('Audit archive input must be a closed regular file')
-    directory = Path(c['overflow_archive_directory'])
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(directory, 0o700)
-    before = path.stat()
-    required = int(before.st_size * 1.01) + c['archive_reserve_mib'] * 1024**2
-    if shutil.disk_usage(directory).free < required:
-        raise RuntimeError('Archive volume lacks worst-case compressed capacity plus its reserve; source preserved')
-    destination = directory / (path.name + '.gz')
-    partial = directory / (path.name + '.gz.part-' + uuid.uuid4().hex)
-    digest = hashlib.sha256()
-    print(f'Preserving {before.st_size} audit bytes in {destination} ...', flush=True)
-    with open(partial, 'xb') as output:
-        os.chmod(partial, 0o600)
-        process = subprocess.Popen(['pigz', '-1', '-p', str(c['compression_threads']), '-c'],
-                                   stdin=subprocess.PIPE, stdout=output, stderr=subprocess.PIPE)
-        try:
-            with path.open('rb') as source:
-                while chunk := source.read(4 * 1024**2):
-                    digest.update(chunk)
-                    process.stdin.write(chunk)
-            process.stdin.close()
-            if process.wait() != 0:
-                raise RuntimeError('Audit compression failed; source preserved')
-            output.flush()
-            os.fsync(output.fileno())
-        finally:
-            if process.poll() is None:
-                process.kill()
-                process.wait()
-    verify = hashlib.sha256()
-    process = subprocess.Popen(['pigz', '-d', '-c', str(partial)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    count = 0
-    while chunk := process.stdout.read(4 * 1024**2):
-        count += len(chunk)
-        verify.update(chunk)
-    if process.wait() or count != before.st_size or verify.digest() != digest.digest():
-        raise RuntimeError('Compressed audit readback differs; source preserved')
-    after = path.stat()
-    if (before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns) or open_file(c, path):
-        raise RuntimeError('Closed audit changed during archival; source preserved')
-    os.replace(partial, destination)
-    metadata = {'source': str(path), 'archive': str(destination), 'source_bytes': count,
-                'compressed_bytes': destination.stat().st_size, 'sha256': digest.hexdigest(), 'readback': 'passed'}
-    atomic(str(destination) + '.json', json.dumps(metadata, indent=2) + '\n', 0o600)
-    # Delete only the exact closed input after complete decompression/hash verification.
-    path.unlink()
-    return metadata
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--configuration', type=Path, default=Path(__file__).with_name('protection.json'))
@@ -193,7 +141,7 @@ def main():
     if socket.gethostname().split('.')[0].lower() != c['host'].lower():
         raise RuntimeError('Wrong host for secrets protection declaration')
     http, server, site = configurations(c, Path(c['site']).read_text())
-    for binary in ('nginx', 'logrotate', 'systemctl', 'curl', 'pigz'):
+    for binary in ('nginx', 'logrotate', 'systemctl', 'curl'):
         if not shutil.which(binary):
             raise RuntimeError('Required installed program missing: ' + binary)
     if args.check:
