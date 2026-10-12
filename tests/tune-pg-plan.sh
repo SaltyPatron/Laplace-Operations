@@ -11,10 +11,10 @@ export LAPLACE_CONNINFO="host=/tmp port=5432 user=laplace dbname=laplace"
 G=$((1024 * 1024 * 1024))
 #        name          profile    ram_kb     threads cores wal_bytes       shared rot reserved buffers_max
 fixtures() { cat <<TSV
-hart-server	knowledge	131799160	12	6	$((64 * G))	0	0	0	0
-hart-cloud	knowledge	32862256	8	4	$((16 * G))	0	0	0	0
+hart-server	substrate	131799160	12	6	$((64 * G))	0	0	0	0
+hart-cloud	substrate	32862256	8	4	$((16 * G))	0	0	0	0
 hart-prod	app	4007004	2	1	$((50 * G))	1	0	0	0
-HART-DESKTOP	knowledge	50037756	32	24	$((2000 * G))	1	0	34GB	1GB
+HART-DESKTOP	substrate	50037756	32	24	$((2000 * G))	1	0	34GB	1GB
 one-core-hdd	app	2048000	1	1	$((20 * G))	1	1	0	0
 TSV
 }

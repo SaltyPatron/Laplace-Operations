@@ -25,11 +25,11 @@ Run these from this Operations checkout on HART-DESKTOP, using your existing Git
 ./laplace.ps1 recovery -Target production
 ```
 
-`staging` selects hart-server; `production` selects hart-prod; `knowledge` selects hart-cloud when it is running.
+`staging` selects hart-server; `production` selects hart-prod; `cloud` selects hart-cloud when it is running.
 `status` inspects installed revisions, configuration and connectivity; `runs` lists workflow history. `verify` executes the installed application. With `-Wait`, status and verification receipts are downloaded under `$LAPLACE_WORK/operations/<run-id>`.
 `deploy -Target staging` builds and runs `main` on hart-server and stops there. This is also the default for `deploy`.
 `deploy -Target production` verifies staging, transfers that package to hart-prod, publishes and verifies it.
-Normal main delivery does not start hart-cloud or change the selected knowledge backend. The monorepo's
+Normal main delivery does not start hart-cloud or change the selected substrate backend. The monorepo's
 `product-operator.yml` exposes `qualify-cloud` for explicitly requested isolated qualification; its lease is
 released afterward so the existing idle-stop mechanism can stop the VM. `prepare`, `build` and `test` select desktop by
 default and reject remote targets. HART-DESKTOP remains the development and optional GPU machine.
@@ -50,11 +50,11 @@ backup's SHA-256, restores into a uniquely named disposable database, and runs t
 port with background provider/bootstrap services disabled. It tests authenticated SQL and native operations using the
 restored application state, then removes its temporary database, process and credential file. Its JSON receipt is saved
 under `$LAPLACE_WORK/operations`. `backup/recovery-installation.json` declares paths, identities and the port. This proves
-application-data recovery with the selected knowledge still available; knowledge and OpenBao recovery are separate checks.
+application-data recovery with the selected substrate still available; substrate and OpenBao recovery are separate checks.
 
 The installed-runtime check requires API/web responses, MCP authentication when installed, authenticated SQL
 execution, native decomposition/storage invariants, compatible loaded Tier-0 artifacts, and the configured Stockfish
-executable's UCI/search behavior. An empty knowledge database is reported separately from failed infrastructure.
+executable's UCI/search behavior. An empty substrate database is reported separately from failed infrastructure.
 The verifier issues a temporary key in the migration-provisioned verification workspace and revokes it afterward.
 
 On a declared Linux host, from the matching Laplace source checkout:
@@ -104,10 +104,10 @@ deployment account; the API's pgpass contains only its two runtime credentials. 
 OpenBao AppRole that can read only the two declared runtime records. Its root-only credential is selected by
 `LAPLACE_BAO_RUNTIME_CREDENTIALS`; the existing host AppRole remains available for deployment. Verification exercises
 both allowed reads, denies migration/shared credentials, and proves the token stops working after revocation.
-The refresh reads selected knowledge and `LAPLACE_BAO_APP_RUNTIME_RECORD`; `setup.sh database-client` installs
+The refresh reads selected substrate and `LAPLACE_BAO_APP_RUNTIME_RECORD`; `setup.sh database-client` installs
 that timer for `LAPLACE_API_USER`. Changed credentials are authenticated before publication and trigger verified
 pool recreation. The two-connection application pool and six-connection role allocation include a concurrent
-recovery process and credential checks; these are not an aggregate knowledge-cluster resource budget.
+recovery process and credential checks; these are not an aggregate substrate-cluster resource budget.
 
 Apply the declared application-cluster resource budget with `./secrets/application-runtime.ps1 -Phase resources`.
 The installer checks the actual database directory, holds the host operation lock, validates the plan before database
@@ -120,7 +120,7 @@ The production declaration allocates eight application client connections: two s
 for credential refresh, backup, migration and operator inspection. PostgreSQL's maintenance/reserved allocation
 brings its connection setting to fourteen. A 1 GB reservation leaves room for other host processes; a 256 MB shared
 buffer ceiling avoids allocating a quarter of this host to its currently small application database. These are
-explicit initial allocations, not measured throughput guarantees. Knowledge runs on a different database host.
+explicit initial allocations, not measured throughput guarantees. Substrate runs on a different database host.
 
 `LAPLACE_PG_WORK_NODES` estimates simultaneous sort/hash nodes per backend (default two); the planner charges each
 against `work_mem` with its declared hash multiplier of one. Increasing the estimate reduces per-node memory, and
@@ -128,7 +128,7 @@ plans that exceed the private-memory allocation at minimum settings are refused.
 memory cap. [PostgreSQL documents the per-operation and parallel-worker multipliers](https://www.postgresql.org/docs/current/runtime-config-resource.html).
 The application WAL profile retains `replica` for recovery/base-backup compatibility; this does not itself enable
 WAL archiving or prove point-in-time recovery. Application overrides use `LAPLACE_APP_PG_*` in machine.env so they
-do not silently change a co-located knowledge cluster's plan.
+do not silently change a co-located substrate cluster's plan.
 
 Register an existing Stockfish build using its actual selected source path:
 
@@ -144,14 +144,14 @@ hart-cloud to hart-server when hart-cloud is stopped or unavailable. Hart-prod a
 for local fallback, in addition to its billing, account and other application data. A selected hart-server
 connection is a failover state; it does not change the hosts' development, staging and production roles.
 Inspect the selected target before a database reset, including whether it currently serves production.
-`secrets/provision-database.ps1` creates the non-superuser knowledge login and the consumer's OpenBao record;
+`secrets/provision-database.ps1` creates the non-superuser substrate login and the consumer's OpenBao record;
 `sudo ./setup.sh database-client` installs the existing host AppRole's credential refresh timer. Selecting a new
-knowledge source is explicit; the timer only refreshes the selected credential. It never moves account/session data.
+database source is explicit; the timer only refreshes the selected credential. It never moves account/session data.
 
 Selection checks the installed Tier-0 receipt before writing configuration. Use the installed helper with
 `--select --verification-base https://api.hartonomous.com` and its existing host/AppRole arguments to activate
-the selected knowledge credential. It verifies authenticated application work afterward and restores the prior
-credential and configuration if activation fails. Changing knowledge contents does not imply a stale replica.
+the selected substrate credential. It verifies authenticated application work afterward and restores the prior
+credential and configuration if activation fails. Changing substrate contents does not imply a stale replica.
 
 After the cloud lease has ended and hart-cloud is stopped, verify continued public API/MCP operation with:
 
@@ -162,7 +162,7 @@ After the cloud lease has ended and hart-cloud is stopped, verify continued publ
 The acceptance registry declares the installation's actual control host, cloud project, serving host and public URLs.
 The check verifies cloud state both before and after execution; it does not start or stop the VM.
 
-When MCP runs on the knowledge host, declare `LAPLACE_MCP_UPSTREAM` in the consumer's machine.env and run the
+When MCP runs on the database host, declare `LAPLACE_MCP_UPSTREAM` in the consumer's machine.env and run the
 site host installer. Distribute the existing MCP credential with:
 
 ```powershell
@@ -202,9 +202,9 @@ For development on HART-DESKTOP, use the same entry point:
 
 `configure-development` provisions the identities declared in `development/installation.json` using the existing
 operator Bao login and authorized database administration connection. On this installation the desktop uses
-hart-server's `laplace-mono` knowledge and a separate `laplace-desktop-app` database. The application schema has a
+hart-server's `laplace-mono` substrate and a separate `laplace-desktop-app` database. The application schema has a
 non-login owner; the API uses a separate login with data access and no schema-creation or administrator privileges.
-Knowledge and application credentials are distinct OpenBao records under `kv/hosts/hart-desktop`; the run command
+Substrate and application credentials are distinct OpenBao records under `kv/hosts/hart-desktop`; the run command
 fetches them into the child process and never writes connection passwords into the source tree or logs.
 
 Configuration also enrolls `laplace-hart-desktop-development`. For an already configured desktop, run

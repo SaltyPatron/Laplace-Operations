@@ -74,6 +74,8 @@ EOF
     [ -n "$token" ] || token=$(gh_op "api -X POST repos/$owner/$repo/actions/runners/registration-token --jq .token" 2>/dev/null || true)
     if [ -z "$token" ]; then say "registration" "NO TOKEN: gh auth login as an administrator of $owner/$repo, or $var=..., and run again"; return; fi
     lv=LAPLACE_AGENT_LABELS_$(echo "$repo" | tr - _); labels=$LAPLACE_AGENT_LABELS,$repo${!lv:+,${!lv}}
+    # Cloud is a host target independently of an application's deployment tier.
+    [[ $(hostname -s) != hart-cloud ]] || labels="$labels,cloud"
     as_agent "cd $r && ./config.sh --unattended --url https://github.com/$owner/$repo --token $token --name $name --labels $labels --work $d/work --replace" >/dev/null
     say "registration" "$name on $owner/$repo, labels $labels"
   else say "registration" "$(sed -n 's/.*"agentName": *"\([^"]*\)".*/\1/p' "$r/.runner") on $owner/$repo"; fi

@@ -171,7 +171,7 @@ jobs:
   deploy-cloud:
     needs: [deploy, checks, reads, cloud-acquire]
     if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.reads.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.cloud == true && needs.cloud-acquire.result == 'success'
-    runs-on: [self-hosted, laplace, Laplace-Operations, knowledge]
+    runs-on: [self-hosted, laplace, Laplace-Operations, cloud]
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -201,7 +201,7 @@ jobs:
   checks-cloud:
     needs: deploy-cloud
     if: always() && needs.deploy-cloud.result == 'success'
-    runs-on: [self-hosted, laplace, Laplace-Operations, knowledge]
+    runs-on: [self-hosted, laplace, Laplace-Operations, cloud]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -211,7 +211,7 @@ jobs:
   ingest-cloud:
     needs: [deploy-cloud, checks-cloud]
     if: always() && needs.deploy-cloud.result == 'success' && needs.checks-cloud.result == 'success' && inputs.reseed == true
-    runs-on: [self-hosted, laplace, Laplace-Operations, knowledge]
+    runs-on: [self-hosted, laplace, Laplace-Operations, cloud]
     timeout-minutes: 7200
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -221,7 +221,7 @@ jobs:
   reads-cloud:
     needs: [deploy-cloud, checks-cloud, ingest-cloud]
     if: always() && needs.deploy-cloud.result == 'success' && needs.checks-cloud.result == 'success' && needs.ingest-cloud.result != 'failure' && needs.ingest-cloud.result != 'cancelled'
-    runs-on: [self-hosted, laplace, Laplace-Operations, knowledge]
+    runs-on: [self-hosted, laplace, Laplace-Operations, cloud]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

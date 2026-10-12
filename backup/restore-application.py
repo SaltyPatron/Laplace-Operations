@@ -99,7 +99,7 @@ def main():
     receipt = {'host': socket.gethostname(), 'archive': str(archive), 'archive_sha256': archive_hash,
                'backup_modified_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(archive.stat().st_mtime)),
                'source_database': source_db, 'restored_database': database, 'scratch': str(scratch),
-               'scope': 'Application database restore and installed API; selected knowledge remains unchanged',
+               'scope': 'Application database restore and installed API; selected substrate remains unchanged',
                'installed_revision': (args.app_dir / '.laplace-source-revision').read_text().strip(), 'passed': False}
 
     def pg(tool, *arguments):

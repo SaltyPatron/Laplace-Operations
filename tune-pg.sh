@@ -14,7 +14,7 @@
 # whether it is the log's own, whether the data's device rotates. What a machine cannot say is declared in its
 # machine.env with the measurement that set it: LAPLACE_PG_RESERVED (memory its other residents keep: HART-DESKTOP's
 # llama-servers), LAPLACE_PG_BUFFERS_MAX (the largest shared memory a build maps: Windows), LAPLACE_PG_PROFILE
-# (knowledge: the server shares the host with the ingest client, the build and the agent; app: with the API, the MCP
+# (substrate: the server shares the host with the ingest client, the build and the agent; app: with the API, the MCP
 # and the agent; what differs is the connection plan), LAPLACE_PG_SERVING (the connections the host's services hold).
 #
 # The memory is one equation in four domains (the monorepo's PostgresResourcePlan, which the laplace program sizes
@@ -48,8 +48,9 @@ _tune_here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [ -z "${LAPLACE_CONNINFO:-}" ]; then
   LAPLACE_CONNINFO="host=/tmp port=5432 user=${LAPLACE_ROLE:-laplace} dbname=laplace"
 fi
-PROFILE=${LAPLACE_PG_PROFILE:-knowledge}
-case $PROFILE in knowledge|app) ;; *) echo "tune-pg: LAPLACE_PG_PROFILE is knowledge or app, not '$PROFILE'" >&2; exit 2 ;; esac
+PROFILE=${LAPLACE_PG_PROFILE:-substrate}
+[[ "$PROFILE" != knowledge ]] || PROFILE=substrate
+case $PROFILE in substrate|app) ;; *) echo "tune-pg: LAPLACE_PG_PROFILE is substrate or app, not '$PROFILE'" >&2; exit 2 ;; esac
 PGDATA=${TUNE_PGDATA:-$LAPLACE_PGDATA}
 PGWAL=${PGWAL:-$LAPLACE_PGWAL}
 PGBIN=${PGBIN:-$LAPLACE_PG_DIR/bin}
@@ -166,14 +167,14 @@ plan() {  # every derived quantity as NAME=value lines; declared() formats them
   wal_buf_kb=$(clamp $((shared_kb / 32)) 16384 $((wal_mb * 1024 / 16)))
   # the processors: parallel query on the cores (a sibling thread is not another core), asynchronous reads on the threads
   par=$cores; gather=$((cores / 2)); avw=$(max 3 $((cores / 2))); iow=$(clamp $((threads * 2 / 3)) 1 32); mwp=$((par + 4))
-  # the connection plan: who may be connected at once. knowledge: the ingest's fan (one coordinator, two a core, three
+  # the connection plan: who may be connected at once. substrate: the ingest's fan (one coordinator, two a core, three
   # observers: the monorepo's measured population), the serving pools, the maintenance workers; app: the serving pools
   # and the maintenance workers. The serving pools are the host's services' (the API, the MCP, the runners' checks, a
   # person's psql), which the machine cannot say: LAPLACE_PG_SERVING declares them with the measurement; undeclared,
   # four a thread (on hart-server one MCP process held 13 idle backends after a single search, 2026-10-10 01:07Z, so
   # one a thread was too few). Three superuser connections are reserved.
   case $PROFILE in
-    knowledge) ingest=$((1 + 2 * cores + 3)); serving=${LAPLACE_PG_SERVING:-$((4 * threads))}; locks=1024 ;;
+    substrate) ingest=$((1 + 2 * cores + 3)); serving=${LAPLACE_PG_SERVING:-$((4 * threads))}; locks=1024 ;;
     app)       ingest=0; serving=${LAPLACE_PG_SERVING:-$(max 16 $((8 * threads)))}; locks=64 ;;
   esac
   reserved_conns=3; conns=$((ingest + serving + avw + reserved_conns))
@@ -282,7 +283,7 @@ max_connections                  $(v conns)
 superuser_reserved_connections   3
 max_prepared_transactions        32
 SET
-  [ "$PROFILE" = knowledge ] && echo "temp_tablespaces                 pgtemp"
+  [ "$PROFILE" = substrate ] && echo "temp_tablespaces                 pgtemp"
   return 0
 }
 

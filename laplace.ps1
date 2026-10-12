@@ -10,7 +10,7 @@ Operate the installed Laplace application through its delivery workflows.
 [CmdletBinding()]
 param(
     [ValidateSet('status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','prepare','build','test','recovery')][string]$Operation = 'status',
-    [ValidateSet('desktop','staging','production','knowledge')][string]$Target,
+    [ValidateSet('desktop','staging','production','cloud')][string]$Target,
     [string]$Revision = 'main',
     [string]$Repository = 'SaltyPatron/Laplace',
     [string]$SourcePath,
@@ -25,7 +25,7 @@ if ($Operation -in $desktopOperations -and $Target -ne 'desktop') {
     throw "$Operation runs on desktop; target '$Target' is not supported. Use deploy to install a deployment target."
 }
 if ($Operation -eq 'deploy' -and $Target -notin @('staging','production')) {
-    throw 'deploy supports staging or production. Use components -Target knowledge for on-demand component qualification.'
+    throw 'deploy supports staging or production. Use components -Target cloud for on-demand component qualification.'
 }
 if ($SourcePath -and $Target -ne 'desktop') {
     throw 'SourcePath selects local desktop sources; remote operations use Revision.'
@@ -73,10 +73,10 @@ if ($Operation -eq 'runs') {
 $workflow = 'product-operator.yml'
 $inputs = @('-f',"operation=$Operation",'-f',"target=$Target")
 if ($Operation -eq 'components') {
-    if ($Target -eq 'production') { throw 'Use deploy for public production delivery; components supports staging and on-demand knowledge-host verification.' }
+    if ($Target -eq 'production') { throw 'Use deploy for public production delivery; components supports staging and on-demand cloud-host verification.' }
     if (-not $PSBoundParameters.ContainsKey('Repository')) { $Repository = 'SaltyPatron/Laplace-Operations' }
     $workflow = 'laplace.yml'
-    $inputs = @('-f','drop=false','-f','reseed=false','-f',"cloud=$($Target -eq 'knowledge')".ToLowerInvariant())
+    $inputs = @('-f','drop=false','-f','reseed=false','-f',"cloud=$($Target -eq 'cloud')".ToLowerInvariant())
     Write-Host "Verify component deployment from $Revision on $Target."
 } elseif ($Operation -eq 'deploy') {
     if ($Target -eq 'production') {

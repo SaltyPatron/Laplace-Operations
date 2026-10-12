@@ -31,7 +31,7 @@ foreach ($arguments in @(
     @('build','-Target','production'),
     @('prepare','-Target','staging'),
     @('start','-Target','staging'),
-    @('deploy','-Target','knowledge'),
+    @('deploy','-Target','cloud'),
     @('verify','-Target','production','-SourcePath','C:\local-source')
 )) {
     $result=Dispatch $arguments

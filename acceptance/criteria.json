@@ -82,7 +82,7 @@
         "Install onto a clean declared host, rerun repair without damage, and upgrade from an existing release.",
         "Each implementation's setup includes its declared runtime stages. Shared/modular setup does not install or restart monorepo services; an application connection must not implicitly provision another database cluster.",
         "Inject publication/activation failure; recover a coherent release and state, not only its old binaries.",
-        "Remove owned services/binaries without deleting persistent knowledge, application data or shared infrastructure."
+        "Remove owned services/binaries without deleting persistent substrate, application data or shared infrastructure."
       ],
       "checks": [
         {
@@ -136,7 +136,7 @@
       "outcome": "CI and local maintenance invoke the same operation and target contract without relying on runner leftovers.",
       "acceptance": [
         "Run maintenance against the current layout on a replaced runner.",
-        "Explicitly resolve tier, machine, role and knowledge target; coordinate shared resources across repositories.",
+        "Explicitly resolve tier, machine, role and database target; coordinate shared resources across repositories.",
         "Demonstrate queue/supersession behavior for two differently parameterized operations."
       ],
       "checks": [
@@ -197,7 +197,7 @@
         "RELEASE-001",
         "CONFIG-001"
       ],
-      "outcome": "Ingestion is an explicit resumable operation against a selected release and knowledge substrate.",
+      "outcome": "Ingestion is an explicit resumable operation against a selected release and content substrate.",
       "acceptance": [
         "Ordinary build/deploy performs no unrequested source admission or database deletion.",
         "Interrupt and resume a named ingest using the recorded input selection and checkpoint; reject incompatible artifacts."
@@ -324,7 +324,7 @@
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "secrets/application-runtime.ps1", "-Phase", "resources-check", "-Target", "production"],
           "timeout_seconds": 120,
-          "evidence": "Read back application-cluster tuning against measured host facts and declared allocations, including service/data-directory identity and no pending restart. This is configuration convergence, not workload saturation or aggregate knowledge-host proof."
+          "evidence": "Read back application-cluster tuning against measured host facts and declared allocations, including service/data-directory identity and no pending restart. This is configuration convergence, not workload saturation or aggregate cloud-host proof."
         }
       ]
     },
@@ -425,18 +425,18 @@
       ]
     },
     {
-      "id": "KNOWLEDGE-001",
+      "id": "SUBSTRATE-001",
       "owner": "Laplace delivery + Operations",
       "depends_on": [
         "RELEASE-001",
         "IDENTITY-001",
         "NETWORK-001"
       ],
-      "outcome": "hart-prod performs authenticated useful work against selected compatible hart-server knowledge while hart-cloud remains intentionally off.",
+      "outcome": "hart-prod performs authenticated useful work against selected compatible hart-server substrate while hart-cloud remains intentionally off.",
       "acceptance": [
-        "Record the selected knowledge/artifact identity and verify API and MCP operations through public ingress.",
+        "Record the selected substrate/artifact identity and verify API and MCP operations through public ingress.",
         "Reject an incompatible target and reverse the selection cleanly; keep the application database separate.",
-        "Do not substitute replica freshness for intentional knowledge selection."
+        "Do not substitute replica freshness for intentional substrate selection."
       ],
       "checks": [
         {
@@ -455,7 +455,7 @@
         "INSTALL-001",
         "IDENTITY-001"
       ],
-      "outcome": "Recovery of releases, application data, selected knowledge and infrastructure secrets is demonstrated separately.",
+      "outcome": "Recovery of releases, application data, selected substrate and infrastructure secrets is demonstrated separately.",
       "acceptance": [
         "Restore backups to an isolated target and perform application reads with compatible schema/native artifacts.",
         "Record recovery point/time and failure handling; a copied file or readable dump listing is not a restore proof."
@@ -472,7 +472,7 @@
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "recovery", "-Target", "production"],
           "timeout_seconds": 300,
-          "evidence": "Restore the declared production application backup into a disposable database, execute installed API/key issuance and native operations, verify the restored database actually received the key, and clean up. Does not claim knowledge or infrastructure-secret recovery."
+          "evidence": "Restore the declared production application backup into a disposable database, execute installed API/key issuance and native operations, verify the restored database actually received the key, and clean up. Does not claim substrate or infrastructure-secret recovery."
         }
       ]
     },
@@ -480,7 +480,7 @@
       "id": "WIRE-001",
       "owner": "Laplace native/client/database integration",
       "depends_on": [
-        "KNOWLEDGE-001"
+        "SUBSTRATE-001"
       ],
       "outcome": "Representative operations have measured and regression-checked external round trips and wire bytes.",
       "acceptance": [
@@ -534,7 +534,7 @@
         "Keep hart-server's damaged GPU ineligible without running a GPU workload.",
         "Allow optional desktop GPU services through explicit configuration; CPU Laplace installation does not require them.",
         "Cloud work explicitly acquires/releases its resource and does not become an undeclared always-on runtime dependency.",
-        "Resolve build host, release tier, serving host and selected knowledge target independently; the on-demand cloud role does not prohibit building production artifacts."
+        "Resolve build host, release tier, serving host and selected database target independently; the on-demand cloud role does not prohibit building production artifacts."
       ],
       "checks": [
         {

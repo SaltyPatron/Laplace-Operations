@@ -16,7 +16,7 @@
   "grants": [
     // Development: SSH administration, HTTPS, SQL and the installed internal proxy.
     {"src":["hart-desktop","hart-desktop-v6"],"dst":["hart-server","hart-server-v6","hart-server-lan","hart-prod","hart-prod-v6","hart-cloud","hart-cloud-v6"],"ip":["tcp:22","tcp:443","tcp:5432","tcp:8080"]},
-    // VM knowledge, OpenBao, MCP and restricted SSH backup landing.
+    // VM substrate, OpenBao, MCP and restricted SSH backup landing.
     {"src":["hart-prod","hart-prod-v6","hart-cloud","hart-cloud-v6"],"dst":["hart-server","hart-server-v6","hart-server-lan"],"ip":["tcp:22","tcp:443","tcp:5432","tcp:8080"]},
     // Server-side deployment and qualification of the selected VM.
     {"src":["hart-server","hart-server-v6","hart-server-lan"],"dst":["hart-prod","hart-prod-v6","hart-cloud","hart-cloud-v6"],"ip":["tcp:22","tcp:443","tcp:5432","tcp:8080"]},
