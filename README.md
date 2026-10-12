@@ -26,6 +26,30 @@ service with `systemctl status laplace-modular-mcp` and its logs with
 `journalctl -u laplace-modular-mcp`. This service is distinct from the monorepo's
 `laplace-mcp` and from Refactor; its acceptance does not establish either of those.
 
+The Windows modular CLI is installed separately from `laplace-mono`:
+
+```powershell
+./setup.ps1 client -Installation ./installation/hart-desktop-modular-client.json
+laplace --where
+laplace status
+laplace help ingest
+```
+
+This non-administrator installation uses the declaration's existing Engine build,
+prepared artifacts, compiled grammars, data paths and database identity. It packages
+native dependencies, recipes, firmware and artifacts into an immutable release under
+the declared prefix, then verifies native composition and the selected database before
+publishing the human command. No PostgreSQL instance is created. The command works from
+any directory and reads its installed client profile; it does not need a developer shell.
+On HART-DESKTOP, the profile is `E:/Data/Laplace/clients/laplace/client.json` and the command
+is in the existing `%LOCALAPPDATA%/Laplace/bin` directory beside `laplace-mono`.
+
+`installation/build-grammars.ps1 -Source <grammar-source-directory> -Output <build-directory>`
+builds selected Windows grammar sources, including C++ scanners, and fails on any compiler
+error. `package-windows-client.py` resolves transitive DLL imports and also packages the
+declared dynamically loaded [oneMKL CPU libraries](https://www.intel.com/content/www/us/en/docs/onemkl/developer-guide-windows/2024-2/using-the-single-dynamic-library.html).
+The package manifest records file hashes, grammar names and Engine/Native revisions.
+
 The machine Laplace runs on, and Laplace on it, from nothing: one environment file, four scripts, and the agents. The
 code is in Laplace-Native, Laplace-postgres and Laplace-Engine, side by side under one source root; this repository
 holds what installs, sets up, deploys, repairs and runs them (Operations in the Wiki).

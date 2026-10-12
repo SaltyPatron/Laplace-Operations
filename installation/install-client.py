@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 
@@ -16,6 +17,7 @@ def main():
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--data', type=Path, required=True)
     parser.add_argument('--command', type=Path, required=True)
+    parser.add_argument('--connection', type=Path, help='JSON with non-secret libpq TLS/address options; credentials remain in the user store')
     parser.add_argument('--configuration', type=Path,
                         default=Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config') / 'laplace/client.json')
     args = parser.parse_args()
@@ -24,6 +26,8 @@ def main():
             parser.error('Installation, work, command and configuration paths must be absolute')
     profile = {'schema': 'laplace.modular-client/v1', 'installation': str(args.installation),
                'role': args.role, 'work': str(args.work), 'data': str(args.data)}
+    if args.connection:
+        profile['connection'] = json.loads(args.connection.read_text())
     source = Path(__file__).with_name('client.py')
     spec = importlib.util.spec_from_file_location('client', source)
     client = importlib.util.module_from_spec(spec)
@@ -50,7 +54,23 @@ def main():
         with tempfile.NamedTemporaryFile(mode='w', dir=args.command.parent,
                                          prefix='.laplace-', delete=False) as stream:
             pending = Path(stream.name)
-            stream.write(program)
+            if os.name == 'nt':
+                if args.command.suffix.lower() != '.cmd':
+                    raise ValueError('The Windows installed command must end in .cmd')
+                # Persist the Python launcher alongside its script, using the
+                # installed interpreter rather than a source/build environment.
+                program_path = args.command.with_suffix('.py')
+                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=args.command.parent,
+                                                 prefix='.laplace-program-', delete=False) as program_stream:
+                    program_stream.write(program)
+                    program_pending = Path(program_stream.name)
+                try:
+                    os.replace(program_pending, program_path)
+                finally:
+                    program_pending.unlink(missing_ok=True)
+                stream.write('@"' + sys.executable.replace('%', '%%') + '" -I "%~dp0' + program_path.name + '" %*\n')
+            else:
+                stream.write(program)
         pending.chmod(0o755)
         os.replace(candidate, args.configuration)
         os.replace(pending, args.command)

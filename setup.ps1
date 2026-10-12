@@ -28,8 +28,14 @@
   developer shell is LAPLACE_DEVSHELL); privileged steps happen here and only here. HART-DESKTOP's one-time cleanup
   of what earlier set-ups left is toolchain\windows\retire.ps1, not this.
 #>
-param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('development'), [switch]$Check)
+param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('development'), [switch]$Check, [string]$Installation)
 $ErrorActionPreference = 'Stop'
+if ($Parts.Count -eq 1 -and $Parts[0] -eq 'client') {
+    if ($Check) { throw 'Client installation does not accept -Check; inspect an installed client with laplace --where and laplace status.' }
+    if (-not $Installation) { throw 'Pass -Installation with the modular client declaration.' }
+    & "$PSScriptRoot/installation/install-windows-client.ps1" -Installation $Installation
+    return
+}
 if ($Parts.Count -eq 1 -and $Parts[0] -eq 'postgres') {
     & "$PSScriptRoot/installation/postgres-installation.ps1" -Check:$Check
     return
