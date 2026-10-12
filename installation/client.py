@@ -62,6 +62,13 @@ def selected(configuration):
         'work': str(work), 'data': str(data), 'revisions': package['revisions']}
 
 
+def process_environment(environment):
+    # The named client controls selection; do not inherit another implementation's
+    # LAPLACE_* values from a developer shell. libpq uses the human's own credential store.
+    inherited = {k: v for k, v in os.environ.items() if not k.startswith('LAPLACE_')}
+    return {**inherited, **environment}
+
+
 def main():
     configuration = Path(os.environ.get('LAPLACE_CLIENT_CONFIG') or
                          str(Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config') / 'laplace/client.json'))
@@ -70,10 +77,7 @@ def main():
         print(json.dumps(description, indent=2))
         return
     Path(environment['LAPLACE_WORK']).mkdir(parents=True, exist_ok=True)
-    # The named client controls selection; do not inherit another implementation's
-    # LAPLACE_* values from a developer shell. libpq uses the human's own credential store.
-    inherited = {k: v for k, v in os.environ.items() if not k.startswith('LAPLACE_')}
-    os.execve(executable, [str(executable), *sys.argv[1:]], {**inherited, **environment})
+    os.execve(executable, [str(executable), *sys.argv[1:]], process_environment(environment))
 
 
 if __name__ == '__main__':

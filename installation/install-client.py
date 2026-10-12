@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 
 
 def main():
@@ -28,29 +29,35 @@ def main():
     client = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(client)
     args.configuration.parent.mkdir(parents=True, exist_ok=True)
-    candidate = args.configuration.with_suffix('.candidate.json')
-    candidate.write_text(json.dumps(profile, indent=2) + '\n')
-    candidate.chmod(0o600)
+    with tempfile.NamedTemporaryFile(mode='w', dir=args.configuration.parent,
+                                     prefix='.client-', suffix='.json', delete=False) as stream:
+        candidate = Path(stream.name)
+        stream.write(json.dumps(profile, indent=2) + '\n')
+    pending = None
     try:
         executable, environment, _ = client.selected(candidate)
         # Native composition and selected-database readback precede command replacement.
         for operation in (['text', 'Laplace'], ['status']):
             verification = subprocess.run([str(executable), *operation],
-                                          env={**os.environ, **environment}, capture_output=True, text=True, timeout=60)
+                                          env=client.process_environment(environment), capture_output=True, text=True, timeout=60)
             if verification.returncode:
                 raise ValueError('Installed modular Engine ' + operation[0] + ' failed: ' + verification.stderr.strip())
         if args.configuration.exists() and json.loads(args.configuration.read_text()).get('schema') != profile['schema']:
             raise ValueError('Refusing to replace a configuration belonging to another application')
         args.command.parent.mkdir(parents=True, exist_ok=True)
-        # The command is self-contained and selects its adjacent public declaration.
+        # The command is self-contained and selects the declared client profile.
         program = source.read_text().replace("def main():\n", "def main():\n    os.environ.setdefault('LAPLACE_CLIENT_CONFIG', " + repr(str(args.configuration)) + ")\n", 1)
-        pending = args.command.with_name(args.command.name + '.new')
-        pending.write_text(program)
+        with tempfile.NamedTemporaryFile(mode='w', dir=args.command.parent,
+                                         prefix='.laplace-', delete=False) as stream:
+            pending = Path(stream.name)
+            stream.write(program)
         pending.chmod(0o755)
         os.replace(candidate, args.configuration)
         os.replace(pending, args.command)
     finally:
         candidate.unlink(missing_ok=True)
+        if pending is not None:
+            pending.unlink(missing_ok=True)
     print('Installed modular command: ' + str(args.command))
     subprocess.run([str(args.command), '--where'], check=True, timeout=10)
 
