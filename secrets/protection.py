@@ -63,7 +63,23 @@ location @laplace_bao_retry {{
         raise RuntimeError('Expected exactly one declared OpenBao nginx server; no configuration changed')
     site = site.replace(marker + '\n', '')
     site = site.replace(selector, selector + '\n' + marker)
+    generation = hashlib.sha256((http + server).encode()).hexdigest()[:16]
+    server += f'add_header X-Laplace-Secrets-Protection {generation} always;\n'
     return http, server, site
+
+
+def await_reload(c, server):
+    generation = re.search(r'X-Laplace-Secrets-Protection (\w+)', server).group(1)
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        response = run(['curl', '--silent', '--show-error', '--max-time', '5', '--noproxy', '*',
+                        '--resolve', f"{c['hostname']}:443:{c['address']}",
+                        '--dump-header', '-', '--output', '/dev/null',
+                        'https://' + c['hostname'] + '/v1/sys/health'])
+        if re.search(r'^X-Laplace-Secrets-Protection: ' + generation + r'\s*$', response.stdout, re.I | re.M):
+            return
+        time.sleep(0.25)
+    raise RuntimeError('Nginx did not serve the installed protection generation within 30 seconds')
 
 
 def status(c, uri, method='GET'):
@@ -207,6 +223,9 @@ def main():
                 run(['nginx', '-t'])
                 run(['systemctl', 'reload', 'nginx'])
                 raise
+            # systemctl reload returns after signaling the master, before new
+            # workers necessarily serve requests. Observe the actual generation.
+            await_reload(c, server)
             with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
                 codes = list(pool.map(lambda _: status(c, '/v1/auth/token/renew-self', 'PUT'), range(24)))
             if 429 not in codes or any(code not in (403, 429) for code in codes):
