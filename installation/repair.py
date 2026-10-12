@@ -10,7 +10,9 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import socket
+import stat
 import sqlite3
 import subprocess
 import sys
@@ -42,6 +44,74 @@ def digest(path):
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             value.update(chunk)
     return value.hexdigest()
+
+
+def archive_rotated_log(config, source, destination, check=False):
+    """Move an explicitly selected closed rotation after durable, exact copying."""
+    if config['host'] != socket.gethostname().split('.')[0].lower():
+        raise ValueError('Repair declaration belongs to another host')
+    source = source.absolute()
+    if (source.is_symlink() or not source.resolve().is_relative_to(Path('/var/log'))
+            or not re.fullmatch(r'.+\.\d+(?:\.gz)?', source.name)):
+        raise ValueError('Select a closed, numbered log rotation under /var/log')
+    before = source.stat()
+    if not stat.S_ISREG(before.st_mode):
+        raise ValueError('Selected rotation is not a regular file')
+    if destination is None:
+        declared = config.get('log_archive_directory')
+        if not declared:
+            raise ValueError('Declare log_archive_directory for this host or pass --archive-directory')
+        destination = Path(declared)
+    if not destination.is_absolute() or '..' in destination.parts or destination == Path('/'):
+        raise ValueError('Declare an absolute log archive directory')
+    ancestor = destination
+    while not ancestor.exists():
+        ancestor = ancestor.parent
+    if ancestor.stat().st_dev == before.st_dev:
+        raise ValueError('The log archive must have space on a different filesystem')
+    if shutil.disk_usage(ancestor).free < before.st_size + 1024 ** 3:
+        raise ValueError('Log archive does not have space for the selected rotation and 1 GiB reserve')
+    result = {'source': str(source), 'archive_directory': str(destination), 'bytes': before.st_size}
+    if check:
+        return {**result, 'preflight': 'passed', 'archived': False}
+    if os.geteuid() != 0:
+        raise ValueError('Log storage repair requires sudo ./setup.sh repair --archive-rotated-log PATH')
+    destination.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if destination.is_symlink() or destination.stat().st_uid != 0 or destination.stat().st_mode & 0o022:
+        raise ValueError('Log archive directory must be root-owned, not a symlink, and not writable by other users')
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8]
+    target = destination / (source.name + '.' + stamp)
+    with source.open('rb') as incoming, target.open('xb') as outgoing:
+        os.chmod(target, 0o600)
+        expected = hashlib.sha256()
+        for chunk in iter(lambda: incoming.read(8 * 1024 * 1024), b''):
+            expected.update(chunk)
+            outgoing.write(chunk)
+        outgoing.flush()
+        os.fsync(outgoing.fileno())
+    after = source.stat()
+    if (before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns):
+        raise ValueError('Rotation changed during copying; original preserved')
+    if digest(target) != expected.hexdigest():
+        raise ValueError('Archived bytes differ; original preserved')
+    result.update(archive=str(target), sha256=expected.hexdigest(), archived=True)
+    receipt = destination / (stamp + '.json')
+    receipt.write_text(json.dumps(result, indent=2) + '\n')
+    receipt.chmod(0o600)
+    # The copy and its receipt survive a crash before the original is unlinked.
+    with receipt.open('rb') as stream:
+        os.fsync(stream.fileno())
+    directory = os.open(destination, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+    current = source.stat()
+    if (before.st_ino, before.st_size, before.st_mtime_ns) != (current.st_ino, current.st_size, current.st_mtime_ns):
+        raise ValueError('Rotation changed during archive verification; original preserved')
+    source.unlink()
+    result['source_filesystem_free_bytes'] = shutil.disk_usage(source.parent).free
+    return result
 
 
 def checked_archive(directory, database):
@@ -152,9 +222,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--installation', type=Path)
     parser.add_argument('--check', action='store_true', help='Unprivileged installed-host preflight; makes no changes')
+    parser.add_argument('--archive-rotated-log', type=Path, help='Preserve one explicitly selected closed log rotation on another filesystem to recover space')
+    parser.add_argument('--archive-directory', type=Path, help='Log archive destination; defaults to this host declaration\'s log_archive_directory')
     args = parser.parse_args()
     declaration = args.installation or Path(__file__).with_name(socket.gethostname().split('.')[0].lower() + '.json')
     config = json.loads(declaration.read_text())
+    if args.archive_rotated_log:
+        print(json.dumps(archive_rotated_log(config, args.archive_rotated_log, args.archive_directory, args.check)))
+        return
     proposed = preflight(config)
     if args.check:
         print(json.dumps({'preflight': 'passed', 'host': config['host'], 'installation': str(declaration),
