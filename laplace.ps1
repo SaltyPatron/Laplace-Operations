@@ -80,7 +80,7 @@ if ($Operation -eq 'components') {
     Write-Host "Verify component deployment from $Revision on $Target."
 } elseif ($Operation -eq 'deploy') {
     if ($Target -eq 'production') {
-        Write-Host "Deploy ${Revision}: staging verification, promote to production, production verification."
+        Write-Host "Deploy ${Revision}: staging verification, package transfer, production verification."
     } else {
         Write-Host "Deploy ${Revision} to staging on hart-server."
     }

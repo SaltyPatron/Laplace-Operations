@@ -5,7 +5,12 @@ For monorepo API/MCP, browser and chess identity setup, run `sudo bash deploy/li
 from the Laplace checkout. The latter owns database TLS, scoped runtime credentials and their refresh;
 an existing workload enrollment does not require a personal OpenBao login. Operations' default setup
 does not install or restart monorepo services.
+Refactor has its own installer. See [the monorepo's setup entrypoints](https://github.com/SaltyPatron/Laplace/blob/main/deploy/README.md).
+Runtime checks do not establish complete installation of all three implementations.
 See [installation configuration and receipts](../installation/README.md#default-setup-and-runtime-identity-installation).
+
+See the [installation map](installation-map.md) for the current repo/environment layout and the
+different CLI implementations. These lifecycle controls are not a globally installed ingestion CLI.
 
 Run these from this Operations checkout on HART-DESKTOP, using your existing GitHub CLI login:
 
@@ -23,10 +28,18 @@ Run these from this Operations checkout on HART-DESKTOP, using your existing Git
 `staging` selects hart-server; `production` selects hart-prod; `knowledge` selects hart-cloud when it is running.
 `status` inspects installed revisions, configuration and connectivity; `runs` lists workflow history. `verify` executes the installed application. With `-Wait`, status and verification receipts are downloaded under `$LAPLACE_WORK/operations/<run-id>`.
 `deploy -Target staging` builds and runs `main` on hart-server and stops there. This is also the default for `deploy`.
-`deploy -Target production` verifies staging, promotes its application/native closure to hart-prod and verifies
-it there. Ordinary delivery does not start hart-cloud or change the selected knowledge host.
-Cloud qualification is an explicit separate operation. `prepare`, `build` and `test` select desktop by
+`deploy -Target production` verifies staging, transfers that package to hart-prod, publishes and verifies it.
+Normal main delivery does not start hart-cloud or change the selected knowledge backend. The monorepo's
+`product-operator.yml` exposes `qualify-cloud` for explicitly requested isolated qualification; its lease is
+released afterward so the existing idle-stop mechanism can stop the VM. `prepare`, `build` and `test` select desktop by
 default and reject remote targets. HART-DESKTOP remains the development and optional GPU machine.
+
+Desktop `build` uses the selected source checkout before resolving its output directories. It builds
+native code and calls that monorepo's `scripts/win/publish-cli.ps1` to produce `LAPLACE_CLI_EXE`,
+including its runtime dependencies, before building the managed solution and web assets. CLI help
+and native decomposition must work outside the developer shell. The resulting development build
+does not replace the installed IIS release. `start` runs the built API, and repeated `start`/`verify`
+reuse its owned process. Receipts record the executable paths and hashes under `$LAPLACE_WORK/operations`.
 
 Workflow operations return a GitHub run link. `-Wait` follows that run and returns failure if it fails. The GitHub
 **Product — maintenance** workflow offers the same controls. `-Revision` selects a published ref; local uncommitted

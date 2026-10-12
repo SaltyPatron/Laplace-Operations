@@ -161,6 +161,13 @@
           "evidence": "Actual staging workflow execution through the human entry point; does not by itself prove replacement-runner installation."
         },
         {
+          "id": "desktop-build",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "build"],
+          "timeout_seconds": 3600,
+          "evidence": "Actual configured desktop source build: native libraries, monorepo-owned ReadyToRun CLI publication and execution without developer environment variables, managed solution, web assets and native/runtime tests. Installed IIS and database behavior are verified separately."
+        },
+        {
           "id": "desktop-runtime",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "desktop"],
