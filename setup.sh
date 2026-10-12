@@ -482,7 +482,7 @@ idlestop(){ part "idle stop"
   say "idle stop" "after $m idle minutes; $(systemctl is-active laplace-idle-stop.timer); next $(systemctl show -p NextElapseUSecRealtime --value laplace-idle-stop.timer)"
 }
 # Business continuity: a host that holds databases (LAPLACE_BACKUP_DATABASES in its machine.env, e.g. "laplace laplace-mono"
-# on the knowledge host, "laplace-app" on the hosting host) dumps each of them nightly with pg_dump -Fc, proves the dump
+# on the substrate host, "laplace-app" on the hosting host) dumps each of them nightly with pg_dump -Fc, proves the dump
 # readable with pg_restore --list, and ships it over the tailnet to the landing LAPLACE_BACKUP_TARGET (user@host:, the
 # landing part on hart-server: setup.sh landing), by rsync with the host's own key /etc/laplace/backup.key, made here; its
 # public half /etc/laplace/backup.pub is declared in backup/landing.keys, which is what the landing authorizes. The landing
@@ -719,8 +719,8 @@ TIMER
   say 'OpenBao appdb refresh' 'authentication verified; timer enabled; each invocation uses and revokes a scoped token'
 }
 
-knowledge-client(){ part 'OpenBao knowledge credentials'
-  local host=${LAPLACE_BAO_KNOWLEDGE_HOST:-$(hostname -s)}
+database-client(){ part 'OpenBao substrate credentials'
+  local host=${LAPLACE_BAO_DATABASE_HOST:-$(hostname -s)}
   local credentials=${LAPLACE_BAO_RUNTIME_CREDENTIALS:-${LAPLACE_BAO_CREDENTIALS:-/etc/laplace/approle.json}}
   local address=${BAO_ADDR:-https://openbao.hartonomous.com}
   local prefix=${LAPLACE_INSTALL_PREFIX:-/opt/laplace}
@@ -735,29 +735,34 @@ knowledge-client(){ part 'OpenBao knowledge credentials'
     args+=(--application-record "$LAPLACE_BAO_APP_RUNTIME_RECORD" --restart-on-change
       --verification-base "${LAPLACE_API_VERIFICATION_URL:-${LAPLACE_PUBLIC_BASE_URL:?API verification origin is required}}")
   fi
-  python3 "$here/secrets/knowledge-sync.py" "${args[@]}"
+  python3 "$here/secrets/database-sync.py" "${args[@]}"
+  # Credential verification precedes retirement of the previous refresh owner.
+  if [[ $(systemctl show laplace-knowledge-refresh.timer -p LoadState --value) == loaded ]]; then
+    systemctl disable --now laplace-knowledge-refresh.timer
+    systemctl stop laplace-knowledge-refresh.service
+  fi
   install -d -m 755 /usr/local/libexec
-  install -m 755 "$here/secrets/knowledge-sync.py" /usr/local/libexec/laplace-knowledge-sync.py
+  install -m 755 "$here/secrets/database-sync.py" /usr/local/libexec/laplace-database-sync.py
   {
-    printf '#!/bin/bash\nset -euo pipefail\nexec python3 /usr/local/libexec/laplace-knowledge-sync.py '
+    printf '#!/bin/bash\nset -euo pipefail\nexec python3 /usr/local/libexec/laplace-database-sync.py '
     printf '%q ' "${args[@]}"
     printf '\n'
-  } > /usr/local/libexec/laplace-knowledge-refresh
-  chmod 755 /usr/local/libexec/laplace-knowledge-refresh
-  cat > /etc/systemd/system/laplace-knowledge-refresh.service <<'UNIT'
+  } > /usr/local/libexec/laplace-database-refresh
+  chmod 755 /usr/local/libexec/laplace-database-refresh
+  cat > /etc/systemd/system/laplace-database-refresh.service <<'UNIT'
 [Unit]
-Description=Refresh Laplace knowledge credential through OpenBao
+Description=Refresh Laplace substrate credential through OpenBao
 After=network-online.target
 Wants=network-online.target
 [Service]
 Type=oneshot
-ExecStart=/usr/local/libexec/laplace-knowledge-refresh
+ExecStart=/usr/local/libexec/laplace-database-refresh
 NoNewPrivileges=true
 UMask=0077
 UNIT
-  cat > /etc/systemd/system/laplace-knowledge-refresh.timer <<'TIMER'
+  cat > /etc/systemd/system/laplace-database-refresh.timer <<'TIMER'
 [Unit]
-Description=Refresh Laplace knowledge credentials every fifteen minutes
+Description=Refresh Laplace substrate credentials every fifteen minutes
 [Timer]
 OnBootSec=2min
 OnUnitActiveSec=15min
@@ -766,8 +771,8 @@ Persistent=true
 WantedBy=timers.target
 TIMER
   systemctl daemon-reload
-  systemctl enable --now laplace-knowledge-refresh.timer
-  say 'Knowledge credential refresh' 'database authentication and native receipt verified; existing AppRole session revoked'
+  systemctl enable --now laplace-database-refresh.timer
+  say 'Substrate credential refresh' 'database authentication and native receipt verified; existing AppRole session revoked'
 }
 
 report(){ part report

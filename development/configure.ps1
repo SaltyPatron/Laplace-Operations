@@ -18,19 +18,19 @@ function Remote([string]$Script, [hashtable]$Payload) {
     Invoke-Program ssh @('-o','BatchMode=yes','-o','ConnectTimeout=10',$config.database_host,
         "python3 -c 'import base64;exec(base64.b64decode(`"$program`"))'") ($Payload | ConvertTo-Json -Compress)
 }
-$knowledge = Record 'knowledge' @{ database_host=$config.database_host; database=$config.knowledge_database; role=$config.knowledge_role; port=$config.port; password=(Password) }
+$substrate = Record 'substrate' @{ database_host=$config.database_host; database=$config.substrate_database; role=$config.substrate_role; port=$config.port; password=(Password) }
 $application = Record 'appdb' @{ database_host=$config.database_host; database=$config.application_database; role=$config.application_role; port=$config.port; password=(Password) }
-foreach ($pair in @(@($knowledge,$config.knowledge_database,$config.knowledge_role), @($application,$config.application_database,$config.application_role))) {
+foreach ($pair in @(@($substrate,$config.substrate_database,$config.substrate_role), @($application,$config.application_database,$config.application_role))) {
     if ($pair[0].database_host -ne $config.database_host -or $pair[0].database -ne $pair[1] -or $pair[0].role -ne $pair[2] -or $pair[0].port -ne $config.port) {
         throw 'Existing OpenBao record selects another database or identity; refusing replacement.'
     }
 }
 $common = @{ client_address=$config.client_address; psql=$config.psql; admin_socket=$config.admin_socket;
     admin_role=$config.admin_role; lock=$config.host_lock; port=$config.port }
-Remote "$PSScriptRoot/../secrets/knowledge-role.py" ($common + @{database=$knowledge.database; role=$knowledge.role; password=$knowledge.password})
+Remote "$PSScriptRoot/../secrets/database-role.py" ($common + @{database=$substrate.database; role=$substrate.role; password=$substrate.password})
 Remote "$PSScriptRoot/application-database.py" ($common + @{database=$application.database; role=$application.role; password=$application.password;
     owner=$config.application_owner; work=$config.remote_work; migrator=$config.migrator})
 $null = Record 'laplace-api' @{operator_token=(Password)}
-$knowledge = $null; $application = $null
+$substrate = $null; $application = $null
 Write-Host "Development identities provisioned for $($config.client). Credentials remain in OpenBao at $root."
 & "$PSScriptRoot/enroll.ps1" -Installation $Installation

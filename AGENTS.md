@@ -13,6 +13,11 @@ Keep the parent issue open while whole-system criteria remain unmet, and link ch
 does not depend on chat history. Preserve an existing desktop backup-task path until its task has been deliberately
 migrated and read back; a merged source change does not change a registered task action.
 
-Preserve the declared roles: hart-cloud is intentionally stopped when unused; hart-server's damaged GPU must not run;
-OpenBao and Vaultwarden already live on hart-server. Selecting compatible knowledge is distinct from application-data
-recovery. Network acceptance measures external round trips and bytes, not counts of SQL executed inside PostgreSQL.
+Preserve the isolated environments: hart-desktop is development, hart-server is staging, and hart-prod is the inexpensive
+always-on production web host. Hart-cloud is the on-demand AVX-512 database VM; keep it off when unused to preserve trial
+credit. Production can fail over from hart-cloud to hart-server. Hart-prod also has PostgreSQL for local fallback and
+application data such as accounts and billing. A current connection to hart-server is not evidence of a configuration
+error or authorization to redesign placement. Read docs/operating-laplace.md and the cloud-off-serving criterion before
+changing database targets or resetting data. Hart-server's damaged GPU must not run; OpenBao and Vaultwarden already
+live there. Database target selection is distinct from application-data recovery. Network acceptance measures external
+round trips and bytes, not counts of SQL executed inside PostgreSQL.
