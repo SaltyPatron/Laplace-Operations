@@ -1,5 +1,11 @@
 # Laplace-Operations
 
+`sudo ./setup.sh` owns shared infrastructure and the declared modular Laplace runtime.
+It does not configure the monorepo API, MCP, browser identities or their credentials.
+Run the monorepo's `sudo bash deploy/linux/site-host.sh` from its own checkout for those.
+The explicit Operations `site` and `runtime` stages remain compatibility entry points;
+they are not part of `all`. Refactor has its own installer in its own repository.
+
 For the current monorepo application's staging-to-production delivery and installed-runtime checks, use
 [Operating Laplace](docs/operating-laplace.md). The commands below describe the older split-repository deployment.
 

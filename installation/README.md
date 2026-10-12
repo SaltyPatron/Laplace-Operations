@@ -31,34 +31,33 @@ identity isolation. Those remain separate acceptance requirements. The database 
 
 ## Default setup and runtime identity installation
 
-On the installed hart-server, the normal command converges the host and its declared runtime together.
-An existing workload enrollment authenticates independently of the operator's OpenBao session:
+Operations configures shared infrastructure and the declared modular runtime:
 
 ```sh
 sudo ./setup.sh
 ```
 
-The default `all` sequence runs runtime setup after the site units and before its final report. It verifies
-API/MCP behavior, database permissions, OpenBao boundaries and credential refresh. A failed runtime stage
-fails the whole command; it cannot print the final success message. A stopped API/MCP can be repaired as
+The monorepo's `sudo bash deploy/linux/site-host.sh`, run from its own checkout, owns API/MCP behavior,
+database permissions, OpenBao boundaries and credential refresh. Operations `all` never invokes that setup.
+A failed monorepo runtime stage fails its installer. A stopped API/MCP can be repaired as
 long as the service units and application release are installed. A missing release fails explicitly; setup
 does not build or ingest an application implicitly.
 
 Runtime selection uses `LAPLACE_RUNTIME_MANIFEST` from the machine declaration (or process override), otherwise
-`installation/<hostname>-runtime.json` in this checkout. Explicit paths must be absolute. The declaration is
+`deploy/linux/runtime/<hostname>-runtime.json` in the monorepo checkout. Explicit paths must be absolute. The declaration is
 validated against the actual host and effective machine configuration before provisioning. Conflicting database
 names, ports or cluster paths fail. The declared local runtime uses its configured PostgreSQL cluster;
 `LAPLACE_APP_DBNAME` alone does not request a second packaged cluster on that host. Hosts without a runtime
-declaration retain their existing infrastructure setup and explicitly report that no runtime was verified.
+declaration receive infrastructure/modular setup only.
 
-The individual stage remains available for diagnosis and focused repair:
+The old explicit stage forwards to the configured monorepo for compatibility:
 
 ```sh
 ./setup.sh runtime --check
 sudo ./setup.sh runtime
 ```
 
-`hart-server-runtime.json` declares the current hart-server installation; `--manifest /absolute/path.json` selects another
+The monorepo's `hart-server-runtime.json` declares the current hart-server installation; `--manifest /absolute/path.json` selects another
 declaration. The preflight checks the actual machine, mounts, services and installed paths. A non-root
 check reports `workload_authentication=requires_privileged_check` when the private enrollment exists;
 it does not claim authentication was tested. A root check also authenticates the installed AppRole.

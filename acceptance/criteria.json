@@ -80,7 +80,7 @@
       "outcome": "Install, repair and upgrade operate on one installation, with recoverable failure boundaries.",
       "acceptance": [
         "Install onto a clean declared host, rerun repair without damage, and upgrade from an existing release.",
-        "Default setup includes every declared runtime stage and fails if runtime verification fails; an application connection must not implicitly provision another database cluster.",
+        "Each implementation's setup includes its declared runtime stages. Shared/modular setup does not install or restart monorepo services; an application connection must not implicitly provision another database cluster.",
         "Inject publication/activation failure; recover a coherent release and state, not only its old binaries.",
         "Remove owned services/binaries without deleting persistent knowledge, application data or shared infrastructure."
       ],
@@ -90,7 +90,7 @@
           "platform": "linux",
           "argv": ["python3", "tests/setup-flow.py"],
           "timeout_seconds": 60,
-          "evidence": "Execute the default/all dispatcher, runtime invocation and app-cluster routing with external provisioning isolated; injected failures must stop before success. A privileged full setup receipt is separate evidence."
+          "evidence": "Execute the default/all dispatcher without monorepo mutations, explicit compatibility invocation and declared app-cluster routing; injected failures stop before success. Privileged installation is separate evidence."
         },
         {
           "id": "modular-installation",
@@ -342,9 +342,9 @@
         {
           "id": "runtime-setup-boundaries",
           "platform": "linux",
-          "argv": ["python3", "tests/runtime-setup.py"],
+          "argv": ["python3", "tests/runtime-owner.py"],
           "timeout_seconds": 60,
-          "evidence": "Repeat setup with operator authentication forbidden, workload failure receipts before mutation, enrollment access boundaries, wrong-host and invalid identity refusal, preserved Bao selection, activation rollback, operation locking and TLS checks. Fixture evidence does not establish installed runtime identities or credential rotation."
+          "evidence": "Operations forwards to the configured monorepo owner and preserves arguments and failures. Runtime/TLS/identity checks now run in SaltyPatron/Laplace scripts/test-runtime-installation.py; installed credential refresh remains a separate check."
         },
         {
           "id": "runtime-setup-preflight",

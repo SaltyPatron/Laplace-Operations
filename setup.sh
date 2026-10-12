@@ -41,9 +41,13 @@ if [[ $# == 1 && $1 == machine ]]; then
 fi
 . "$here/laplace.env"
 . "$here/installation/setup-flow.sh"
-# Resolve from the host declaration, never from an application connection string.
-# This validates topology before packages, clusters or service files are changed.
-setup_runtime_manifest=$(python3 "$here/installation/runtime.py" --select)
+# A database connection is a consumer, not a request to create another cluster.
+# Monorepo workload setup is owned by Laplace/deploy/linux/site-host.sh.
+if [[ -n ${LAPLACE_APP_PGDATA:-} && $LAPLACE_APP_PGDATA != "$LAPLACE_PGDATA" &&
+      ${LAPLACE_APP_PGPORT:-5432} == "$LAPLACE_PGPORT" ]]; then
+  echo 'Distinct local PostgreSQL clusters require distinct declared ports' >&2
+  exit 2
+fi
 setup_runtime_verified=0
 op=${SUDO_USER:-$(id -un)}; ophome=$(getent passwd "$op" | cut -d: -f6)
 PGDATA=$LAPLACE_PGDATA; PGWAL=$LAPLACE_PGWAL; PGTEMP=$LAPLACE_PGTEMP; PGUSER=$LAPLACE_PGUSER; PGBIN=$LAPLACE_PG_DIR/bin; PREFIX=$LAPLACE_PREFIX; SERVICE=$LAPLACE_PGSERVICE
@@ -828,10 +832,8 @@ report(){ part report
   say "over the socket, as $op" "$(as_op "$PGBIN/psql -X 'host=/tmp port=5432 user=$LAPLACE_ROLE dbname=postgres' -Atc \"SELECT 'connected as '||current_user\"" 2>&1 | tail -1)"
   if [[ $setup_runtime_verified == 1 ]]; then
     say 'application runtime' 'API, MCP, database access and credential refresh verified; runtime receipt saved'
-  elif [[ -n $setup_runtime_manifest ]]; then
-    say 'application runtime' 'not verified by these selected stages; full setup includes runtime verification'
   else
-    say 'application runtime' 'not declared; this run configures host infrastructure only'
+    say 'installation scope' 'shared infrastructure and modular Laplace; monorepo setup belongs to Laplace/deploy/linux/site-host.sh'
   fi
 }
 
