@@ -1,6 +1,6 @@
 """Exercise peer-role provisioning against a disposable PostgreSQL 18 cluster.
 
-Usage: python3 tests/knowledge-peer.py --pgbin /declared/postgresql/bin
+Usage: python3 tests/database-peer.py --pgbin /declared/postgresql/bin
 Runs as the ordinary operator; never connects to an installed cluster.
 """
 import argparse
@@ -39,20 +39,20 @@ def main():
             sqlargs = [str(args.pgbin / 'psql'), '-XwAt', '-v', 'ON_ERROR_STOP=1', '-h', str(root),
                        '-p', '35439', '-U', 'fixture_owner', '-d', 'postgres', '-f', '-']
             run(sqlargs, input='CREATE SCHEMA app; CREATE TABLE app.tenants(id integer); '
-                              'CREATE SCHEMA knowledge; CREATE TABLE knowledge.facts(id integer); '
-                              'INSERT INTO knowledge.facts VALUES(1);')
+                              'CREATE SCHEMA substrate; CREATE TABLE substrate.facts(id integer); '
+                              'INSERT INTO substrate.facts VALUES(1);')
             config = {'database': 'postgres', 'role': 'fixture_runtime', 'admin_role': 'fixture_owner',
                       'schema_owner': 'fixture_owner', 'peer_user': user, 'lock': str(root / 'host.lock'),
                       'psql': str(args.pgbin / 'psql'), 'admin_socket': str(root), 'port': 35439, 'connection_limit': 2}
             for _ in range(2):
-                result = json.loads(run([sys.executable, str(ROOT / 'secrets/knowledge-role.py')], input=json.dumps(config)))
+                result = json.loads(run([sys.executable, str(ROOT / 'secrets/database-role.py')], input=json.dumps(config)))
                 assert result['authentication'] == 'peer'
             peer = [v if v != 'fixture_owner' else 'fixture_runtime' for v in sqlargs]
-            assert run(peer, input='SELECT current_user; SELECT count(*) FROM knowledge.facts;') == 'fixture_runtime\n1'
+            assert run(peer, input='SELECT current_user; SELECT count(*) FROM substrate.facts;') == 'fixture_runtime\n1'
             # Default privileges must cover newly migrated objects too.
-            run(sqlargs, input='CREATE TABLE knowledge.later(id integer); INSERT INTO knowledge.later VALUES(1);')
-            assert run(peer, input='SELECT count(*) FROM knowledge.later;') == '1'
-            for statement in ('SELECT * FROM app.tenants;', 'SET ROLE fixture_owner;', 'CREATE TABLE knowledge.forbidden(id integer);'):
+            run(sqlargs, input='CREATE TABLE substrate.later(id integer); INSERT INTO substrate.later VALUES(1);')
+            assert run(peer, input='SELECT count(*) FROM substrate.later;') == '1'
+            for statement in ('SELECT * FROM app.tenants;', 'SET ROLE fixture_owner;', 'CREATE TABLE substrate.forbidden(id integer);'):
                 result = subprocess.run(peer, input=statement, text=True, capture_output=True, timeout=15)
                 assert result.returncode and 'permission denied' in result.stderr, result.stderr
             assert run(sqlargs, input="SELECT rolpassword IS NULL FROM pg_authid WHERE rolname='fixture_runtime';") == 't'

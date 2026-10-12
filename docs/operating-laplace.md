@@ -104,7 +104,7 @@ deployment account; the API's pgpass contains only its two runtime credentials. 
 OpenBao AppRole that can read only the two declared runtime records. Its root-only credential is selected by
 `LAPLACE_BAO_RUNTIME_CREDENTIALS`; the existing host AppRole remains available for deployment. Verification exercises
 both allowed reads, denies migration/shared credentials, and proves the token stops working after revocation.
-The refresh reads selected knowledge and `LAPLACE_BAO_APP_RUNTIME_RECORD`; `setup.sh knowledge-client` installs
+The refresh reads selected knowledge and `LAPLACE_BAO_APP_RUNTIME_RECORD`; `setup.sh database-client` installs
 that timer for `LAPLACE_API_USER`. Changed credentials are authenticated before publication and trigger verified
 pool recreation. The two-connection application pool and six-connection role allocation include a concurrent
 recovery process and credential checks; these are not an aggregate knowledge-cluster resource budget.
@@ -139,9 +139,13 @@ python3 scripts/install-stockfish.py --configure --source-dir "$LAPLACE_STOCKFIS
 The command validates the official pinned checkout and executes a legal search before saving its paths. It preserves
 unrelated service settings and leaves the checkout in place.
 
-Production can select the existing hart-server knowledge database while keeping its application database local.
-`secrets/provision-knowledge.ps1` creates the non-superuser knowledge login and the consumer's OpenBao record;
-`sudo ./setup.sh knowledge-client` installs the existing host AppRole's credential refresh timer. Selecting a new
+Hart-prod is the inexpensive always-on web host. Its substrate database connection can fail over from
+hart-cloud to hart-server when hart-cloud is stopped or unavailable. Hart-prod also has its own PostgreSQL
+for local fallback, in addition to its billing, account and other application data. A selected hart-server
+connection is a failover state; it does not change the hosts' development, staging and production roles.
+Inspect the selected target before a database reset, including whether it currently serves production.
+`secrets/provision-database.ps1` creates the non-superuser knowledge login and the consumer's OpenBao record;
+`sudo ./setup.sh database-client` installs the existing host AppRole's credential refresh timer. Selecting a new
 knowledge source is explicit; the timer only refreshes the selected credential. It never moves account/session data.
 
 Selection checks the installed Tier-0 receipt before writing configuration. Use the installed helper with

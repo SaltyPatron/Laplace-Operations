@@ -18,7 +18,7 @@ if ($Phase -eq 'prepare') {
     }
     # KV-v2 data endpoints are explicit; no host wildcard, migration credential,
     # metadata listing, credential writes or shared-secret access is granted.
-    $policy = "path `"kv/data/hosts/$($config.host)/knowledge`" { capabilities = [`"read`"] }`npath `"kv/data/hosts/$($config.host)/$($config.record)`" { capabilities = [`"read`"] }`n"
+    $policy = "path `"kv/data/hosts/$($config.host)/substrate`" { capabilities = [`"read`"] }`npath `"kv/data/hosts/$($config.host)/$($config.record)`" { capabilities = [`"read`"] }`n"
     $null = Invoke-Program bao @('policy','write',$config.bao_role,'-') $policy
     $null = Invoke-Program bao @('write',"auth/approle/role/$($config.bao_role)","token_policies=$($config.bao_role)",'token_ttl=5m','token_max_ttl=10m','secret_id_ttl=0','secret_id_num_uses=0')
     & ssh -o BatchMode=yes $config.host ('sudo -n test -s ' + (Sh $config.credentials))
@@ -50,7 +50,7 @@ $record = $null
 }
 $remote = $config.work.TrimEnd('/')
 $null = Invoke-Program ssh @('-o','BatchMode=yes',$config.host,('sudo -n install -d -o "$(id -un)" -- ' + (Sh $remote)))
-foreach ($file in 'application-runtime.py','knowledge-sync.py') {
+foreach ($file in 'application-runtime.py','database-sync.py') {
     & scp "$PSScriptRoot/$file" "$($config.host):$remote/$file"
     if ($LASTEXITCODE) { throw "Cannot transfer runtime installer $file" }
 }
@@ -62,7 +62,7 @@ $command = (@('sudo','-n','python3',"$remote/application-runtime.py",'--phase',$
 Invoke-Program ssh @('-o','BatchMode=yes',$config.host,$command) ($config | ConvertTo-Json -Compress) -TimeoutSeconds 300
 $config.password = $null
 if ($Phase -eq 'prepare') {
-    $arguments = @('sudo','-n','python3',"$remote/knowledge-sync.py",'--host',$config.host,'--credentials',$config.credentials,
+    $arguments = @('sudo','-n','python3',"$remote/database-sync.py",'--host',$config.host,'--credentials',$config.credentials,
         '--user',$config.runtime_user,'--prefix',$config.prefix,'--machine-file',$config.machine_file,
         '--lock',$config.host_lock,'--bao-address',$config.bao_address,'--application-record',$config.record)
     Invoke-Program ssh @('-o','BatchMode=yes',$config.host,(($arguments | ForEach-Object { Sh $_ }) -join ' '))

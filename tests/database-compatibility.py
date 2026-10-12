@@ -13,21 +13,21 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("knowledge_sync", ROOT / "secrets/knowledge-sync.py")
+spec = importlib.util.spec_from_file_location("substrate_sync", ROOT / "secrets/database-sync.py")
 selector = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(selector)
 
 
-class KnowledgeCompatibility(unittest.TestCase):
+class SubstrateCompatibility(unittest.TestCase):
     def exercise_refresh(self, *, prior=False, application_failure=False, activation_failure=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             credentials = root / 'approle.json'
             credentials.write_text('{}')
             credentials.chmod(0o600)
-            knowledge = dict(database_host='knowledge', database='knowledge_db', role='reader', port=5432, password='a' * 64)
+            substrate = dict(database_host='substrate', database='substrate_db', role='reader', port=5432, password='a' * 64)
             application = dict(database_host='127.0.0.1', database='application', role='runtime', port=5432, password='b' * 64)
-            expected = 'knowledge:5432:knowledge_db:reader:' + knowledge['password'] + '\n127.0.0.1:5432:application:runtime:' + application['password'] + '\n'
+            expected = 'substrate:5432:substrate_db:reader:' + substrate['password'] + '\n127.0.0.1:5432:application:runtime:' + application['password'] + '\n'
             pgpass = root / '.pgpass'
             original = expected if prior else 'previous:5432:application:runtime:old\n'
             pgpass.write_text(original)
@@ -37,7 +37,7 @@ class KnowledgeCompatibility(unittest.TestCase):
                 path = req.full_url.split('/v1/', 1)[1]
                 requests.append(path)
                 if path == 'auth/approle/login': body = {'auth': {'client_token': 'test-token'}}
-                elif path.endswith('/knowledge'): body = {'data': {'data': knowledge}}
+                elif path.endswith('/substrate'): body = {'data': {'data': substrate}}
                 elif path.endswith('/application-runtime'): body = {'data': {'data': application}}
                 else: body = {}
                 return io.BytesIO(json.dumps(body).encode())
@@ -50,7 +50,7 @@ class KnowledgeCompatibility(unittest.TestCase):
                 activations.append(pgpass.read_text())
                 if activation_failure and len(activations) == 1:
                     raise RuntimeError('new credential activation failed')
-            argv = ['knowledge-sync', '--host', 'consumer', '--credentials', str(credentials), '--user', 'runtime',
+            argv = ['database-sync', '--host', 'consumer', '--credentials', str(credentials), '--user', 'runtime',
                     '--prefix', str(root), '--machine-file', str(root / 'machine.env'), '--lock', str(root / 'lock'),
                     '--bao-address', 'https://bao.invalid', '--application-record', 'application-runtime',
                     '--restart-on-change', '--verification-base', 'https://api.invalid']
@@ -115,7 +115,7 @@ class KnowledgeCompatibility(unittest.TestCase):
                 path.write_text('after')
             self.assertEqual(path.read_text(), 'after')
 
-    def test_selection_uses_identity_not_knowledge_freshness(self):
+    def test_selection_uses_identity_not_substrate_freshness(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "app").mkdir()
@@ -126,13 +126,13 @@ class KnowledgeCompatibility(unittest.TestCase):
             for value in (str(artifact), '"' + str(artifact) + '"'):
                 config.write_text("LAPLACE_PERFCACHE_BIN=" + value + "\n")
                 before = config.read_bytes(), artifact.read_bytes()
-                self.assertEqual(selector.validate_knowledge_receipt(root, receipt.hex()), receipt.hex())
+                self.assertEqual(selector.validate_substrate_receipt(root, receipt.hex()), receipt.hex())
                 with self.assertRaisesRegex(ValueError, "incompatible"):
-                    selector.validate_knowledge_receipt(root, "ff" * 16)
+                    selector.validate_substrate_receipt(root, "ff" * 16)
                 self.assertEqual(before, (config.read_bytes(), artifact.read_bytes()))
             artifact.write_bytes(struct.pack("<II", 0x4652504C, 999) + bytes(120) + receipt)
             with self.assertRaisesRegex(ValueError, "Unsupported"):
-                selector.validate_knowledge_receipt(root, receipt.hex())
+                selector.validate_substrate_receipt(root, receipt.hex())
 
 
 if __name__ == "__main__":

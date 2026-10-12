@@ -34,7 +34,7 @@ def main():
     if os.geteuid() == 0:
         raise ValueError('Run this disposable cluster test unprivileged')
     tls = load('tls', ROOT / 'installation/runtime_tls.py')
-    sync = load('sync', ROOT / 'secrets/knowledge-sync.py')
+    sync = load('sync', ROOT / 'secrets/database-sync.py')
     atomic = sync.atomic
     sync.atomic = lambda path, text, mode, uid, gid: atomic(path, text, mode, os.geteuid(), os.getegid())
     policy = json.loads((ROOT / 'installation/hart-server-runtime.json').read_text())['tls']

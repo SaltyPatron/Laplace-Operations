@@ -22,7 +22,7 @@ function Get-DevelopmentSecretPaths($Config) {
     $null = Get-DevelopmentCredentialPath $Config
     if ($Config.identity_reference -notmatch '^kv/[a-zA-Z0-9_/-]+$' -or $Config.identity_reference -match '//|/\.\.?(/|$)') { throw 'Invalid shared identity record.' }
     [ordered]@{
-        knowledge = "kv/hosts/$($Config.client)/knowledge"
+        substrate = "kv/hosts/$($Config.client)/substrate"
         appdb = "kv/hosts/$($Config.client)/appdb"
         'laplace-api' = "kv/hosts/$($Config.client)/laplace-api"
         identity = $Config.identity_reference

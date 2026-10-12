@@ -30,22 +30,22 @@ function Denied($Record, [string]$Sql, [string]$Code, [string]$Database = $Recor
 }
 try {
     $records = Get-DevelopmentSecrets $config
-    foreach ($kind in 'knowledge','appdb') {
+    foreach ($kind in 'substrate','appdb') {
         $record = $records[$kind]
         if ((Query $record 'SELECT current_user') -ne $record.role) { throw 'Connected as the wrong database identity.' }
         if ((Query $record "SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls FROM pg_roles WHERE rolname=current_user") -ne 'f') { throw 'Runtime identity is privileged.' }
         Denied $record "SET ROLE $($config.admin_role)" '42501'
         $receipt.checks["$kind-login-and-admin-denial"] = 'passed'
     }
-    $application = $records.appdb; $knowledge = $records.knowledge
+    $application = $records.appdb; $substrate = $records.substrate
     $null = Query $application 'SELECT count(*) FROM app.api_keys'
     Denied $application 'BEGIN; CREATE TABLE public.laplace_permission_probe(id integer); ROLLBACK;' '42501'
     Denied $application 'BEGIN; CREATE TABLE app.laplace_permission_probe(id integer); ROLLBACK;' '42501'
-    Denied $knowledge 'SELECT count(*) FROM app.api_keys' '42501'
-    Denied $knowledge 'SELECT 1' '28000' $application.database
-    Denied $application 'SELECT 1' '28000' $knowledge.database
+    Denied $substrate 'SELECT count(*) FROM app.api_keys' '42501'
+    Denied $substrate 'SELECT 1' '28000' $application.database
+    Denied $application 'SELECT 1' '28000' $substrate.database
     $receipt.checks['application-data-readable-runtime-ddl-denied'] = 'passed'
-    $receipt.checks['knowledge-cannot-read-application-identities'] = 'passed'
+    $receipt.checks['substrate-cannot-read-application-identities'] = 'passed'
     $receipt.checks['cross-database-connections-denied'] = 'passed'
     $receipt.passed = $true
 } finally {

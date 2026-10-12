@@ -32,7 +32,7 @@ laplace status
 ```
 
 The monorepo desktop client selects hart-server database `laplace-mono`, role
-`laplace_desktop_knowledge`. The modular client selects hart-server database `laplace`,
+`laplace_desktop_db`. The modular client selects hart-server database `laplace`,
 role `laplace`. The background modular MCP uses its separate service identity. Raw Operations
 build/ingest wrappers still have their own environment resolution; do not infer a target from
 the word "Laplace" alone. Read the selected client configuration or `--where`.
