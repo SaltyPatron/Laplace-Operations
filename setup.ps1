@@ -30,6 +30,11 @@
 #>
 param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('development'), [switch]$Check, [string]$Installation)
 $ErrorActionPreference = 'Stop'
+if ($Parts.Count -eq 1 -and $Parts[0] -eq 'secrets-agents') {
+    if (-not $Installation) { $Installation = Join-Path $PSScriptRoot ('installation/'+$env:COMPUTERNAME.ToLowerInvariant()+'-secrets-agents.json') }
+    & "$PSScriptRoot/secrets/upgrade-agents.ps1" -Installation $Installation -Check:$Check
+    return
+}
 if ($Parts.Count -eq 1 -and $Parts[0] -eq 'client') {
     if ($Check) { throw 'Client installation does not accept -Check; inspect an installed client with laplace --where and laplace status.' }
     if (-not $Installation) { throw 'Pass -Installation with the modular client declaration.' }
