@@ -542,6 +542,13 @@
           "platform": "any",
           "argv": null,
           "evidence": "Role resolution and prohibited-operation rejection tests."
+        },
+        {
+          "id": "chess-gpu-eligibility",
+          "platform": "linux",
+          "argv": ["bash", "tests/chess-gpu-policy.sh"],
+          "timeout_seconds": 30,
+          "evidence": "The real Linux provisioner skips GPU probing on undeclared and mismatched hosts and only processes the requested tool."
         }
       ]
     },
