@@ -28,8 +28,13 @@
   developer shell is LAPLACE_DEVSHELL); privileged steps happen here and only here. HART-DESKTOP's one-time cleanup
   of what earlier set-ups left is toolchain\windows\retire.ps1, not this.
 #>
-param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('development'))
+param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('development'), [switch]$Check)
 $ErrorActionPreference = 'Stop'
+if ($Parts.Count -eq 1 -and $Parts[0] -eq 'postgres') {
+    & "$PSScriptRoot/installation/postgres-installation.ps1" -Check:$Check
+    return
+}
+if ($Check) { throw '-Check currently applies to the postgres installation operation.' }
 if ($Parts -contains 'development') {
     if ($Parts.Count -ne 1) { throw 'Run the development profile separately from explicit database/service installation steps.' }
     & pwsh -NoProfile -File "$PSScriptRoot/dev.ps1" -Operation prepare
@@ -491,9 +496,9 @@ function cluster {
         Attempt "service $PgService" {
             if (Test-Path (Join-Path $PgData 'postmaster.pid')) {
                 & "$PgBin\pg_ctl.exe" -D $PgData -m fast -w -t 300 stop 2>&1 | Out-Null
-                if (Test-Path (Join-Path $PgData 'postmaster.pid')) { & "$PgBin\pg_ctl.exe" -D $PgData -m immediate -w -t 120 stop 2>&1 | Out-Null }
-                Get-Process postgres -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-                Remove-Item (Join-Path $PgData 'postmaster.pid') -ErrorAction SilentlyContinue
+                if ($LASTEXITCODE -ne 0 -or (Test-Path (Join-Path $PgData 'postmaster.pid'))) {
+                    throw "The PostgreSQL server for $PgData did not stop cleanly. Its PID file and other processes were preserved."
+                }
                 Say 'hand-started server' 'stopped'
             }
             # pg_ctl registers the service as LocalSystem unless -U names the account (pg_ctl.c: register_username NULL);
@@ -834,7 +839,7 @@ function backup {
     }
 }
 
-$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'cluster', 'settings', 'access', 'report', 'network', 'shares', 'services', 'firewall', 'backup', 'status'
+$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'postgres', 'cluster', 'settings', 'access', 'report', 'network', 'shares', 'services', 'firewall', 'backup', 'status'
 foreach ($p in $Parts) { if ($known -notcontains $p) { "setup.ps1 [drop] [$(($known | Select-Object -Skip 1) -join '|') ...]"; Stop-Transcript | Out-Null; exit 2 } }
 # status: the desktop's own parts named with it (all three, when none is) report and change nothing
 $Status = $Parts -contains 'status'
@@ -843,7 +848,8 @@ if ($Status) {
     $other = @($Parts | Where-Object { $_ -notin 'network', 'shares', 'services', 'firewall', 'backup' })
     if ($other.Count) { "setup.ps1 status reports shares, services, firewall and backup; $($other -join ', ') has none (report)"; Stop-Transcript | Out-Null; exit 2 }
 }
-try { foreach ($p in $Parts) { if ($p -eq 'all') { volumes; packages; rights; deps; cluster; settings; access; report } else { & $p } } }
+function postgres { & "$PSScriptRoot/installation/postgres-installation.ps1" }
+try { foreach ($p in $Parts) { if ($p -eq 'all') { volumes; packages; rights; deps; postgres; cluster; settings; access; report } else { & $p } } }
 catch { "=== $($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"; $failed.Add("setup.ps1 stopped: $($_.Exception.Message)") }
 ''
 if ($failed.Count) { '=== failed'; $failed | ForEach-Object { "  $_" } }

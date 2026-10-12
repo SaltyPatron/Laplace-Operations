@@ -28,6 +28,10 @@ if [[ ${1:-} == repair ]]; then
   shift
   exec python3 "$here/installation/repair.py" "$@"
 fi
+if [[ ${1:-} == postgres ]]; then
+  shift
+  exec python3 "$here/installation/postgres-installation.py" "$@"
+fi
 if [[ ${1:-} == runtime && ( $# == 1 || ${2:-} == --* ) ]]; then
   shift
   exec python3 "$here/installation/runtime.py" "$@"
@@ -43,9 +47,8 @@ fi
 . "$here/installation/setup-flow.sh"
 # A database connection is a consumer, not a request to create another cluster.
 # Monorepo workload setup is owned by Laplace/deploy/linux/site-host.sh.
-if [[ -n ${LAPLACE_APP_PGDATA:-} && $LAPLACE_APP_PGDATA != "$LAPLACE_PGDATA" &&
-      ${LAPLACE_APP_PGPORT:-5432} == "$LAPLACE_PGPORT" ]]; then
-  echo 'Distinct local PostgreSQL clusters require distinct declared ports' >&2
+if [[ -n ${LAPLACE_APP_PGDATA:-} && $LAPLACE_APP_PGDATA != "$LAPLACE_PGDATA" ]]; then
+  echo 'Application databases must use the selected PostgreSQL cluster; reconcile machine.env before setup.' >&2
   exit 2
 fi
 setup_runtime_verified=0
@@ -436,85 +439,27 @@ site_sources(){
          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
          say "source" "GitHub CLI"; }
 }
-# The application's own database, on a hosting host that declares one (LAPLACE_APP_DBNAME in its machine.env): the
-# monorepo's app schema (accounts, sessions, keys, billing; Laplace #1741), in PostgreSQL from the PostgreSQL
-# project's own apt repository, never the cluster this script builds for the knowledge: no extension, no compiler.
-# Its data is $LAPLACE_APP_PGDATA (the host's data disk), it listens for $LAPLACE_LAN so the knowledge host's
-# migrate reaches it, and $LAPLACE_ROLE owns it with a password of its own: canonical in /etc/laplace/pgpass as
-# a 127.0.0.1 line, written into every operator's ~/.pgpass, never printed. The knowledge host gets that line for
-# this host's tailnet address by the operator (OpenBao, kv/hosts/<host>/appdb, is where it is to live).
+# An application database is created inside the host's selected PostgreSQL cluster.
+# Schema, runtime identities and credentials belong to the implementation installer.
 appdb_cluster(){
-  local name=${LAPLACE_APP_DBNAME:-}; [ -n "$name" ] || { say "application database" "none declared (LAPLACE_APP_DBNAME): skipped"; return 0; }
-  local ver=${LAPLACE_APP_PGVERSION:-18} port=${LAPLACE_APP_PGPORT:-5432} data=${LAPLACE_APP_PGDATA:-/data/postgresql/app} cl=app
-  if [ ! -e /etc/apt/sources.list.d/pgdg.list ]; then
-    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
-    echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
-    apt-get update -q >/dev/null; say "source" "apt.postgresql.org"; fi
-  for p in postgresql-$ver postgresql-client-$ver; do dpkg-query -W -f '${Status}\n' "$p" 2>/dev/null | grep -q "install ok installed" \
-    || { DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$p" >/dev/null; say "installed" "$p"; }; done
-  # the package's own cluster, main, on the boot disk, is not the declared one: dropped while it holds nothing but the
-  # defaults; the declared cluster, app, lives on the data disk at the declared port
-  if pg_lsclusters -h | awk '{print $1" "$2}' | grep -qx "$ver main" && ! pg_lsclusters -h | awk '{print $1" "$2}' | grep -qx "$ver $cl"; then
-    mp=$(pg_lsclusters -h | awk -v v="$ver" '$1==v && $2=="main" {print $3}')
-    n=$(su postgres -c "psql -X -p $mp -Atc \"SELECT count(*) FROM pg_database WHERE datname NOT IN ('postgres','template0','template1')\"" 2>/dev/null || echo 0)
-    [ "$n" = 0 ] && { pg_dropcluster --stop "$ver" main; say "cluster main" "dropped: the package's own, empty"; } || say "cluster main" "KEPT: it holds $n database(s) that are not the defaults"; fi
-  if ! pg_lsclusters -h | awk '{print $1" "$2}' | grep -qx "$ver $cl"; then
-    install -d -m 700 -o postgres -g postgres "$(dirname "$data")" "$data"
-    pg_createcluster -d "$data" -p "$port" --start "$ver" "$cl" >/dev/null; say "cluster $cl" "made at $data, port $port"
-  else say "cluster $cl" "$(pg_lsclusters -h | awk -v v="$ver" -v c="$cl" '$1==v && $2==c {print $4", "$3}')"; fi
-  local conf=/etc/postgresql/$ver/$cl
-  grep -q "^listen_addresses = '\*'" "$conf/conf.d/laplace.conf" 2>/dev/null || { install -d "$conf/conf.d"; printf "listen_addresses = '*'\n" > "$conf/conf.d/laplace.conf"; say "listen_addresses" "*: the firewall and pg_hba decide"; }
-  printf '%s\n' "# Laplace (setup.sh appdb). Local: the server's own user and the operator over the socket; the network: $LAPLACE_ROLE from $LAPLACE_LAN, scram." \
-    "local   all   postgres                      peer" "local   all   $LAPLACE_ROLE                 scram-sha-256" \
-    "host    all   $LAPLACE_ROLE   127.0.0.1/32  scram-sha-256" "host    all   $LAPLACE_ROLE   $LAPLACE_LAN  scram-sha-256" > "$conf/pg_hba.conf.setup"
-  cmp -s "$conf/pg_hba.conf.setup" "$conf/pg_hba.conf" || { mv "$conf/pg_hba.conf.setup" "$conf/pg_hba.conf"; chown postgres:postgres "$conf/pg_hba.conf"; say "pg_hba.conf" "written"; }
-  rm -f "$conf/pg_hba.conf.setup"; pg_ctlcluster "$ver" "$cl" reload 2>/dev/null || pg_ctlcluster "$ver" "$cl" start
-  aq(){ su postgres -c "psql -X -p $port -Atc \"$1\""; }
-  [ "$(aq "SELECT count(*) FROM pg_roles WHERE rolname = '$LAPLACE_ROLE'")" = 1 ] || aq "CREATE ROLE $LAPLACE_ROLE LOGIN CREATEDB" >/dev/null
-  # the role's password for this cluster: one canonical copy, root's, as the 127.0.0.1 line of /etc/laplace/pgpass
-  install -d -m 755 /etc/laplace; local canon=/etc/laplace/pgpass pw
-  aworks(){ PGPASSWORD=$1 psql -X "host=127.0.0.1 port=$port user=$LAPLACE_ROLE dbname=postgres" -Atc 'SELECT 1' 2>/dev/null | grep -q 1; }
-  pw=""; [ -s "$canon" ] && pw=$(sed -n "s/^127\.0\.0\.1:$port:[^:]*:$LAPLACE_ROLE:\(.*\)$/\1/p" "$canon" | head -1)
-  if [ -z "$pw" ] || ! aworks "$pw"; then
-    [ -n "$pw" ] || pw=$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-32)
-    aq "ALTER ROLE $LAPLACE_ROLE PASSWORD '$pw'" >/dev/null
-    { [ ! -f "$canon" ] || grep -v "^127\.0\.0\.1:$port:[^:]*:$LAPLACE_ROLE:" "$canon" || true; printf '127.0.0.1:%s:*:%s:%s\n' "$port" "$LAPLACE_ROLE" "$pw"; } > "$canon.setup"
-    umask 077; mv -f "$canon.setup" "$canon"; chmod 600 "$canon"; say "role $LAPLACE_ROLE" "password set, in $canon"
-  else say "role $LAPLACE_ROLE" "password in $canon"; fi
-  # The knowledge this host serves is another machine's (LAPLACE_PGHOST over the tailnet): the role's line for it, in the
-  # canonical copy and in every operator's and the agent's ~/.pgpass, or the API (laplace-runner) cannot open the knowledge
-  # (2026-10-10: hart-prod held the application line alone; the API aborted at start). The role has one password for the
-  # whole installation (access, on the knowledge host): adopted from an operator's ~/.pgpass line for that host or for any
-  # host when the knowledge host accepts it; nothing is made here, because the knowledge host owns it.
-  local kh=${LAPLACE_PGHOST:-} kp=${LAPLACE_PGPORT:-5432} kpw="" kfrom=""
-  if [ -n "$kh" ] && ! hostname -I | tr ' ' '\n' | grep -qx "$kh"; then
-    kworks(){ PGPASSWORD=$1 timeout 15 psql -X "host=$kh port=$kp user=$LAPLACE_ROLE dbname=postgres connect_timeout=5 sslmode=require" -Atc 'SELECT 1' 2>/dev/null | grep -q 1; }
-    kpw=$(sed -n "s/^$kh:$kp:[^:]*:$LAPLACE_ROLE:\(.*\)$/\1/p" "$canon" 2>/dev/null | head -1)
-    if [ -z "$kpw" ] || ! kworks "$kpw"; then
-      kpw=""; for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [ -s "$h/.pgpass" ] || continue
-        for c in $(sed -n "s/^\(\*\|$kh\):\(\*\|$kp\):[^:]*:$LAPLACE_ROLE:\(.*\)$/\3/p" "$h/.pgpass"); do kworks "$c" && { kpw=$c; kfrom=$u; break 2; }; done; done
-      if [ -n "$kpw" ]; then
-        { [ ! -f "$canon" ] || grep -v "^$kh:$kp:[^:]*:$LAPLACE_ROLE:" "$canon" || true; printf '%s:%s:*:%s:%s\n' "$kh" "$kp" "$LAPLACE_ROLE" "$kpw"; } > "$canon.setup"
-        umask 077; mv -f "$canon.setup" "$canon"; chmod 600 "$canon"; say "knowledge $kh:$kp" "the role's line adopted from $kfrom, in $canon"
-      else say "knowledge $kh:$kp" "NO LINE THE KNOWLEDGE HOST ACCEPTS: as an operator, copy the role's line from the knowledge host (ssh <knowledge host> cat ~/.pgpass >> ~/.pgpass) and run again; or the knowledge host is stopped"; fi
-    else say "knowledge $kh:$kp" "the role's line in $canon"; fi
-  fi
-  for u in $(operators); do h=$(getent passwd "$u" | cut -d: -f6); [ -d "$h" ] || continue
-    { [ ! -f "$h/.pgpass" ] || grep -v -e "^127\.0\.0\.1:$port:[^:]*:$LAPLACE_ROLE:" ${kh:+-e "^$kh:$kp:[^:]*:$LAPLACE_ROLE:"} "$h/.pgpass" || true; grep -e "^127\.0\.0\.1:$port:" ${kh:+-e "^$kh:$kp:"} "$canon"; } > "$h/.pgpass.setup"
-    mv -f "$h/.pgpass.setup" "$h/.pgpass"; chown "$u" "$h/.pgpass"; chmod 600 "$h/.pgpass"; done
-  unset pw kpw
-  [ "$(aq "SELECT count(*) FROM pg_database WHERE datname = '$name'")" = 1 ] || { aq "CREATE DATABASE \"$name\" OWNER $LAPLACE_ROLE" >/dev/null; say "database $name" "made, owner $LAPLACE_ROLE"; }
-  if command -v ufw >/dev/null && ufw status | grep -q "^Status: active"; then ufw status | grep -q "$port/tcp.*$LAPLACE_LAN" || { ufw allow from "$LAPLACE_LAN" to any port "$port" proto tcp >/dev/null; say "ufw" "$port/tcp from $LAPLACE_LAN"; }; fi
-  # its settings: tune-pg.sh's rules from this machine's memory, cores and disk, with the app profile (the API's pool,
-  # no ingest fan); the PostgreSQL project's cluster has its socket in /var/run/postgresql and its own unit
-  LAPLACE_PG_PROFILE=app LAPLACE_PG_SERVING="${LAPLACE_APP_PG_SERVING:-${LAPLACE_PG_SERVING:-}}" \
-    LAPLACE_PG_WORK_NODES="${LAPLACE_APP_PG_WORK_NODES:-${LAPLACE_PG_WORK_NODES:-2}}" \
-    LAPLACE_PG_RESERVED="${LAPLACE_APP_PG_RESERVED:-${LAPLACE_PG_RESERVED:-0}}" \
-    LAPLACE_PG_BUFFERS_MAX="${LAPLACE_APP_PG_BUFFERS_MAX:-${LAPLACE_PG_BUFFERS_MAX:-}}" \
-    TUNE_SOCKET=/var/run/postgresql TUNE_CONN="host=/var/run/postgresql port=$port user=postgres dbname=postgres" \
-    TUNE_PGDATA=$data PGWAL=$data/pg_wal PGBIN=/usr/lib/postgresql/$ver/bin PGUSER=postgres SERVICE=postgresql@$ver-$cl LAPLACE_CONNINFO="host=127.0.0.1 port=$port user=$LAPLACE_ROLE dbname=$name" \
-    bash "$here/tune-pg.sh" 2>&1 | sed 's/^/  /'
-  say "database $name" "$(aq "SELECT pg_size_pretty(pg_database_size('$name'))") on 127.0.0.1:$port and $LAPLACE_LAN"
+  local name=${LAPLACE_APP_DBNAME:-}
+  [[ -n "$name" ]] || return 0
+  local port=${LAPLACE_APP_PGPORT:-$LAPLACE_PGPORT} socket=${LAPLACE_PGSOCKET:-/tmp}
+  local data=${LAPLACE_APP_PGDATA:-$PGDATA}
+  [[ "$data" == "$PGDATA" && "$port" == "$LAPLACE_PGPORT" ]] || {
+    echo 'Application database must use the selected PostgreSQL cluster; select that cluster in machine.env.' >&2
+    return 1
+  }
+  local actual
+  actual=$(runuser -u "$PGUSER" -- "$PGBIN/psql" -X -w -h "$socket" -p "$port" -d postgres -At -v ON_ERROR_STOP=1 -c 'SHOW data_directory')
+  [[ "$(readlink -f "$actual")" == "$(readlink -f "$PGDATA")" ]] || { echo 'Connected PostgreSQL data directory differs from the declaration' >&2; return 1; }
+  runuser -u "$PGUSER" -- "$PGBIN/psql" -X -w -h "$socket" -p "$port" -d postgres -v ON_ERROR_STOP=1 -v name="$name" -v owner="$LAPLACE_ROLE" <<'SQL'
+SELECT format('CREATE DATABASE %I OWNER %I', :'name', :'owner')
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'name')
+\gexec
+SELECT datname, pg_get_userbyid(datdba) AS owner FROM pg_database WHERE datname = :'name';
+SQL
+  say "application database $name" "uses $SERVICE, $PGDATA; credentials unchanged"
 }
 # A host that is started for a job and pays by the minute (hart-cloud) stops itself when nothing has run on it for
 # LAPLACE_IDLE_STOP_MINUTES (its machine.env): no runner job (a Runner.Worker process), no ingest, deploy or build, no
