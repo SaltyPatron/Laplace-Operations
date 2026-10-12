@@ -16,7 +16,7 @@ setup_dispatch() {
       all)
         volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup
         landing_of_all=1; landing; landing_of_all=
-        site; runtime; modular; agents; idlestop; report
+        modular; agents; idlestop; report
         ;;
       *) "$p" ;;
     esac
@@ -29,19 +29,15 @@ modular() {
 }
 
 runtime() {
-  part 'application runtime'
-  if [[ -z $setup_runtime_manifest ]]; then
-    say 'runtime' 'no runtime installation declared for this host'
-    return 0
-  fi
-  python3 "$here/installation/runtime.py" --manifest "$setup_runtime_manifest"
+  part 'monorepo runtime (compatibility entry point)'
+  python3 "$here/installation/runtime.py"
   setup_runtime_verified=1
 }
 
 appdb() {
   part 'application database'
-  if [[ -n $setup_runtime_manifest ]]; then
-    say 'application database' 'uses the runtime declaration and existing configured PostgreSQL cluster'
+  if [[ -z ${LAPLACE_APP_PGDATA:-} || ${LAPLACE_APP_PGDATA:-} == "$LAPLACE_PGDATA" ]]; then
+    say 'application database' 'no separate cluster declared; database consumers use the existing cluster'
     return 0
   fi
   appdb_cluster

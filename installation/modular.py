@@ -55,6 +55,14 @@ def config_load(path):
         raise ValueError('Invalid listener declaration')
     if config['connection_limit'] < 3 * config['threads'] + 2:
         raise ValueError('Connection allocation cannot fit the resident reader and Engine bulk writer')
+    client = config.get('operator_client')
+    if client:
+        for key in ('work', 'data', 'command', 'configuration'):
+            path = Path(client[key])
+            if not path.is_absolute() or '..' in path.parts or path == Path('/'):
+                raise ValueError('Invalid operator client path: ' + key)
+        if not re.fullmatch(r'[a-z_][a-z0-9_-]{0,62}', client['role']) or client['role'] == config['role']:
+            raise ValueError('Operator client must name its own database identity')
     for key in ('postgres_service', 'legacy_unit'):
         if not re.fullmatch(r'[A-Za-z0-9_.-]+\.service', config[key]):
             raise ValueError('Invalid service name')
@@ -407,7 +415,7 @@ def main():
             prepare(config)
         else:
             live = config_load(config['installed_config'])
-            if any(config[k] != live[k] for k in config if k != 'source'):
+            if any(config[k] != live[k] for k in config if k not in ('source', 'operator_client')):
                 raise ValueError('Installation configuration changed; run setup before deployment')
             if not all(path.is_file() for path in (UNITS / UNIT, Path(config['environment_file']),
                     UNITS / 'laplace-modular-mcp-restart.path')):
@@ -422,6 +430,12 @@ def main():
         activate(config, release, receipt_path, installing)
         if installing:
             restart_units(config)
+            client = config.get('operator_client')
+            if client:
+                checked(['runuser', '-u', config['operator'], '--', 'python3',
+                         ROOT / 'installation/install-client.py', '--installation', config['installed_config'],
+                         *[value for key in ('role', 'work', 'data', 'command', 'configuration')
+                           for value in ('--' + key, client[key])]])
         atomic(receipt_path / 'acceptance.json', json.dumps({'scope': 'modular MCP installed runtime', 'host': config['host'],
             'release': str(release), 'unit': UNIT, 'runtime_user': config['runtime_user'], 'database_role': config['role'],
             'result': 'passed', 'runtime_evidence': str(receipt_path / 'runtime.json')}, indent=2) + '\n')

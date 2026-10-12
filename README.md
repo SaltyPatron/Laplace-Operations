@@ -1,5 +1,11 @@
 # Laplace-Operations
 
+`sudo ./setup.sh` owns shared infrastructure and the declared modular Laplace runtime.
+It does not configure the monorepo API, MCP, browser identities or their credentials.
+Run the monorepo's `sudo bash deploy/linux/site-host.sh` from its own checkout for those.
+The explicit Operations `site` and `runtime` stages remain compatibility entry points;
+they are not part of `all`. Refactor has its own installer in its own repository.
+
 For the current monorepo application's staging-to-production delivery and installed-runtime checks, use
 [Operating Laplace](docs/operating-laplace.md). The commands below describe the older split-repository deployment.
 
@@ -189,10 +195,24 @@ records in a directory in place of the branch's.
 The [ongoing system audit](docs/2026-10-10-system-audit.md) records confirmed lifecycle, verification and service
 defects, their evidence, and outstanding work. It is not a system-completion report.
 
-`laplace.sh`, installed as the operator's `~/.local/bin/laplace`, runs the program the last deployment built, with its
-code, recipes and environment.
+The modular command uses the installed release and its packaged recipes/firmware, not a runner's build tree.
+The declared `operator_client` is installed by modular setup. It can also be installed without sudo:
 
-The root steps are `sudo ./setup.sh`. Its part `site` runs the monorepo's `deploy/linux/site-host.sh` (the API and SPA
+```sh
+python3 installation/install-client.py --installation /etc/laplace/modular.json \
+  --role laplace --work /repos/work/clients/ahart/laplace --data /vault/Data \
+  --command "$HOME/.local/bin/laplace"
+laplace --where
+laplace status
+laplace help ingest
+```
+
+These are hart-server's declared paths and existing human database identity, not requirements for another host.
+`LAPLACE_CLIENT_CONFIG` selects another client declaration. `laplace.sh` is a checkout convenience for the same
+installed client; do not copy it onto PATH. Prepared tier/grammar inputs still use the installation's declared
+paths. `laplace-mono` is the separate monorepo client; `laplace-refactor` is not installed by this operation.
+
+The shared/modular root steps are `sudo ./setup.sh`. Its explicit compatibility part `site` runs the monorepo's `deploy/linux/site-host.sh` (the API and SPA
 over `laplace-mono` behind nginx). Its part `agents` runs `agents.sh`, which gives every repository of `LAPLACE_REPOS` its
 runner. `agents.sh status` fails when any repository of the owner with a self-hosted workflow has no runner here, or is
 missing from `LAPLACE_REPOS`. A runner carries `LAPLACE_AGENT_LABELS`, its repository's name, and the repository's own

@@ -19,7 +19,9 @@ class SetupFlow(unittest.TestCase):
 set -euo pipefail
 source "$FLOW"
 here='/fixture checkout with spaces'
-setup_runtime_manifest=${DECLARED:+/fixture manifest with spaces.json}
+LAPLACE_PGDATA='/fixture database'
+LAPLACE_APP_PGDATA=${DECLARED:+$LAPLACE_PGDATA}
+if [[ -z $DECLARED ]]; then LAPLACE_APP_PGDATA='/separate declared cluster'; fi
 setup_runtime_verified=0
 stage() { printf '%s\n' "$1" >> "$TRACE"; [[ $1 != "$FAIL_STAGE" ]] || return 37; }
 part() { :; }
@@ -33,7 +35,7 @@ python3() {
     stage modular
     return
   fi
-  [[ $# == 3 && $1 == "$here/installation/runtime.py" && $2 == --manifest && $3 == "$setup_runtime_manifest" ]]
+  [[ $# == 1 && $1 == "$here/installation/runtime.py" ]]
   stage runtime
 }
 setup_dispatch "$@"
@@ -43,21 +45,19 @@ printf 'complete:%s\n' "$setup_runtime_verified" >> "$TRACE"
                                     text=True, capture_output=True, env=env, timeout=15)
             return result, trace.read_text().splitlines() if trace.exists() else []
 
-    def test_default_and_all_include_verified_runtime_without_another_cluster(self):
+    def test_default_and_all_own_shared_and_modular_without_monorepo_mutations(self):
         for args in ((), ('all',)):
             with self.subTest(args=args):
                 result, stages = self.run_setup(args)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(stages.count('runtime'), 1)
-                self.assertLess(stages.index('site'), stages.index('runtime'))
-                self.assertLess(stages.index('runtime'), stages.index('report'))
-                self.assertLess(stages.index('runtime'), stages.index('modular'))
+                self.assertNotIn('runtime', stages)
+                self.assertNotIn('site', stages)
                 self.assertLess(stages.index('modular'), stages.index('report'))
                 self.assertNotIn('separate_cluster', stages)
-                self.assertEqual(stages[-1], 'complete:1')
+                self.assertEqual(stages[-1], 'complete:0')
 
     def test_failures_stop_before_success_report(self):
-        for failed in ('packages', 'site', 'runtime', 'modular'):
+        for failed in ('packages', 'modular'):
             with self.subTest(failed=failed):
                 result, stages = self.run_setup(fail=failed)
                 self.assertEqual(result.returncode, 37, result.stderr)
