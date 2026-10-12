@@ -1,11 +1,17 @@
 # Operating Laplace
 
-For installation or repair of the existing hart-server host, run `sudo ./setup.sh` from its Operations
-checkout. An already enrolled host uses its own AppRole; a personal OpenBao login is needed only for initial
-enrollment. Default setup includes the declared API/MCP identities,
-database TLS and permissions, credential refresh and authenticated verification. It fails if those checks
-fail. Individual setup stages are diagnostic options, not additional steps after successful full setup.
+Operations owns the modular installation and shared host infrastructure. The monorepo and Refactor own
+their own application installers. Operations' current `setup.sh` still invokes legacy monorepo site/runtime
+stages; that misplaced ownership remains an implementation defect. For monorepo browser-route installation,
+use [the monorepo's setup entrypoints](https://github.com/SaltyPatron/Laplace/blob/main/deploy/README.md).
+
+An already enrolled runtime uses its own AppRole; a personal OpenBao login is used for initial enrollment.
+The current runtime stage checks database TLS/permissions, credential refresh and authenticated access.
+Those checks do not establish complete installation of all three implementations.
 See [installation configuration and receipts](../installation/README.md#default-setup-and-runtime-identity-installation).
+
+See the [installation map](installation-map.md) for the current repo/environment layout and the
+different CLI implementations. These lifecycle controls are not a globally installed ingestion CLI.
 
 Run these from this Operations checkout on HART-DESKTOP, using your existing GitHub CLI login:
 
@@ -23,9 +29,10 @@ Run these from this Operations checkout on HART-DESKTOP, using your existing Git
 `staging` selects hart-server; `production` selects hart-prod; `knowledge` selects hart-cloud when it is running.
 `status` inspects installed revisions, configuration and connectivity; `runs` lists workflow history. `verify` executes the installed application. With `-Wait`, status and verification receipts are downloaded under `$LAPLACE_WORK/operations/<run-id>`.
 `deploy -Target staging` builds and runs `main` on hart-server and stops there. This is also the default for `deploy`.
-`deploy -Target production` first verifies staging, then starts hart-cloud, builds the production bundle, publishes
-on hart-prod and verifies it. The cloud lease is released afterward so the existing idle-stop mechanism can stop
-the VM. Automatic main delivery retains this production chain. `prepare`, `build` and `test` select desktop by
+`deploy -Target production` verifies staging, transfers that package to hart-prod, publishes and verifies it.
+Normal main delivery does not start hart-cloud or change the selected knowledge backend. The monorepo's
+`product-operator.yml` exposes `qualify-cloud` for explicitly requested isolated qualification; its lease is
+released afterward so the existing idle-stop mechanism can stop the VM. `prepare`, `build` and `test` select desktop by
 default and reject remote targets. HART-DESKTOP remains the development and optional GPU machine.
 
 Workflow operations return a GitHub run link. `-Wait` follows that run and returns failure if it fails. The GitHub
