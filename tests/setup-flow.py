@@ -21,7 +21,7 @@ source "$FLOW"
 here='/fixture checkout with spaces'
 LAPLACE_PGDATA='/fixture database'
 LAPLACE_APP_PGDATA=${DECLARED:+$LAPLACE_PGDATA}
-if [[ -z $DECLARED ]]; then LAPLACE_APP_PGDATA='/separate declared cluster'; fi
+LAPLACE_APP_DBNAME=${DECLARED:+laplace-app}
 setup_runtime_verified=0
 stage() { printf '%s\n' "$1" >> "$TRACE"; [[ $1 != "$FAIL_STAGE" ]] || return 37; }
 part() { :; }
@@ -29,8 +29,12 @@ say() { :; }
 for name in volumes packages rights kernel deps cluster settings access backup landing site agents idlestop report drop; do
   eval "$name() { stage $name; }"
 done
-appdb_cluster() { stage separate_cluster; }
+appdb_cluster() { stage application_database; }
 python3() {
+  if [[ $# == 1 && $1 == "$here/installation/postgres-installation.py" ]]; then
+    stage postgres
+    return
+  fi
   if [[ $# == 2 && $1 == "$here/installation/modular.py" && $2 == install ]]; then
     stage modular
     return
@@ -53,11 +57,12 @@ printf 'complete:%s\n' "$setup_runtime_verified" >> "$TRACE"
                 self.assertNotIn('runtime', stages)
                 self.assertNotIn('site', stages)
                 self.assertLess(stages.index('modular'), stages.index('report'))
-                self.assertNotIn('separate_cluster', stages)
+                self.assertLess(stages.index('cluster'), stages.index('postgres'))
+                self.assertLess(stages.index('postgres'), stages.index('application_database'))
                 self.assertEqual(stages[-1], 'complete:0')
 
     def test_failures_stop_before_success_report(self):
-        for failed in ('packages', 'modular'):
+        for failed in ('packages', 'postgres', 'modular'):
             with self.subTest(failed=failed):
                 result, stages = self.run_setup(fail=failed)
                 self.assertEqual(result.returncode, 37, result.stderr)
@@ -70,10 +75,10 @@ printf 'complete:%s\n' "$setup_runtime_verified" >> "$TRACE"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(stages, ['site', 'runtime', 'report', 'complete:1'])
 
-    def test_undeclared_runtime_retains_existing_cluster_provisioning(self):
+    def test_no_application_database_is_created_without_a_declaration(self):
         result, stages = self.run_setup(declared=False)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('separate_cluster', stages)
+        self.assertNotIn('application_database', stages)
         self.assertNotIn('runtime', stages)
         self.assertEqual(stages[-1], 'complete:0')
 

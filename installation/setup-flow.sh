@@ -7,20 +7,25 @@ setup_dispatch() {
   ((${#parts[@]})) || parts=(all)
   for p in "${parts[@]}"; do
     case $p in
-      all|drop|rights|volumes|packages|kernel|deps|cluster|settings|access|appdb|backup|site|runtime|modular|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client|knowledge-client) ;;
+      all|drop|rights|volumes|packages|kernel|deps|cluster|postgres|settings|access|appdb|backup|site|runtime|modular|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client|knowledge-client) ;;
       *) echo "Unknown setup stage: $p" >&2; return 2 ;;
     esac
   done
   for p in "${parts[@]}"; do
     case $p in
       all)
-        volumes; packages; rights; kernel; deps; cluster; settings; access; appdb; backup
+        volumes; packages; rights; kernel; deps; cluster; postgres; settings; access; appdb; backup
         landing_of_all=1; landing; landing_of_all=
         modular; agents; idlestop; report
         ;;
       *) "$p" ;;
     esac
   done
+}
+
+postgres() {
+  part 'PostgreSQL installation'
+  python3 "$here/installation/postgres-installation.py"
 }
 
 modular() {
@@ -36,8 +41,8 @@ runtime() {
 
 appdb() {
   part 'application database'
-  if [[ -z ${LAPLACE_APP_PGDATA:-} || ${LAPLACE_APP_PGDATA:-} == "$LAPLACE_PGDATA" ]]; then
-    say 'application database' 'no separate cluster declared; database consumers use the existing cluster'
+  if [[ -z ${LAPLACE_APP_DBNAME:-} ]]; then
+    say 'application database' 'none declared; database consumers use the existing cluster'
     return 0
   fi
   appdb_cluster
