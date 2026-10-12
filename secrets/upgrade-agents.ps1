@@ -50,6 +50,10 @@ try {
             Copy-Item -LiteralPath $c.executable -Destination $a.executable -Force
         }
         if ((Get-FileHash -LiteralPath $a.executable -Algorithm SHA256).Hash -ine $c.sha256) { throw "Installed digest mismatch: $($a.service)" }
+        # Match the owning installers: force a fresh template render while keeping
+        # the application's serving credential files and enrollment untouched.
+        $candidate = Join-Path (Split-Path -Parent $a.configuration) 'candidate.json'
+        if (Test-Path -LiteralPath $candidate) { Remove-Item -LiteralPath $candidate -Force }
         $result.restart_utc = [DateTimeOffset]::UtcNow.ToString('o')
         Start-Service -Name $a.service
         $result.status = 'started; awaiting authenticated render'
