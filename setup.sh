@@ -23,6 +23,10 @@
 # declares its own.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
+if [[ ${1:-} == secrets-protection ]]; then
+  shift
+  exec python3 "$here/secrets/protection.py" "$@"
+fi
 # Repair has its own complete preflight and host lock before any mutation.
 if [[ ${1:-} == repair ]]; then
   shift
