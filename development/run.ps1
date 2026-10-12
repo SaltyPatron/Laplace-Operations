@@ -47,7 +47,7 @@ function Connection($Record, [string]$Database, [string]$Role) {
     if ($pool -lt 1) { throw 'pool_max must be positive.' }
     "Host=$($Record.database_host);Port=$($Record.port);Database=$Database;Username=$Role;Password=$($Record.password);SSL Mode=Require;Maximum Pool Size=$pool"
 }
-$env:LAPLACE_DB = Connection $records.knowledge $config.knowledge_database $config.knowledge_role
+$env:LAPLACE_DB = Connection $records.substrate $config.substrate_database $config.substrate_role
 $env:LAPLACE_APP_DB = Connection $records.appdb $config.application_database $config.application_role
 $env:LAPLACE_OPERATOR_TOKEN = $records.'laplace-api'.operator_token
 if (-not $env:LAPLACE_OPERATOR_TOKEN) { throw 'Development operator identity is missing; run development/configure.ps1.' }
@@ -69,8 +69,8 @@ $env:LAPLACE_OPS_LOG_DIR = Join-Path $work 'logs'
 $env:LAPLACE_DATA_PROTECTION_KEYS = Join-Path $env:LAPLACE_WORK 'development/keys'
 Remove-Item Env:LAPLACE_AUTH_DEV_PRINCIPAL,Env:LAPLACE_API_KEY -ErrorAction SilentlyContinue
 $receipt = [ordered]@{ source=$SourcePath; revision=(& git -C $SourcePath rev-parse HEAD); dirty_source=[bool]@(& git -C $SourcePath status --porcelain --untracked-files=no);
-    build_root=$env:LAPLACE_BUILD_ROOT; base_url=$env:LAPLACE_PUBLIC_BASE_URL; knowledge_database=$config.knowledge_database;
-    application_database=$config.application_database; database_host=$config.database_host; knowledge_role=$config.knowledge_role;
+    build_root=$env:LAPLACE_BUILD_ROOT; base_url=$env:LAPLACE_PUBLIC_BASE_URL; substrate_database=$config.substrate_database;
+    application_database=$config.application_database; database_host=$config.database_host; substrate_role=$config.substrate_role;
     application_role=$config.application_role; pool_max_per_serving_datasource=$config.pool_max;
     credential_reference=$root; started_utc=[DateTime]::UtcNow.ToString('o'); status='failed' }
 $process = $null

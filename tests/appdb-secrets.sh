@@ -8,7 +8,7 @@ mkdir "$work/bin"
 export FIXTURE=$work
 printf '{"role_id":"fixture-role","secret_id":"fixture-id"}\n' > "$work/credentials"
 chmod 600 "$work/credentials"
-printf 'knowledge:5432:*:laplace:keep-this\n' > "$work/pgpass"
+printf 'substrate:5432:*:laplace:keep-this\n' > "$work/pgpass"
 cat > "$work/bin/curl" <<'CURL'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -39,7 +39,7 @@ run(){ bash "$root/secrets/appdb-sync.sh" hart-prod "$work/credentials" 127.0.0.
 run
 [[ $(stat -c %a "$work/pgpass") == 600 ]]
 grep -Fxq '127.0.0.1:5432:laplace-app:laplace:s\:ec\\ret' "$work/pgpass"
-grep -Fxq 'knowledge:5432:*:laplace:keep-this' "$work/pgpass"
+grep -Fxq 'substrate:5432:*:laplace:keep-this' "$work/pgpass"
 [[ -e "$work/revoked" ]]
 before=$(sha256sum "$work/pgpass")
 run
@@ -52,4 +52,4 @@ for failure in login read database invalid-record; do
 done
 ! grep -Eq 'fixture-session|fixture-id|s:ec' "$work/arguments" "$work/log"
 [[ -z $(find "$work" -maxdepth 1 -name '.bao-sync.*' -print) ]]
-echo 'PASS authentication before publication, escaping, retained knowledge credential, idempotence, session cleanup, failed auth/read/DB/schema preserve existing credentials'
+echo 'PASS authentication before publication, escaping, retained substrate credential, idempotence, session cleanup, failed auth/read/DB/schema preserve existing credentials'

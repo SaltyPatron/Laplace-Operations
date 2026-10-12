@@ -297,7 +297,7 @@ def main():
         return
     if os.geteuid() != 0:
         parser.error('Use sudo ./setup.sh repair for installation; --check needs no sudo')
-    sync = load_module('knowledge_sync', ROOT / 'secrets/knowledge-sync.py')
+    sync = load_module('substrate_sync', ROOT / 'secrets/database-sync.py')
     machine = Path(config['machine_file'])
     receipt_dir = Path(config['receipt_directory'])
     receipt_dir.mkdir(parents=True, exist_ok=True, mode=0o755)

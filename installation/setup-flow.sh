@@ -7,7 +7,7 @@ setup_dispatch() {
   ((${#parts[@]})) || parts=(all)
   for p in "${parts[@]}"; do
     case $p in
-      all|drop|rights|volumes|packages|kernel|deps|cluster|postgres|settings|access|appdb|backup|site|runtime|modular|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client|knowledge-client) ;;
+      all|drop|rights|volumes|packages|kernel|deps|cluster|postgres|settings|access|appdb|backup|site|runtime|modular|agents|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client|database-client) ;;
       *) echo "Unknown setup stage: $p" >&2; return 2 ;;
     esac
   done

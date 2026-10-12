@@ -69,8 +69,8 @@ runtime refresh authenticate through the root-private AppRole. Rejected existing
 falling back to an operator token, rewriting policy or generating replacement credentials.
 
 This step preserves application data in `laplace-mono.app` and pins its application connection separately
-from knowledge selection. It does not move application data to a separate physical database. MCP uses
-local PostgreSQL peer authentication; the API uses distinct TLS application and knowledge logins.
+from substrate selection. It does not move application data to a separate physical database. MCP uses
+local PostgreSQL peer authentication; the API uses distinct TLS application and substrate logins.
 Mutable state is declared under `/hosting/laplace/runtime`; no build mount is created.
 
 API readiness/native operations, database privilege refusals, Bao policy/refusal/revocation and an
