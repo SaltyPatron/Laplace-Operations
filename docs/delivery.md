@@ -7,17 +7,17 @@ Use [Operating Laplace](operating-laplace.md) for commands. The implemented appl
 | Host | Responsibility | What successful execution establishes |
 | --- | --- | --- |
 | HART-DESKTOP | Windows development, CPU-native/managed/web builds, optional GPU workloads | The selected checkout builds and its executed runtime tests pass. A GPU is not a core Laplace dependency. |
-| hart-server | Independent local deployment target and selectable knowledge host | The Linux installation, migrations, authentication, native calls and application reads work on another machine. Its damaged GPU is ineligible. |
+| hart-server | Independent local deployment target and selectable database host | The Linux installation, migrations, authentication, native calls and application reads work on another machine. Its damaged GPU is ineligible. |
 | hart-cloud | On-demand Google Cloud compute for release builds, native AVX-512 testing and benchmarks | Only the checks actually executed by the selected job. The delivery job builds a bundle; it does not automatically establish every ISA or performance claim. |
-| hart-prod | Public application hosting and local application database | The received bundle serves authenticated requests through public ingress against the selected compatible knowledge source. |
+| hart-prod | Public application hosting and local application database | The received bundle serves authenticated requests through public ingress against the selected compatible database source. |
 | hart-router | LAN routing and DNS, including existing AdGuard configuration | Client-to-service probes must establish the actual route and resolution. Router reachability alone is not application readiness. |
 
-Build host, serving host, deployment tier and selected knowledge source are separate settings. hart-cloud is intentionally
-stopped when unused. Production currently selects hart-server knowledge while keeping accounts, sessions, API keys and
+Build host, serving host, deployment tier and selected database source are separate settings. hart-cloud is intentionally
+stopped when unused. Production currently selects hart-server substrate while keeping accounts, sessions, API keys and
 billing in its local application database. OpenBao and Vaultwarden remain on hart-server. Tailscale provides private
-connectivity; it does not create database grants, synchronize knowledge, or provide application failover by itself.
+connectivity; it does not create database grants, synchronize substrate, or provide application failover by itself.
 
-Knowledge selection chooses an admitted knowledge/artifact estate. It is not a replica-freshness test. Selection checks
+Substrate selection chooses an admitted substrate/artifact estate. It is not a replica-freshness test. Selection checks
 the installed Tier-0 contract before changing configuration and verifies authenticated application work afterward.
 The desktop and deployed Linux Tier-0 artifact now have identical bytes for the same pinned Unicode inputs and sources;
 source line endings are normalized before computing the generator fingerprint.
@@ -41,7 +41,7 @@ processes that actually share installation/database resources.
 The separate Native/Engine/Postgres deployment remains an active, distinct installation path. Operations resolves
 immutable dependency commits before checkout and preserves a component dispatch's exact commit after checking that
 it belongs to main history. Normal deployment does not drop databases or ingest content. Explicit ingestion has its
-own operation. `./laplace.ps1 components -Target knowledge -Wait` verifies staging, acquires an independent cloud
+own operation. `./laplace.ps1 components -Target cloud -Wait` verifies staging, acquires an independent cloud
 lease, starts the declared worker, and deploys the same component revisions there. Required compatibility checks
 precede final SQL readback. Cleanup releases only that run's lease; the installed idle timer stops the worker after
 all leases and active work end. This component path is separate from public application publication.

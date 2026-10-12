@@ -35,7 +35,7 @@ LAPLACE_WORK=Y:\state\work
 LAPLACE_BUILD=X:\build roots
 LAPLACE_PGDATA=Y:\state\pgdata
 LAPLACE_PGWAL=W:\wal
-LAPLACE_ROLE=knowledge_login
+LAPLACE_ROLE=substrate_login
 LAPLACE_PG_SERVICE_ACCOUNT=NT SERVICE\LaplacePostgres
 '@ | Set-Content -LiteralPath (Join-Path $scratch 'machine.env')
     $batch = Join-Path $scratch 'read.cmd'

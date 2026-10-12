@@ -28,7 +28,7 @@ pwsh -NoProfile -File acceptance/verify.ps1 -Check storage-windows,resource-refu
 
 CI runs the named implemented checks on Windows and Linux and uploads their JSON receipts even on failure. Its green
 component jobs are not a green whole-installation acceptance result. Future live probes must identify the target,
-installed release, knowledge selection and workload identity without logging credentials. Live destructive operations
+installed release, substrate selection and workload identity without logging credentials. Live destructive operations
 must not be smuggled into this default verifier; setup/recovery actions prepare the state, and verification reads it.
 
 Work proceeds as: criterion -> failing check -> implementation -> passing check -> install/activate when applicable ->

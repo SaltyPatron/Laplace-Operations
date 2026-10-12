@@ -84,7 +84,7 @@ Hart-prod can reach the Bao HTTPS health endpoint (HTTP 200).
 
 `sudo ./setup.sh secrets-client` retrieves the declared application DB password
 using `/etc/laplace/approle.json`, verifies it against PostgreSQL, then updates the
-canonical and existing operator/runner `pgpass` files. Existing knowledge DB
+canonical and existing operator/runner `pgpass` files. Existing substrate DB
 entries are preserved. It installs `laplace-appdb-secrets.timer` for refresh every
 15 minutes and two minutes after boot. Each invocation logs in with the host
 AppRole and revokes its short-lived session afterwards; no admin token is installed.
@@ -101,7 +101,7 @@ already installed credentials implicitly. `LAPLACE_BAO_APPDB_HOST`,
 Operations `setup.sh access` and `appdb` still provision database roles and maintain
 their existing protected-file behavior. `secrets-client` supplies subsequent
 app credential refresh. The production API uses the separate `laplace-hart-prod-runtime`
-AppRole for its knowledge and application runtime records. The root-owned refresh timer
+AppRole for its substrate and application runtime records. The root-owned refresh timer
 verifies credentials before publishing them to the API identity. Windows development uses
 `development/enroll.ps1` and a user-bound encrypted AppRole enrollment for its two database
 records, development API identity and shared OAuth configuration. See

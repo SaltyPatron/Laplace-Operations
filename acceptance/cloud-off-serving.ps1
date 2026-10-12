@@ -33,8 +33,8 @@ for line in (prefix/'app/laplace-api.env').read_text().splitlines():
  if line.strip() and not line.lstrip().startswith('#') and '=' in line:
   key,_,value=line.partition('='); parsed=shlex.split(value); env[key]=parsed[0] if parsed else ''
 def host(connection):return next((v.strip() for k,v in (x.split('=',1) for x in connection.split(';') if '=' in x) if k.strip().lower()=='host'),None)
-knowledge=host(env.get('LAPLACE_DB','')); application=host(env.get('LAPLACE_APP_DB',''))
-if not knowledge or application not in ('localhost','127.0.0.1','::1') or knowledge==application:raise SystemExit('Application and knowledge placement are not distinct')
+substrate=host(env.get('LAPLACE_DB','')); application=host(env.get('LAPLACE_APP_DB',''))
+if not substrate or application not in ('localhost','127.0.0.1','::1') or substrate==application:raise SystemExit('Application and substrate placement are not distinct')
 token=next(shlex.split(x.partition('=')[2])[0] for x in (prefix/'secrets/mcp.env').read_text().splitlines() if x.startswith('LAPLACE_MCP_TOKEN='))
 data=json.dumps({'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2025-06-18','capabilities':{},'clientInfo':{'name':'cloud-off-acceptance','version':'1'}}}).encode()
 codes=[]
@@ -47,7 +47,7 @@ for authenticated,expected in [(False,401),(True,200)]:
  if code!=expected:raise SystemExit('MCP returned '+str(code)+' instead of '+str(expected))
  if authenticated and ('protocolVersion' not in body or 'serverInfo' not in body):raise SystemExit('MCP did not return the initialization contract')
  codes.append(code)
-print(json.dumps({'knowledge_host':knowledge,'application_host':application,'release':(prefix/'app/.laplace-source-revision').read_text().strip(),
+print(json.dumps({'substrate_host':substrate,'application_host':application,'release':(prefix/'app/.laplace-source-revision').read_text().strip(),
  'public_api':p['base'],'public_mcp':p['mcp'],'api_verification':json.loads(receipt.read_text()),'mcp_statuses':codes}))
 '@
 $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($program))

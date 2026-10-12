@@ -14,7 +14,7 @@
   holding the write-ahead log and whether it is the log's own, whether the data's disk rotates. What the machine
   cannot say is laplace.env.ps1's, each with the measurement that set it: LAPLACE_PG_RESERVED (what its other
   residents keep: the llama-server services), LAPLACE_PG_BUFFERS_MAX (the largest shared memory this Windows build
-  maps in every backend), LAPLACE_PG_PROFILE (knowledge or app: the connection plan). The memory is tune-pg.sh's one
+  maps in every backend), LAPLACE_PG_PROFILE (substrate or app: the connection plan). The memory is tune-pg.sh's one
   equation in four domains: of what the server may use, a quarter the shared cache, a quarter the backends' private
   memory (divided by the backends the plan allows), a quarter the client's, a quarter the page cache. Windows: huge
   pages off (the backends' shared-memory mapping failed at 4 GB before any large page was tried), io_method worker
@@ -25,8 +25,9 @@ if (-not $env:LAPLACE_PGDATA -or -not $env:LAPLACE_PGPORT) { . "$PSScriptRoot\la
 $TunePsqlExe = Join-Path $env:LAPLACE_PG_DIR 'bin\psql.exe'
 $TuneConn = $env:LAPLACE_CONNINFO -replace 'dbname=\S+', 'dbname=postgres'
 if ($TuneConn -notmatch 'dbname=') { $TuneConn += ' dbname=postgres' }
-$TuneProfile = if ($env:LAPLACE_PG_PROFILE) { $env:LAPLACE_PG_PROFILE } else { 'knowledge' }
-if ($TuneProfile -notin 'knowledge', 'app') { throw "tune-pg: LAPLACE_PG_PROFILE is knowledge or app, not '$TuneProfile'" }
+$TuneProfile = if ($env:LAPLACE_PG_PROFILE) { $env:LAPLACE_PG_PROFILE } else { 'substrate' }
+if ($TuneProfile -eq 'knowledge') { $TuneProfile = 'substrate' }
+if ($TuneProfile -notin 'substrate', 'app') { throw "tune-pg: LAPLACE_PG_PROFILE is substrate or app, not '$TuneProfile'" }
 
 function TuneKB([string]$size) {   # a size with a unit (34GB, 512MB, 1048576kB, 4096) in kB
     if ($size -notmatch '^\s*(\d+)\s*(TB|GB|MB|kB|KB|B)?\s*$') { throw "not a size: '$size'" }
@@ -86,7 +87,7 @@ function TunePlan {   # every derived quantity, tune-pg.sh's plan(): the same na
     $par = $cores; $gather = [int]($cores / 2); $avw = [math]::Max(3, [int]($cores / 2)); $iow = [math]::Min([math]::Max([int]($threads * 2 / 3), 1), 32); $mwp = $par + 4
     $declaredServing = if ($env:LAPLACE_PG_SERVING) { [int]$env:LAPLACE_PG_SERVING } else { 0 }
     switch ($TuneProfile) {
-        'knowledge' { $ingest = 1 + 2 * $cores + 3; $serving = if ($declaredServing) { $declaredServing } else { 4 * $threads }; $locks = 1024 }
+        'substrate' { $ingest = 1 + 2 * $cores + 3; $serving = if ($declaredServing) { $declaredServing } else { 4 * $threads }; $locks = 1024 }
         'app'       { $ingest = 0; $serving = if ($declaredServing) { $declaredServing } else { [math]::Max(16, 8 * $threads) }; $locks = 64 }
     }
     $reservedConns = 3; $conns = $ingest + $serving + $avw + $reservedConns
@@ -179,7 +180,7 @@ function TuneDeclared {
         superuser_reserved_connections   = '3'
         max_prepared_transactions        = '32'
     }
-    if ($TuneProfile -eq 'knowledge' -and $env:LAPLACE_PGTEMP) { $s['temp_tablespaces'] = 'pgtemp' }
+    if ($TuneProfile -eq 'substrate' -and $env:LAPLACE_PGTEMP) { $s['temp_tablespaces'] = 'pgtemp' }
     $s
 }
 

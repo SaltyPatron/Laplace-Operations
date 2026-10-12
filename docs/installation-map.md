@@ -7,7 +7,7 @@ October 11. This records installed surfaces and remaining gaps, not whole-produc
 ## Where to run ingestion
 
 The intended workflow is an ordinary, non-admin terminal on hart-desktop, from any working directory.
-The CLI reads input on the machine executing it and connects to the selected knowledge database.
+The CLI reads input on the machine executing it and connects to the selected substrate database.
 A remote database does not require mounting source or build trees. A server ingestion API reads
 server paths unless its API explicitly uploads the files.
 
@@ -111,7 +111,7 @@ The [acceptance register](../acceptance/criteria.json) and
 - CONFIG-001: consistent selection of named installation, paths and identities.
 - INSTALL-001: a complete usable installed runtime and repair/upgrade process.
 - RELEASE-001: compatible executable, native libraries, schemas and prepared artifacts.
-- INGEST-001: explicit release/knowledge selection and usable ingestion of real input.
+- INGEST-001: explicit release/substrate selection and usable ingestion of real input.
 - NETWORK-001: correct deployed origins, routing, TLS and authentication.
 
 Installed CLI location, native closure and database selection have been checked on desktop
