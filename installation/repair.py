@@ -57,7 +57,11 @@ def archive_rotated_log(config, source, destination, check=False):
     before = source.stat()
     if not stat.S_ISREG(before.st_mode):
         raise ValueError('Selected rotation is not a regular file')
-    destination = destination or Path(config['machine']['LAPLACE_WORK']) / 'log-archive'
+    if destination is None:
+        declared = config.get('log_archive_directory')
+        if not declared:
+            raise ValueError('Declare log_archive_directory for this host or pass --archive-directory')
+        destination = Path(declared)
     if not destination.is_absolute() or '..' in destination.parts or destination == Path('/'):
         raise ValueError('Declare an absolute log archive directory')
     ancestor = destination
@@ -219,7 +223,7 @@ def main():
     parser.add_argument('--installation', type=Path)
     parser.add_argument('--check', action='store_true', help='Unprivileged installed-host preflight; makes no changes')
     parser.add_argument('--archive-rotated-log', type=Path, help='Preserve one explicitly selected closed log rotation on another filesystem to recover space')
-    parser.add_argument('--archive-directory', type=Path, help='Log archive destination; default is the declared LAPLACE_WORK/log-archive')
+    parser.add_argument('--archive-directory', type=Path, help='Log archive destination; defaults to this host declaration\'s log_archive_directory')
     args = parser.parse_args()
     declaration = args.installation or Path(__file__).with_name(socket.gethostname().split('.')[0].lower() + '.json')
     config = json.loads(declaration.read_text())
