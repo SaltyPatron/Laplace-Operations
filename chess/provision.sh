@@ -1,6 +1,6 @@
 #!/bin/bash
 # The chess lab's conventional reference on Linux, from dependencies.tsv's rows for this platform: Stockfish built with
-# profile-guided optimization, fastchess, Ordo, Lc0 with CUDA when the machine has an NVIDIA GPU, Lc0's networks and the
+# profile-guided optimization, fastchess, Ordo, explicitly authorized CUDA Lc0, Lc0's networks and the
 # opening suites. Run as the operator (sudo ./setup.sh chess runs it so); nothing here needs root.
 #
 #   chess/provision.sh            every chess row; each is made only when its proof is missing or wrong
@@ -26,7 +26,7 @@ SF_BENCH=${LAPLACE_STOCKFISH_BENCH:-2497913}
 NVCC=${LAPLACE_NVCC:-$(ls -d /usr/local/cuda/bin/nvcc 2>/dev/null || command -v nvcc || true)}
 say(){ printf '  %-34s %s\n' "$1" "$2"; }
 rows(){ awk -F'\t' '!/^#/ && NF >= 12 && $1 != "name" && $9 ~ /linux/' "$here/dependencies.tsv" | tr -d '\r'; }
-want(){ [ $# -eq 0 ] || [[ " $* " == *" $1 "* ]]; }
+want(){ local selected=$1; shift; [ $# -eq 0 ] && return 0; local item; for item in "$@"; do [ "$item" != "$selected" ] || return 0; done; return 1; }
 sha(){ sha256sum "$1" | cut -c1-64; }
 fetch(){ # url pin file: download once, verify
   local url=$1 pin=$2 file=$3
@@ -74,6 +74,12 @@ release(){ local name=$1 version=$2 origin=$4 pin=$6 build=$7 proof=${12}; local
   link "$prefix/$proof" "$name"; say "$name $version" "at $prefix"
 }
 lc0(){ local name=$1 version=$2 origin=$3 pin=$6 proof=${12}; local prefix=$DEPS/$name/$version src=$WORK/$name
+  # Hardware presence is not permission to probe or use it. A copied declaration
+  # cannot authorize a different host; an empty declaration leaves CUDA disabled.
+  local gpu_host=${LAPLACE_GPU_HOST:-} actual_host; actual_host=$(hostname -s)
+  if [[ -z "$gpu_host" || "${gpu_host,,}" != "${actual_host,,}" ]]; then
+    say "$name" "skipped: GPU not authorized for $actual_host (LAPLACE_GPU_HOST)"; return
+  fi
   command -v nvidia-smi >/dev/null && nvidia-smi -L >/dev/null 2>&1 || { say "$name" "skipped: no NVIDIA GPU"; return; }
   if [ -x "$prefix/$proof" ] && [ "$(cat "$prefix/.pin" 2>/dev/null)" = "$pin" ]; then say "$name $version" "at $prefix"; link "$prefix/$proof" lc0; return; fi
   [ -x "$NVCC" ] || { say "$name" "NOT BUILT: no nvcc (LAPLACE_NVCC)"; return 1; }
