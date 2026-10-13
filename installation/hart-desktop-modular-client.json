@@ -4,13 +4,13 @@
   "prefix": "E:/Data/Laplace/services/laplace",
   "state": "E:/Data/Laplace/runtime/laplace",
   "installed_config": "E:/Data/Laplace/clients/laplace/installation.json",
-  "build": "D:/Libraries/build/Laplace/Laplace-Engine/icx-release",
+  "build": "D:/Libraries/build/Laplace/Laplace-Engine/windows-client",
   "engine": "E:/Repositories/Laplace/Laplace-Engine",
   "native": "E:/Repositories/Laplace/Laplace-Native",
   "prepared": "E:/Data/Laplace/work/modular-client/prepared",
   "grammars": "D:/Libraries/build/Laplace/grammars",
   "ucd": "D:/Data/UCD",
-  "socket": "hart-server",
+  "socket": "HART-DESKTOP",
   "port": 5432,
   "database": "laplace",
   "threads": 8,
@@ -25,20 +25,30 @@
   ],
   "mkl_runtime": "C:/Program Files (x86)/Intel/oneAPI/mkl/2026.1/bin",
   "mkl_runtime_libraries": [
-    "mkl_rt.*.dll", "mkl_core.*.dll", "mkl_intel_thread.*.dll",
-    "mkl_sequential.*.dll", "mkl_tbb_thread.*.dll", "mkl_avx*.dll",
-    "mkl_def.*.dll", "mkl_mc*.dll", "mkl_vml_*.dll", "libimalloc.dll"
+    "mkl_rt.*.dll",
+    "mkl_core.*.dll",
+    "mkl_intel_thread.*.dll",
+    "mkl_sequential.*.dll",
+    "mkl_tbb_thread.*.dll",
+    "mkl_avx*.dll",
+    "mkl_def.*.dll",
+    "mkl_mc*.dll",
+    "mkl_vml_*.dll",
+    "libimalloc.dll"
   ],
   "operator_client": {
-    "role": "laplace",
+    "role": "ahart",
     "data": "E:/Data/Ingest",
     "work": "E:/Data/Laplace/work/clients/ahart/laplace",
     "configuration": "E:/Data/Laplace/clients/laplace/client.json",
     "connection": {
-      "hostaddr": "192.168.1.2",
+      "hostaddr": "127.0.0.1",
       "sslmode": "verify-full",
-      "sslrootcert": "E:/Data/Laplace/clients/laplace/postgres-ca.crt",
-      "connect_timeout": 10
+      "sslrootcert": "E:/Data/Laplace/clients/laplace/postgresql-desktop-ca.pem",
+      "connect_timeout": 10,
+      "require_auth": "sspi",
+      "passfile": "E:/Data/Laplace/clients/laplace/sspi-no-password-file"
     }
-  }
+  },
+  "database_artifact_reader": "S-1-5-20"
 }

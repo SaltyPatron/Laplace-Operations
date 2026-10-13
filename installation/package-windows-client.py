@@ -118,6 +118,10 @@ def main():
         shutil.rmtree(candidate)  # checked above: only this operation's private staging directory
     else:
         candidate.rename(release)
+    if config.get('database_artifact_reader'):
+        if config['socket'].lower() != socket.gethostname().lower() or not re.fullmatch(r'S-1-[0-9-]+', config['database_artifact_reader']):
+            raise ValueError('A database artifact reader must select a Windows SID on the local database host')
+        run(['icacls.exe', release / 'share/prepared', '/grant', '*' + config['database_artifact_reader'] + ':(OI)(CI)(RX)'])
     installed = {key: config[key] for key in ('schema', 'host', 'prefix', 'state', 'socket', 'port', 'database', 'threads', 'batch_mb', 'ucd')}
     installed.update(release=str(release), tier0=str(release / 'share/prepared/tier0.bin'),
                      flags=str(release / 'share/prepared/tier0.flags'), highway=str(release / 'share/prepared/tier0.highway'),

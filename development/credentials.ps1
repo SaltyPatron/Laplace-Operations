@@ -21,12 +21,15 @@ function Get-DevelopmentBaoAddress($Config) {
 function Get-DevelopmentSecretPaths($Config) {
     $null = Get-DevelopmentCredentialPath $Config
     if ($Config.identity_reference -notmatch '^kv/[a-zA-Z0-9_/-]+$' -or $Config.identity_reference -match '//|/\.\.?(/|$)') { throw 'Invalid shared identity record.' }
-    [ordered]@{
-        substrate = "kv/hosts/$($Config.client)/substrate"
-        appdb = "kv/hosts/$($Config.client)/appdb"
+    $paths=[ordered]@{
         'laplace-api' = "kv/hosts/$($Config.client)/laplace-api"
         identity = $Config.identity_reference
     }
+    if(-not $Config.PSObject.Properties['authentication'] -or $Config.authentication -ne 'sspi'){
+        $paths.substrate="kv/hosts/$($Config.client)/substrate"
+        $paths.appdb="kv/hosts/$($Config.client)/appdb"
+    }
+    $paths
 }
 
 function Read-DevelopmentEnrollment($Config) {

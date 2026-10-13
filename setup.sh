@@ -104,6 +104,7 @@ Fathom      $LAPLACE_DEPSRC/Fathom/src/tbprobe.c   source   https://github.com/j
 . "$here/tune-pg.sh"
 # Who may connect, and how: the whole file, not a line added to whatever is there.
 HBA="# Laplace (setup.sh). Local: the server's own user and the operator, over the socket. The network: laplace and postgres, scram over TLS; postgres also by password from the host itself.
+include_if_exists pg_hba.operator.conf
 local     all   $PGUSER                           peer
 local     all   $LAPLACE_ROLE                     peer map=laplace
 host      all   $LAPLACE_ROLE  127.0.0.1/32       scram-sha-256
@@ -121,6 +122,7 @@ hostnossl all   all            0.0.0.0/0          reject
 # and has the role's password in ~/.pgpass. Not whoever happened to run this script.
 operators(){ { getent group "$LAPLACE_GROUP" | cut -d: -f4 | tr , '\n'; echo "$LAPLACE_AGENT_USER"; echo "$PGUSER"; } | grep . | sort -u; }
 ident(){ echo "# who connects over the socket as $LAPLACE_ROLE: the members of $LAPLACE_GROUP, the agent, the server's user"
+         echo 'include_if_exists pg_ident.operator.conf'
          echo 'include_if_exists pg_ident.runtime.conf'
          echo 'include_if_exists pg_ident.modular.conf'
          operators | while read -r u; do printf 'laplace  %-20s %s\n' "$u" "$LAPLACE_ROLE"; done; }

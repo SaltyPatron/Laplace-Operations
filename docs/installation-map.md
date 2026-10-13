@@ -1,6 +1,6 @@
 # Installed Laplace: repositories, environments and commands
 
-Updated 2026-10-12 from installed commands, actual desktop builds, SSH service/revision
+Updated 2026-10-13 from installed commands, actual desktop builds, SSH service/revision
 readback and HTTPS requests. Research/historical repository observations below are from
 October 11. This records installed surfaces and remaining gaps, not whole-product acceptance.
 
@@ -17,7 +17,7 @@ and hart-server's interactive login. They are different implementations, not int
 | Entry point | Current behavior and location |
 | --- | --- |
 | Monorepo `laplace-mono` | Accepts `ingest document <file-or-directory>`, singular. Desktop launcher selects `E:\Data\Laplace\clients\laplace-mono\client.json` and the CLI in the installed IIS release. Server launcher selects `/home/ahart/.local/share/laplace-mono/client.json` and `/opt/laplace/app/cli/Laplace.Cli`. `--where` prints the resolved executable, profile and database without credentials. |
-| Modular `laplace` | Desktop launcher selects `E:\Data\Laplace\clients\laplace\client.json` and the packaged executable under `E:\Data\Laplace\services\laplace\releases`. It includes native libraries, grammar libraries, recipes and firmware. Live `status` reached hart-server and matched firmware identities. Server launcher selects `/home/ahart/.config/laplace/client.json` and `/hosting/laplace/modular/current/bin/laplace`. |
+| Modular `laplace` | Desktop launcher selects `E:\Data\Laplace\clients\laplace\client.json` and the packaged executable under `E:\Data\Laplace\services\laplace\releases`. It includes native libraries, grammar libraries, recipes and firmware. Live `status` reaches HART-DESKTOP and matches both artifact fingerprints. Server launcher selects `/home/ahart/.config/laplace/client.json` and `/hosting/laplace/modular/current/bin/laplace`. |
 | Refactor `laplace-refactor` | A complete installed command is not yet established; its existing scripts still require build-layout and separate PostgreSQL assumptions to be corrected. |
 | Operations `laplace.ps1` | Development/build/deployment controller, not the ingestion CLI. |
 | Operations `ingest.ps1` / `ingest.sh` | Modular ingestion wrappers still tied to build-tree locations and their environment. |
@@ -31,9 +31,12 @@ laplace --where
 laplace status
 ```
 
-The monorepo desktop client selects hart-server database `laplace-mono`, role
-`laplace_desktop_db`. The modular client selects hart-server database `laplace`,
-role `laplace`. The background modular MCP uses its separate service identity. Raw Operations
+The monorepo desktop development profile selects HART-DESKTOP database `laplace-mono`,
+role `laplace_desktop_db`, using SSPI. The modular client selects HART-DESKTOP database
+`laplace` as Windows operator `ahart`, also through SSPI and verified TLS. Explicit staging
+selection remains available: monorepo profile `staging`, or modular `LAPLACE_CLIENT_CONFIG`
+pointing to `E:/Data/Laplace/clients/laplace/client-staging.json`. The background modular MCP
+uses its separate service identity. Raw Operations
 build/ingest wrappers still have their own environment resolution; do not infer a target from
 the word "Laplace" alone. Read the selected client configuration or `--where`.
 
@@ -43,7 +46,7 @@ the word "Laplace" alone. Read the selected client configuration or `--where`.
 | --- | --- | --- | --- |
 | Laplace | Named IIS site and installed `laplace-mono`; separate source development API | API/UI, separate monorepo MCP and CLI installed | API/UI on hart-prod; nginx `/mcp` forwards to hart-server:8080 |
 | Laplace-Native | Included in installed modular client; source checkout is separate | Included in modular package | No separate modular installation identified |
-| Laplace-postgres | Source checkout | Modular extension files installed; `laplace` database exists | Distinct from monorepo substrate; equivalent modular deployment not established |
+| Laplace-postgres | Modular extension 1.12 in the one custom PostgreSQL 18.6 installation; local `laplace` database | Modular extension files installed; `laplace` database exists | Distinct from monorepo substrate; equivalent modular deployment not established |
 | Laplace-Engine | CLI installed with native/resource closure | CLI in modular release | Modular installation location absent on hart-prod |
 | Laplace-MCP | Source; expected Windows executable absent | Separate modular MCP service active | Modular installation location absent on hart-prod |
 | Laplace-Operations | Shared/modular setup; existing mono build/deployment controller delegates CLI publication to Laplace | Default setup owns shared/modular services; explicit mono compatibility stages forward to the monorepo installer | Shared configuration; monorepo owns its own application delivery |
@@ -91,7 +94,11 @@ The October 12 desktop source build at `d3cb42fb4` passed native, managed and we
 published its configured ReadyToRun CLI, executed CLI help/native decomposition without
 developer environment variables, and passed 23 native/runtime tests. The source API started
 at localhost:5187 with that revision. This development build does not replace the installed
-IIS release: the installed desktop client still identifies release `8b7e91f41db3`.
+IIS release. On October 13 the corrected Windows database/launcher source reached
+local main; a fresh desktop build passed all 23 selected native/runtime tests and
+the running source API passed authenticated SQL/native checks against HART-DESKTOP.
+The installed IIS release observed at 11:33 UTC is `a9385bedcab51` and independently
+uses the local SSPI roles. See `operator-database-access.md` for current verification.
 Production's installed source revision is `d3cb42fb4`; API and nginx are active.
 The server modular package selects Engine `64f6184`, Native `8022bbd`, MCP `4299eec`
 and Operations `59ba23e`. Use `--where` for the current resolved installation after upgrades.

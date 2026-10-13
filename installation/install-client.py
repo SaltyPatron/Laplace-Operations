@@ -46,6 +46,8 @@ def main():
                                           env=client.process_environment(environment), capture_output=True, text=True, timeout=60)
             if verification.returncode:
                 raise ValueError('Installed modular Engine ' + operation[0] + ' failed: ' + verification.stderr.strip())
+            if operation == ['status'] and verification.stdout.count("the same as this engine's") != 2:
+                raise ValueError('Installed modular database must match both Engine artifact fingerprints: ' + verification.stdout.strip())
         if args.configuration.exists() and json.loads(args.configuration.read_text()).get('schema') != profile['schema']:
             raise ValueError('Refusing to replace a configuration belonging to another application')
         args.command.parent.mkdir(parents=True, exist_ok=True)
