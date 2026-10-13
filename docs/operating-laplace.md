@@ -213,6 +213,30 @@ is needed. The application schema has a non-login owner, and its runtime role ha
 Remote SCRAM declarations retain the existing OpenBao credential contract. See [operator access](operator-database-access.md)
 for pgAdmin's local SSPI and remote Windows-certificate connections.
 
+The desktop operator's Google and Microsoft sign-ins also have explicit Laplace platform
+administrator grants in `laplace-desktop-app`. These grants authorize ingestion, services,
+maintenance and access management after browser sign-in; a PostgreSQL administrator check
+does not verify them. `installation/hart-desktop-operator.json` records the exact provider,
+issuer, subject and application user IDs. `installation/Verify-PlatformAccess.ps1` checks
+the bindings, audited grants, serving application's readback and anonymous denial. It does
+not exercise the user's browser session. Run the `desktop-platform-administrators`
+acceptance check independently of database/workload checks.
+
+Platform grants persist in the application database across application deployments. Assign
+or revoke them through Laplace's People & roles interface, or its audited
+`PUT /v1/admin/access/people/{userId}/role` endpoint using an existing installation credential.
+Initial enrollment uses the enrolled workload credential; it does not require a personal Bao
+login. Verification never recreates a revoked grant. The two provider accounts remain
+separate identities and workspaces; matching email text alone does not link identities or
+grant authority. Roles are read on each request, and refreshing the website refreshes its
+displayed permissions.
+
+The desktop grants were applied through that endpoint on 2026-10-13 at 12:49 UTC,
+with audit events 1 (Google) and 2 (Microsoft). Enrollment evidence is
+`E:/Data/Laplace/work/laplace-mono/operator-access/desktop-platform-admin-20261013.json`;
+the passing independent acceptance receipt is
+`E:/Data/Laplace/work/laplace-mono/operator-access/desktop-platform-access-20261013T125500Z.json`.
+
 The existing `laplace-hart-desktop-development` workload enrollment supplies the API identity and shared OAuth
 record. Local SSPI runs do not fetch the two remote database-password records. Subsequent starts use the enrolled
 workload role and revoke the short-lived Bao session; operator token expiry does not prevent a restart. Initial

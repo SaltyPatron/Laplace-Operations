@@ -347,6 +347,13 @@
           "evidence": "Positive/negative authorization and refresh/revocation tests using the intended workload identity."
         },
         {
+          "id": "desktop-platform-administrators",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "installation/Verify-PlatformAccess.ps1"],
+          "timeout_seconds": 90,
+          "evidence": "Exact signed-in Google/Microsoft provider bindings have audited administrator roles in the local application database; the serving IIS application reads back those same roles and denies anonymous directory access. Does not impersonate or exercise a browser session."
+        },
+        {
           "id": "desktop-operator-certificate",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "installation/Verify-OperatorAccess.ps1"],
