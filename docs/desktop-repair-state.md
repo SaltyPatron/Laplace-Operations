@@ -26,6 +26,13 @@ requests concerning a prepared IIS/chess update and active cross-host matches.
 Those messages are not authorization to publish its package or restart services.
 The current shell was observed to be non-elevated after the machine reboot.
 A local SSH attempt failed host-key verification before running a command.
+This repair subsequently requested elevation directly with Start-Process -Verb
+RunAs. The first request ran the prepared serving repair, completing at
+13:50:20 UTC. The second requested read/execute access for the operator on the
+modular client's installed release directory; the user canceled it and it did
+not run. The user objected to the unexplained UAC dialogs. No further UAC request
+or alternate route for that canceled mutation is authorized without explicit
+approval. No other agent was delegated this repair.
 
 ## Installed state and verified changes
 
@@ -43,15 +50,16 @@ A local SSH attempt failed host-key verification before running a command.
   Exact identities are declared in `installation/hart-desktop-operator.json`.
   Grants persist in the application database and are read on each request.
   Browser interaction after the grant has not been observed.
-- IIS origin: `https://dev.hartonomous.com`. Last inspected active package:
-  `a9385bedcab51fb56b3f10cf6653ad3124c0c3c81b393f94220e7dd85a997c20`.
-  Read the live pointer again before changing it; another task is preparing an update.
+- IIS origin: `https://dev.hartonomous.com`. Activated and read back package
+  `5cff2fc659e572e9459c5fe671aa63781cf8fe300e5107303a1f658b7bcc8392`,
+  built from monorepo revision `d4bf13563b9bcffec9e01dde2772c622109985df`.
+  PostgreSQL and IIS remain running. Read the live pointer before any later change.
 - Operations commits: `862f99b` (desktop database/client access), `bf165fc`
   (independent platform-administrator verification). They were committed locally.
 - Monorepo main and worktrees have concurrent work. Do not overwrite the
   `fix/chess-worker-selection` checkout or its uncommitted architecture/UI work.
 
-## Unresolved configuration and performance defects
+## Resource and serving repair
 
 The existing Windows tuning owner is `tune-pg.ps1`, called by `setup.ps1 settings`.
 Its measured plan imports the machine declaration, including
@@ -60,15 +68,15 @@ Its measured plan imports the machine declaration, including
 `scripts/pg-machine-tuning.sh` and the native/managed resource planners; reconcile
 their ownership and declared allocations instead of introducing another formula.
 
-The running cluster was observed with PostgreSQL defaults: shared_buffers 128MB,
-work_mem 4MB, effective_cache_size 4GB, pg_stat_statements not preloaded and I/O
-timing disabled. The existing Windows plan instead declares shared_buffers
-1024MB, effective_cache_size 34205MB and work_mem 10MB on the measured machine,
-along with its other worker, WAL, connection and observability settings.
-The existing `desktop-installed-databases` check did not verify tuning convergence.
-No tuning change or restart has yet been applied by this diagnostic pass.
-Also reconcile the tuner's wildcard listener declaration with the exact
-`localhost,HART-DESKTOP` operator-access declaration before applying it.
+The existing Windows plan was applied through its normal owner during the
+13:50 UTC repair. All 57 declared settings now match, without pending restarts:
+shared_buffers 1024MB, effective_cache_size 34205MB, work_mem 10MB, and the
+existing worker, WAL, connection and observability settings. The measured 1GB
+buffer cap was retained. Independent `desktop-resource-settings` acceptance
+passes. Listener ownership now uses the common LAPLACE_PG_LISTEN_ADDRESSES
+declaration, default '*', retaining the existing exact SSPI authentication
+rules. This fixes the Tailscale interfaces missing from PostgreSQL's listeners
+after reboot; TLS/SSPI checks reached all three resolved HART-DESKTOP addresses.
 
 At 12:56 UTC PostgreSQL PID28556 was serving IIS PID29648 as
 `laplace_desktop_db`, running `ops.band_leaders`. It used approximately one CPU
@@ -87,20 +95,33 @@ A bounded native nested-plan trace reached these paths:
    `constituents_closure`. The diagnostic request hit its five-second timeout
    inside closure after the arena and lexical-label stages.
 
-Root partitioned tables entities, physicalities and consensus have `reltuples=-1`
-in the inspected catalog. Determine statistics/index completeness and inspect
-the actual frontier plan before choosing a native change or maintenance action.
-Do not claim the entire 122 seconds is explained by the five-second trace.
-Preserve the result semantics, canonical composition, batching and content IDs.
+The native retained plan for consensus.band_edges now uses CURSOR_OPT_CUSTOM_PLAN
+instead of CURSOR_OPT_GENERIC_PLAN, preserving its SQL and using the existing
+ranked index for the actual parameters. One band/limit-five comparison in the
+same read-only snapshot returned identical ordered rows: generic 6948.373ms,
+custom 1.036ms. A broader run timed out and is not passing evidence. Installed
+IIS home requests measured 2862.70ms and 2484.51ms; the four-band limit-five
+request measured 694.77ms without a session planner override. These samples do
+not explain every desktop responsiveness issue or certify every query.
+
+See [the deployment and invention evidence](desktop-invention-verification-20261013.md)
+for the full source delta, unchanged canonical trees, live representative
+invariants, installation boundaries, and explicit verification limits.
 
 ## Outstanding work carried forward
 
-- Restore convergence through the existing installation/tuning owner and add an
-  independent live acceptance check; report required restart separately.
-- Correct and measure the actual leaderboard/display path on populated data,
-  including output parity and repeated requests through the running website.
-- Recheck the exact installed revision, browser/admin behavior and client/runtime
-  boundaries after an authorized installation change.
+- Ordinary operator access to the modular CLI remains broken: WinError 5 reading
+  release `03c4df9560c2c278269deb98170d8ecb31e416c66a549540b50e76f9edda884a`
+  beneath `E:/Data/Laplace/services/laplace/releases`. Elevated verification hid
+  this defect; the independent ordinary-token check caught it. The owner source
+  correction and scoped ACL runner are prepared, but the canceled elevation did
+  not apply the live ACL change. This is not a PostgreSQL authentication failure.
+- Actual browser interaction after the platform administrator grants and pgAdmin
+  GUI interaction remain unobserved. Backend checks do not establish those flows.
+- Whole-invention behavior, broad query parity and complete display correctness
+  remain unverified. The Unicode sample in the storage-proof receipt contains
+  malformed display labels even though its identity/geometry invariants pass;
+  that output must not be represented as full Unicode rendering acceptance.
 - The Unicode import and its monitor were interrupted by the host restart at
   12:10:26 UTC. Their previous running receipt was corrected. Completion is not
   verified; do not start another ingest concurrently or claim it finished.
@@ -126,5 +147,17 @@ Work root: `E:/Data/Laplace/work/laplace-mono/operator-access`.
   regenerate that field before treating the document as a complete plan receipt.
 - `desktop-unicode-bootstrap-20261013.json`: interrupted import state.
 - `desktop-database-repair-20261013.json`: prior repairs and remaining limitations.
+- `desktop-serving-activation-20261013.json`: completed serving activation with
+  source/package/cluster identities and backup path; child receipts record
+  resource, database and platform checks. Database/client checks here ran elevated.
+- `desktop-postactivation-acceptance-20261013.json`: ordinary-token resource,
+  platform-administrator and certificate checks passed; installed-databases failed
+  on the modular release directory ACL. Overall installation remains incomplete.
+- `desktop-invention-live-proof-20261013.json`: installed serving timings and
+  three representative canonical-storage proofs; not whole-invention acceptance.
+- `desktop-invention-source-comparison-20261013.json`,
+  `desktop-installation-boundaries-20261013.json`, and
+  `desktop-perfcache-comparison-20261013.json`: unchanged canonical source trees,
+  installation selections and prepared-cache bytes across this deployment.
 
 Update this state with changed facts and new evidence before handing off work.
