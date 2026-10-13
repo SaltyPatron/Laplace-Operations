@@ -4,6 +4,10 @@ param([string]$Installation = $(if ($env:LAPLACE_DEVELOPMENT_INSTALLATION) { $en
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/../secrets/process.ps1"
 $config = Get-Content -LiteralPath $Installation -Raw | ConvertFrom-Json
+if($config.PSObject.Properties['authentication'] -and $config.authentication -eq 'sspi'){
+    & "$PSScriptRoot/configure-windows.ps1" -Installation $Installation
+    return
+}
 $root = "kv/hosts/$($config.client)"
 function Record([string]$Name, [hashtable]$Initial) {
     $names = @(Invoke-Program bao @('kv','list','-format=json',$root) | ConvertFrom-Json)

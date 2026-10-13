@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "windows_identity": "HART-DESKTOP\\ahart",
+  "windows_sid": "S-1-5-21-1955383224-1799969050-1119319971-1001",
+  "role": "ahart",
+  "certificate_subject": "laplace-operator-S-1-5-21-1955383224-1799969050-1119319971-1001",
+  "pgadmin": "C:/Program Files/pgAdmin 4",
+  "openssl": "D:/Libraries/openssl/3.5.9",
+  "state": "C:/Users/ahart/AppData/Local/Laplace/pgadmin",
+  "work": "E:/Data/Laplace/work/laplace-mono/operator-access",
+  "targets": [
+    {
+      "ssh": "hart-server",
+      "remote_root": false,
+      "superuser": true,
+      "psql": [
+        "/usr/local/pgsql/bin/psql",
+        "-h",
+        "/tmp",
+        "-U",
+        "laplace"
+      ],
+      "data": "/data/pgdata",
+      "host": "hart-server",
+      "hostaddr": "100.76.181.27",
+      "port": 5432,
+      "database": "postgres",
+      "client_addresses": [
+        "100.70.222.78/32",
+        "192.168.1.3/32"
+      ],
+      "server_certificate": "/etc/laplace/postgres-runtime.crt",
+      "service": "laplace-operator-staging",
+      "name": "HART-SERVER Laplace",
+      "server_id": 5,
+      "databases": [
+        "postgres",
+        "laplace",
+        "laplace-mono",
+        "laplace-desktop-app"
+      ]
+    },
+    {
+      "ssh": "hart-prod",
+      "remote_root": true,
+      "superuser": true,
+      "psql": [
+        "sudo",
+        "-n",
+        "-u",
+        "postgres",
+        "/usr/lib/postgresql/18/bin/psql",
+        "-h",
+        "/var/run/postgresql",
+        "-U",
+        "postgres"
+      ],
+      "data": "/data/postgresql/app",
+      "host": "hart-prod.us-east1-b.c.project-f5812b96-f924-41a4-94c.internal",
+      "hostaddr": "100.124.95.17",
+      "port": 5432,
+      "database": "laplace-app",
+      "client_addresses": [
+        "100.70.222.78/32"
+      ],
+      "server_certificate": "/etc/ssl/certs/ssl-cert-snakeoil.pem",
+      "service": "laplace-operator-production",
+      "name": "HART-PROD Laplace",
+      "server_id": 6,
+      "databases": [
+        "laplace-app"
+      ]
+    },
+    {
+      "data": "E:/Data/Laplace/pgdata",
+      "postgres_service": "laplace-postgres",
+      "server_id": 7,
+      "hostaddr": "127.0.0.1",
+      "database": "postgres",
+      "ssh": "hart-desktop",
+      "host": "HART-DESKTOP",
+      "authentication_identity": "sspi:HART-DESKTOP\\ahart",
+      "name": "HART-DESKTOP Laplace",
+      "service": "laplace-operator-development",
+      "prefix": "D:/Libraries/postgresql/18.6",
+      "authentication": "sspi",
+      "port": 5432,
+      "databases": [
+        "postgres",
+        "laplace",
+        "laplace-mono",
+        "laplace-desktop-app"
+      ]
+    }
+  ]
+}

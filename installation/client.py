@@ -53,9 +53,15 @@ def selected(configuration):
         return "'" + str(value).replace('\\', '\\\\').replace("'", "\\'") + "'"
     target = {'host': host['socket'], 'port': host['port'], 'dbname': host['database'], 'user': role}
     options = profile.get('connection', {})
-    if set(options) - {'hostaddr', 'sslmode', 'sslrootcert', 'passfile', 'connect_timeout'}:
+    if set(options) - {'hostaddr', 'sslmode', 'sslrootcert', 'passfile', 'connect_timeout', 'require_auth'}:
         raise ValueError('Unsupported client connection option; passwords belong in the credential store')
     target.update(options)
+    authentication = options.get('require_auth')
+    if authentication is not None:
+        if authentication != 'sspi' or os.name != 'nt':
+            raise ValueError('Explicit client authentication must be Windows SSPI')
+        if host['socket'].lower() not in {socket.gethostname().lower(), 'localhost', '127.0.0.1', '::1'}:
+            raise ValueError('SSPI client selection requires the local Windows database')
     if os.name == 'nt' and target.get('sslmode') != 'verify-full':
         raise ValueError('The Windows network client requires full database certificate verification')
     connection = ' '.join(key + '=' + conn(value) for key, value in target.items())
@@ -67,6 +73,8 @@ def selected(configuration):
         'LAPLACE_FIRMWARE': str(release / 'share/firmware/program.firmware'),
         'OMP_NUM_THREADS': str(host['threads']), 'MKL_NUM_THREADS': '1', 'LAPLACE_BATCH_MB': str(host['batch_mb']),
     }
+    if authentication == 'sspi':
+        environment['LAPLACE_DATABASE_AUTHENTICATION'] = 'sspi'
     return executable, environment, {'implementation': 'laplace', 'configuration': str(configuration),
         'installation': str(installation), 'release': str(release), 'executable': str(executable),
         'database_host': host['socket'], 'database': host['database'], 'database_role': role,
@@ -77,6 +85,8 @@ def process_environment(environment):
     # The named client controls selection; do not inherit another implementation's
     # LAPLACE_* values from a developer shell. libpq uses the human's own credential store.
     inherited = {k: v for k, v in os.environ.items() if not k.startswith('LAPLACE_')}
+    if environment.get('LAPLACE_DATABASE_AUTHENTICATION') == 'sspi':
+        inherited = {k: v for k, v in inherited.items() if not k.upper().startswith('PG')}
     # Intel's explicit affinity selection takes precedence; do not also request
     # the contradictory OpenMP binding setting inherited from a developer shell.
     if inherited.get('KMP_AFFINITY'):

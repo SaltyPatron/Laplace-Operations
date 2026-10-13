@@ -33,7 +33,8 @@ try {
     foreach ($path in $denied) {
         if (($caps.$path -join ',') -ne 'deny') { throw "An unrelated operation is permitted: $path" }
     }
-    $receipt.checks['four-record-read-only-policy-and-unrelated-access-denied']='passed'
+    $receipt.checks['declared-records-read-only-and-unrelated-access-denied']='passed'
+    $receipt.record_count=$paths.Count
     $blocked=$false
     try { $null=Invoke-DevelopmentBao $config GET $denied[0] $token } catch {
         if ($_.Exception.Message -notmatch 'HTTP 403') { throw }; $blocked=$true

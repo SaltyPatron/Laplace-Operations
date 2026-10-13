@@ -626,6 +626,14 @@ function access {
     Part 'access'
     if (-not (Elevated 'access')) { return }
     if (-not (PgReady)) { Say 'access' 'FAILED: the server is not accepting connections (cluster first)'; $failed.Add('access: server not ready'); return }
+    $operatorDeclaration=Join-Path $PSScriptRoot ('installation/'+$env:COMPUTERNAME.ToLowerInvariant()+'-operator.json')
+    if(Test-Path -LiteralPath $operatorDeclaration){
+        $operatorConfiguration=Get-Content -LiteralPath $operatorDeclaration -Raw | ConvertFrom-Json -AsHashtable
+        if(@($operatorConfiguration.targets | Where-Object {$_['authentication'] -eq 'sspi'}).Count){
+            & "$PSScriptRoot/installation/windows-operator-access.ps1" -Configuration $operatorDeclaration
+            return
+        }
+    }
     $operator = Join-Path $env:APPDATA 'postgresql\pgpass.conf'
     Attempt "role $PgRole" {
         if ((PgSql "SELECT count(*) FROM pg_roles WHERE rolname = '$PgRole'") -ne '1') { PgSql "CREATE ROLE $PgRole LOGIN SUPERUSER" | Out-Null }

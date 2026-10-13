@@ -9,6 +9,12 @@ Refactor has its own installer. See [the monorepo's setup entrypoints](https://g
 Runtime checks do not establish complete installation of all three implementations.
 See [installation configuration and receipts](../installation/README.md#default-setup-and-runtime-identity-installation).
 
+For human pgAdmin administration from Windows, use the installed
+[Windows operator access](operator-database-access.md). The declared Linux
+instances use the operator's Windows private-key store.
+The PostgreSQL operator roles require no password. Service AppRoles and browser
+login credentials are not used for these connections.
+
 See the [installation map](installation-map.md) for the current repo/environment layout and the
 different CLI implementations. These lifecycle controls are not a globally installed ingestion CLI.
 
@@ -200,18 +206,18 @@ For development on HART-DESKTOP, use the same entry point:
 ./laplace.ps1 verify -Target desktop
 ```
 
-`configure-development` provisions the identities declared in `development/installation.json` using the existing
-operator Bao login and authorized database administration connection. On this installation the desktop uses
-hart-server's `laplace-mono` substrate and a separate `laplace-desktop-app` database. The application schema has a
-non-login owner; the API uses a separate login with data access and no schema-creation or administrator privileges.
-Substrate and application credentials are distinct OpenBao records under `kv/hosts/hart-desktop`; the run command
-fetches them into the child process and never writes connection passwords into the source tree or logs.
+`configure-development` applies `development/installation.json`. HART-DESKTOP selects its local custom PostgreSQL
+installation, `laplace-mono` substrate and separate `laplace-desktop-app` database. The declared Windows developer
+and IIS account authenticate through SSPI to distinct restricted roles; no database password or human Bao login
+is needed. The application schema has a non-login owner, and its runtime role has no DDL or administrator access.
+Remote SCRAM declarations retain the existing OpenBao credential contract. See [operator access](operator-database-access.md)
+for pgAdmin's local SSPI and remote Windows-certificate connections.
 
-Configuration also enrolls `laplace-hart-desktop-development`. For an already configured desktop, run
-`./laplace.ps1 enroll-development` once with an authorized operator Bao login. Subsequent runs authenticate with
-this workload role, read exactly the two database records, development API identity and declared shared OAuth
-record, then revoke the short-lived Bao session. Operator token expiry no longer prevents a restart. The role
-cannot modify these records or read another host's credentials. This follows
+The existing `laplace-hart-desktop-development` workload enrollment supplies the API identity and shared OAuth
+record. Local SSPI runs do not fetch the two remote database-password records. Subsequent starts use the enrolled
+workload role and revoke the short-lived Bao session; operator token expiry does not prevent a restart. Initial
+enrollment on an unconfigured machine is the separate `enroll-development` operation. The workload cannot modify
+the records or read another host's credentials. This follows
 [OpenBao's application authentication contract](https://openbao.org/docs/auth/approle/).
 
 The enrollment is encrypted with [Windows user-bound DPAPI](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/convertfrom-securestring)

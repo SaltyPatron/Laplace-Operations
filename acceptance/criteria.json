@@ -354,6 +354,20 @@
           "evidence": "Positive/negative authorization and refresh/revocation tests using the intended workload identity."
         },
         {
+          "id": "desktop-operator-certificate",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "installation/Verify-OperatorAccess.ps1"],
+          "timeout_seconds": 120,
+          "evidence": "Saved pgAdmin connections to all declared Laplace databases: local Windows SSPI and remote non-exportable user-store certificates, exact identities, TLS, password-free roles, and rejected unmapped identities/missing keys/wrong certificates. GUI interaction, browser OAuth and renewal automation remain separate."
+        },
+        {
+          "id": "desktop-installed-databases",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "installation/Verify-DesktopDatabases.ps1"],
+          "timeout_seconds": 120,
+          "evidence": "One automatic custom PostgreSQL service, declared data directory and WAL readback, Windows SSPI/TLS over every resolved HART-DESKTOP address, installed monorepo/modular client queries, matching modular artifacts, and ready local IIS substrate."
+        },
+        {
           "id": "runtime-setup-boundaries",
           "platform": "linux",
           "argv": ["python3", "tests/runtime-owner.py"],
@@ -393,7 +407,7 @@
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "development/verify-enrollment.ps1"],
           "timeout_seconds": 120,
-          "evidence": "Actual encrypted workload enrollment: read four declared records without operator authentication; verify read-only capabilities, deny another host credential, revoke a token and authenticate a fresh session."
+          "evidence": "Actual encrypted workload enrollment: read the declared records without operator authentication (two API/OAuth records for local SSPI, four with remote database credentials); verify read-only capabilities, deny another host credential, revoke a token and authenticate a fresh session."
         },
         {
           "id": "desktop-database-identities",

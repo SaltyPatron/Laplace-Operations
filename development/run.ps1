@@ -37,6 +37,10 @@ $work = Join-Path $env:LAPLACE_WORK "operations/desktop-run-$stamp"
 $root = "kv/hosts/$($config.client)"
 $records = Get-DevelopmentSecrets $config
 function Connection($Record, [string]$Database, [string]$Role) {
+    if($config.PSObject.Properties['authentication'] -and $config.authentication -eq 'sspi'){
+        . (Join-Path $SourcePath 'deploy/windows/database-connection.ps1')
+        return New-LaplaceWindowsDatabaseConnection @{host=$config.database_host;port=$config.port;database=$Database;role=$Role;pool_max=$config.pool_max;authentication='sspi';root_certificate=$config.root_certificate}
+    }
     if ($Record.database_host -ne $config.database_host -or $Record.database -ne $Database -or $Record.role -ne $Role -or $Record.port -ne $config.port) {
         throw 'OpenBao selection differs from the declared development installation.'
     }
@@ -49,6 +53,7 @@ function Connection($Record, [string]$Database, [string]$Role) {
 }
 $env:LAPLACE_DB = Connection $records.substrate $config.substrate_database $config.substrate_role
 $env:LAPLACE_APP_DB = Connection $records.appdb $config.application_database $config.application_role
+foreach($item in @(Get-ChildItem Env: | Where-Object Name -Like 'PG*')){Remove-Item -LiteralPath ('Env:'+$item.Name)}
 $env:LAPLACE_OPERATOR_TOKEN = $records.'laplace-api'.operator_token
 if (-not $env:LAPLACE_OPERATOR_TOKEN) { throw 'Development operator identity is missing; run development/configure.ps1.' }
 $identity = $records.identity
