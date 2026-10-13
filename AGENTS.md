@@ -2,6 +2,11 @@
 
 The user's instructions and product specifications remain authoritative. The audit is evidence, not a replacement specification.
 
+For the ongoing HART-DESKTOP installation repair, read
+[`docs/desktop-repair-state.md`](docs/desktop-repair-state.md) for the user's scope,
+existing configuration owners, current evidence and unresolved work. Update it
+as facts change; it does not narrow the invention or replace acceptance criteria.
+
 For installation and infrastructure work, read `acceptance/criteria.json` and the parent tracker linked there. Select the
 criterion being implemented, preserve its dependencies and other open criteria, and run its actual checks. Add a missing
 check when implementing the behavior. `acceptance/verify.ps1` saves the command, result, revision, host and scope; use a
