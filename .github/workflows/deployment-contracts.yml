@@ -70,6 +70,7 @@ jobs:
           ruby tests/deployment-workflow.rb
           ruby tests/secrets-setup.rb
           bash tests/appdb-secrets.sh
+          bash tests/secrets-recovery.sh
           python3 tests/database-compatibility.py
           python3 tests/dependency-revisions.py
           python3 tests/cloud-idle.py
