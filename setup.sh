@@ -23,8 +23,13 @@
 # declares its own.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
+if [[ ${1:-} == nginx-repair ]]; then
+  shift
+  exec bash "$here/network/repair-nginx.sh" "$@"
+fi
 if [[ ${1:-} == secrets-protection ]]; then
   shift
+  bash "$here/network/repair-nginx.sh"
   exec python3 "$here/secrets/protection.py" "$@"
 fi
 # Repair has its own complete preflight and host lock before any mutation.
