@@ -29,7 +29,6 @@ if [[ ${1:-} == nginx-repair ]]; then
 fi
 if [[ ${1:-} == secrets-protection ]]; then
   shift
-  bash "$here/network/repair-nginx.sh"
   exec python3 "$here/secrets/protection.py" "$@"
 fi
 # Repair has its own complete preflight and host lock before any mutation.
