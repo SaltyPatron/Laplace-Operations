@@ -482,6 +482,13 @@
           "evidence": "Actual restore/recovery operation receipts without overwriting serving data."
         },
         {
+          "id": "secrets-backup-isolation",
+          "platform": "linux",
+          "argv": ["bash", "tests/secrets-backup.sh"],
+          "timeout_seconds": 60,
+          "evidence": "Isolated SQLite restores and snapshot transport fixtures: each healthy store remains backed up during six failures of the other store; incomplete runs fail without pruning preceding backups; a recovered pair succeeds. Not a live secrets restore drill."
+        },
+        {
           "id": "application-recovery",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "recovery", "-Target", "production"],

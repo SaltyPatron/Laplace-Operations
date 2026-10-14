@@ -49,10 +49,13 @@ snapshot when its snapshot token exists, under `/backup/secrets`, retaining
 30 days. Service success does not prove both backups exist or are restorable:
 snapshot presence, off-host copies and restore drills remain unverified.
 
-The repository replacement backup requires both stores: missing snapshot credentials,
-failed renewal, failed snapshot retrieval, SQLite corruption, or snapshot checksum
-failure returns nonzero without pruning earlier backups. It stages under the backup
-volume with private permissions and publishes only after validation. The SQLite
+The backup attempts both stores independently. A sealed OpenBao or missing snapshot
+credential does not discard a verified Vaultwarden backup; a missing or corrupt
+Vaultwarden database does not prevent a verified OpenBao snapshot. Each store is
+published only after its checks pass. The job still requires both stores to succeed:
+any failure returns nonzero, retains all earlier backups, and writes a private
+per-store result under `receipts/`. Retention runs only after a complete successful
+pair. It stages under the backup volume with private permissions. The SQLite
 fixture was restored and read; failure fixtures preserve earlier backups. These are
 script checks, not a restore drill of the live vaults. Snapshot verification follows
 OpenBao's [archive format](https://pkg.go.dev/github.com/openbao/openbao/v2@v2.7.0/internal/physical/raft/snapshot):

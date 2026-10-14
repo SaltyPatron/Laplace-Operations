@@ -9,12 +9,14 @@ VW=${VAULTWARDEN_DATA_DIR:-/hosting/vaultwarden/data}
 TOKEN=${BAO_SNAPSHOT_TOKEN_FILE:-/etc/openbao/snapshot.token}
 BACKUP_MOUNT=${SECRETS_BACKUP_MOUNT:-/backup}
 DATA_MOUNT=${SECRETS_DATA_MOUNT:-/hosting}
-mountpoint -q "$DATA_MOUNT" && mountpoint -q "$BACKUP_MOUNT" || { echo 'Declared secrets data and backup volumes must be mounted' >&2; exit 1; }
+if ! mountpoint -q "$DATA_MOUNT" || ! mountpoint -q "$BACKUP_MOUNT"; then
+  echo 'Declared secrets data and backup volumes must be mounted' >&2; exit 1
+fi
 for program in bao sqlite3 tar sha256sum flock; do
   command -v "$program" >/dev/null || { echo "missing prerequisite: $program" >&2; exit 1; }
 done
-[[ -s "$TOKEN" && -r "$TOKEN" ]] || { echo 'Existing Bao snapshot credential required' >&2; exit 1; }
-[[ -s "$VW/db.sqlite3" ]] || { echo 'Existing Vaultwarden database required' >&2; exit 1; }
+# The job reports missing inputs per store and still protects the other store.
+# Installing its owner must not make one store's outage disable both backups.
 echo "=== Vaultwarden and OpenBao backups -> $BACKUP"
 install -d -m 700 "$BACKUP"
 install -m 750 "$HERE/backup-secrets.sh" /usr/local/sbin/backup-secrets
