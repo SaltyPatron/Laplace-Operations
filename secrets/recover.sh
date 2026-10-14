@@ -13,8 +13,11 @@ bao_select_escrow() {
   case $# in
     0)
       echo 'OpenBao is sealed. No /root/openbao-init-*.json escrow file exists.' >&2
-      echo 'The original setup instructed moving these shares offline and removing the local copy.' >&2
-      echo 'Use bao operator unseal with the original offline shares, or --unseal-file PATH for an existing relocated escrow.' >&2
+      echo 'The hart-server shares were imported into https://vault.hartonomous.com, folder Infrastructure.' >&2
+      echo 'Recorded note: OpenBao unseal keys + init (hart-server, 2026-10-09).' >&2
+      echo 'Run bao operator unseal three times, entering different unseal_keys_b64 shares at the hidden prompts.' >&2
+      echo 'This does not require sudo or bao login. Do not paste shares into chat or put them in command arguments.' >&2
+      echo 'Alternatively, --unseal-file PATH accepts an existing root-only escrow; no new export is required.' >&2
       return 1 ;;
     1) printf '%s\n' "$1" ;;
     *)

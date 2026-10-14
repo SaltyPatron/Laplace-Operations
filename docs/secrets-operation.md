@@ -26,7 +26,29 @@ sudo ./setup.sh secrets-protection
 ```
 
 After a reboot the existing Shamir-sealed OpenBao cannot authenticate users or
-agents until its threshold shares are supplied. `secrets-recover` repairs nginx
+agents until its threshold shares are supplied.
+
+On this installation, the October 9 import record places the shares in
+`https://vault.hartonomous.com`, folder **Infrastructure**, secure note
+**OpenBao unseal keys + init (hart-server, 2026-10-09)**. Its reported readback matched
+the original before the plaintext `~/.config/shell/openbao-init-20261009.json` was
+shredded. The earlier `/root` copy had already been removed. Local escrow discovery
+alone therefore cannot recover this installation. This historical receipt does not
+replace verification that the user can currently decrypt the note.
+
+Unlock that note through the existing Vaultwarden account, then run the following
+command three times, supplying a different `unseal_keys_b64` share at each hidden
+prompt. No sudo or OpenBao login is required. Keep shares out of command arguments,
+logs and chat; there is no need to export another plaintext file.
+
+```bash
+bao operator unseal
+```
+
+Then `sudo ./setup.sh secrets-recover` verifies HTTPS recovery without reading
+escrow because Bao is already unsealed. Ordinary setup also follows that path.
+
+For installations retaining an existing local escrow, `secrets-recover` repairs nginx
 startup and submits shares from the existing, root-only `/root/openbao-init-*.json`
 escrow when exactly one such file exists. It never initializes storage, reads the
 root token, replaces authentication, or installs unattended unseal. Keys travel
