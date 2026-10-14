@@ -21,8 +21,25 @@ only the unprivileged host/binary/service metadata preflight.
 On hart-server:
 
 ```bash
+sudo ./setup.sh secrets-recover
 sudo ./setup.sh secrets-protection
 ```
+
+After a reboot the existing Shamir-sealed OpenBao cannot authenticate users or
+agents until its threshold shares are supplied. `secrets-recover` repairs nginx
+startup and submits shares from the existing, root-only `/root/openbao-init-*.json`
+escrow when exactly one such file exists. It never initializes storage, reads the
+root token, replaces authentication, or installs unattended unseal. Keys travel
+through stdin to the loopback endpoint, never command arguments or output. If
+escrow was moved offline, use `bao operator unseal` with the offline shares; no
+replacement keys can decrypt the existing store. Multiple escrow files require
+explicit selection with `--unseal-file PATH`. `--check` is read-only.
+
+Ordinary setup performs this recovery before the protection burst check. A sealed
+Bao returns HTTP 503 even for unauthenticated renewals; that is a readiness failure,
+not evidence that the nginx limiter failed. Protections still require observed
+HTTP 403/429 boundaries and healthy HTTPS after recovery. Recovery refuses missing
+or insecure escrow without changing initialization, data or identities.
 
 `secrets/protection.json` declares paths and limits. Nginx permits 10 requests/second
 per client (burst 30), 1 self-renewal/second per client (burst 10), and 40 requests/second

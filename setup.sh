@@ -6,6 +6,7 @@
 #                              appdb | backup | site | runtime | modular | agents | idlestop | report
 #   sudo ./setup.sh machine    public declaration permissions only; no packages, database or service changes
 #   sudo ./setup.sh secrets-stack  converge the existing hart-server Vaultwarden/OpenBao stack; not part of all
+#   sudo ./setup.sh secrets-recover recover nginx and unseal existing Bao from its private escrow; no initialization
 #   sudo ./setup.sh secrets-backup install the backup job only and run a checked backup; not part of all
 #   sudo ./setup.sh secrets-client refresh the declared app DB credentials through this host's Bao AppRole; install timer
 #   sudo ./setup.sh chess      the chess lab's engines, conductor, networks and books (chess/provision.sh); not part of all
@@ -23,6 +24,10 @@
 # declares its own.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
+if [[ ${1:-} == secrets-recover ]]; then
+  shift
+  exec bash "$here/secrets/recover.sh" "$@"
+fi
 if [[ ${1:-} == nginx-repair ]]; then
   shift
   exec bash "$here/network/repair-nginx.sh" "$@"

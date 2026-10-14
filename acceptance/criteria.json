@@ -416,6 +416,13 @@
           "evidence": "Real nginx under the user's systemd manager with the shipped unit policy: failed startup, automatic retry and HTTP 200 over an isolated Unix socket. Does not establish installed HTTPS routing or OpenBao unseal."
         },
         {
+          "id": "secrets-sealed-recovery",
+          "platform": "linux",
+          "argv": ["bash", "tests/secrets-recovery.sh"],
+          "timeout_seconds": 30,
+          "evidence": "Shipped recovery function with isolated loopback transport: threshold shares via stdin, no root token, no initialization, already-unsealed no-op, rejected share stops, unsafe escrow refusal. Live root recovery and authenticated login remain separate evidence."
+        },
+        {
           "id": "browser-routes",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "network/verify-routes.ps1"],
