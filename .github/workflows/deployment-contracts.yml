@@ -96,4 +96,11 @@ jobs:
       - name: Install SQLite for backup recovery checks
         run: sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3
       - name: Check secrets backup failure and recovery behavior
-        run: TMPDIR="$RUNNER_TEMP" bash tests/secrets-backup.sh
+        run: TMPDIR="$RUNNER_TEMP" pwsh -NoProfile -File acceptance/verify.ps1 -Check secrets-backup-isolation -Output "$RUNNER_TEMP/acceptance-secrets-backup.json"
+      - name: Preserve secrets backup acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: acceptance-secrets-backup-${{ github.sha }}
+          path: ${{ runner.temp }}/acceptance-secrets-backup.json
+          if-no-files-found: error
