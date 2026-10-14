@@ -23,6 +23,10 @@
 # declares its own.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
+if [[ ${1:-} == nginx-repair ]]; then
+  shift
+  exec bash "$here/network/repair-nginx.sh" "$@"
+fi
 if [[ ${1:-} == secrets-protection ]]; then
   shift
   exec python3 "$here/secrets/protection.py" "$@"

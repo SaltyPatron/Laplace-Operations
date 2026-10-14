@@ -409,6 +409,13 @@
           "evidence": "Client-to-service probes plus renewal/distribution evidence."
         },
         {
+          "id": "nginx-startup-recovery",
+          "platform": "linux",
+          "argv": ["bash", "tests/nginx-boot.sh"],
+          "timeout_seconds": 60,
+          "evidence": "Real nginx under the user's systemd manager with the shipped unit policy: failed startup, automatic retry and HTTP 200 over an isolated Unix socket. Does not establish installed HTTPS routing or OpenBao unseal."
+        },
+        {
           "id": "browser-routes",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "network/verify-routes.ps1"],
