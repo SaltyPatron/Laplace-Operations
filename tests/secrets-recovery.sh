@@ -5,6 +5,20 @@ repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
 source "$repo/secrets/recover.sh"
+if bao_select_escrow > "$scratch/selected" 2> "$scratch/diagnostic"; then
+  echo 'Missing escrow was accepted' >&2; exit 1
+fi
+[[ ! -s "$scratch/selected" ]]
+grep -Fq 'No /root/openbao-init-*.json escrow file exists.' "$scratch/diagnostic"
+if bao_select_escrow /root/openbao-init-a.json /root/openbao-init-b.json > "$scratch/selected" 2> "$scratch/diagnostic"; then
+  echo 'Ambiguous escrow was accepted' >&2; exit 1
+fi
+[[ ! -s "$scratch/selected" ]]
+grep -Fq 'Found 2 escrow candidates' "$scratch/diagnostic"
+grep -Fq '/root/openbao-init-a.json' "$scratch/diagnostic"
+grep -Fq '/root/openbao-init-b.json' "$scratch/diagnostic"
+[[ $(bao_select_escrow '/root/existing escrow.json') == '/root/existing escrow.json' ]]
+echo 'PASS: missing, unique and ambiguous escrow are distinguished without reading file contents.'
 escrow="$scratch/escrow.json"
 printf '%s\n' '{"unseal_keys_b64":["fixture-one","fixture-two","fixture-three"],"root_token":"fixture-root-never-used"}' > "$escrow"
 chmod 600 "$escrow"
