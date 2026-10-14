@@ -9,6 +9,22 @@ bao_state() {
     http://127.0.0.1:8200/v1/sys/seal-status
 }
 
+bao_select_escrow() {
+  case $# in
+    0)
+      echo 'OpenBao is sealed. No /root/openbao-init-*.json escrow file exists.' >&2
+      echo 'The original setup instructed moving these shares offline and removing the local copy.' >&2
+      echo 'Use bao operator unseal with the original offline shares, or --unseal-file PATH for an existing relocated escrow.' >&2
+      return 1 ;;
+    1) printf '%s\n' "$1" ;;
+    *)
+      printf 'OpenBao is sealed. Found %s escrow candidates; none selected:\n' "$#" >&2
+      printf '  %s\n' "$@" >&2
+      echo 'Select the escrow for this existing store with --unseal-file PATH; file contents have not been read.' >&2
+      return 1 ;;
+  esac
+}
+
 bao_unseal_existing() {
   local escrow=${1:-} state threshold progress index response
   state=$(bao_state)
@@ -27,12 +43,7 @@ bao_unseal_existing() {
     shopt -s nullglob
     candidates=(/root/openbao-init-*.json)
     shopt -u nullglob
-    if [[ ${#candidates[@]} != 1 ]]; then
-      echo 'OpenBao is sealed. Expected one existing /root/openbao-init-*.json; none or multiple found.' >&2
-      echo 'Select the existing escrow with --unseal-file PATH, or use bao operator unseal with the offline shares.' >&2
-      return 1
-    fi
-    escrow=${candidates[0]}
+    escrow=$(bao_select_escrow "${candidates[@]}") || return 1
   fi
   [[ -f $escrow && ! -L $escrow ]] || { echo 'Escrow must be an existing regular file, not a symlink.' >&2; return 1; }
   local owner mode
