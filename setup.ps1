@@ -82,7 +82,9 @@ $Msys2Packages = 'autoconf', 'automake', 'libtool', 'make', 'pkgconf', 'bison', 
 # the contract and the prefix, as the installs on HART-DESKTOP were made (their build trees' caches, 2026-10-04).
 $DepSourceDir = @{ lz4 = 'build\cmake'; zstd = 'build\cmake' }
 $DepOptions = @{
-    lz4       = @('-DLZ4_BUILD_CLI=OFF', '-DBUILD_STATIC_LIBS=OFF')
+    # ICX 2026.1 loop vectorization leaves bytes unwritten in the LZ4 decoder.
+    # Keep /O2 and SLP; tests/windows-lz4.ps1 reproduces the installed failure.
+    lz4       = @('-DLZ4_BUILD_CLI=OFF', '-DBUILD_STATIC_LIBS=OFF', '-DCMAKE_C_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG /clang:-fno-vectorize')
     zstd      = @('-DZSTD_BUILD_PROGRAMS=OFF', '-DZSTD_BUILD_TESTS=OFF', '-DZSTD_BUILD_CONTRIB=OFF')
     libxml2   = @('-DLIBXML2_WITH_PROGRAMS=OFF', '-DLIBXML2_WITH_PYTHON=OFF', '-DLIBXML2_WITH_TESTS=OFF', '-DLIBXML2_WITH_ICONV=OFF', '-DLIBXML2_WITH_HTTP=OFF')
     'json-c'  = @('-DBUILD_APPS=OFF')
@@ -158,6 +160,11 @@ function GrantPg {
 # configured with, so it is made fresh.
 function Contract { ((Get-Content (Join-Path $PSScriptRoot 'toolchain\determinism.tsv') | Where-Object { $_ -match '^[a-z]' }) -join "`n") }
 function ContractMark($r) { Join-Path (Prefix $r) ".contract-$($r.name)" }
+function DependencyContract($r) {
+    $value = Contract
+    if ($r.name -eq 'lz4') { $value += "`nlz4-windows-decoder-v1: /clang:-fno-vectorize" }
+    $value
+}
 # The server stopped around a step that replaces files it holds open (its own binaries, the DLLs beside them): the
 # service, elevated, never under an ingest; a hand-started server is not touched and the step is refused.
 function WithServerStopped([string]$what, [scriptblock]$body) {
@@ -363,7 +370,10 @@ function deps {
         if (-not $proof) { Say $what 'NO PROOF in dependencies.tsv: not built'; continue }
         $mark = ContractMark $r; $compiled = $r.build -ne 'headers'
         if (Test-Path $proof) {
-            if (-not $compiled -or ((Test-Path $mark) -and (Get-Content $mark -Raw) -eq (Contract))) { Say $what "installed at $prefix"; continue }
+            if (-not $compiled -or ((Test-Path $mark) -and (Get-Content $mark -Raw) -eq (DependencyContract $r))) {
+                if ($r.name -eq 'lz4') { & "$PSScriptRoot/tests/windows-lz4.ps1" -Library (Join-Path $prefix 'bin/lz4.dll') -BuildDirectory (Join-Path $b 'regression') }
+                Say $what "installed at $prefix"; continue
+            }
             Say $what $(if (Test-Path $mark) { 'the contract changed since it was built: built again' } else { 'built before the contract was recorded: built again' })
         }
         if (-not (Test-Path $checkout)) { Say $what "NOT BUILT: no source at $checkout"; continue }
@@ -443,7 +453,8 @@ function deps {
                 }
             }
             if (-not (Test-Path $proof)) { throw "DID NOT INSTALL: no $proof; the build is $b" }
-            if ($compiled) { Set-Content -Path $mark -Value (Contract) -NoNewline }
+            if ($r.name -eq 'lz4') { & "$PSScriptRoot/tests/windows-lz4.ps1" -Library (Join-Path $prefix 'bin/lz4.dll') -BuildDirectory (Join-Path $b 'regression') }
+            if ($compiled) { Set-Content -Path $mark -Value (DependencyContract $r) -NoNewline }
             Say $what "built and installed at $prefix"
         }
     }
@@ -469,7 +480,26 @@ function RuntimeClosure {
         $file = $queue.Dequeue(); if ($seen[$file]) { continue }; $seen[$file] = $true
         foreach ($line in (& dumpbin.exe /nologo /dependents $file 2>$null)) {
             $name = $line.Trim(); if ($name -notmatch '^[\w.+-]+\.dll$') { continue }
-            $key = $name.ToLowerInvariant(); if ($have[$key]) { continue }
+            $key = $name.ToLowerInvariant()
+            if ($have[$key]) {
+                # Existing LZ4 copies previously survived every dependency rebuild.
+                if ($key -eq 'lz4.dll') {
+                    $expected = $from | ForEach-Object { Join-Path $_ $name } | Where-Object { Test-Path $_ } | Select-Object -First 1
+                    $installed = Join-Path $PgBin $name
+                    if ($expected -and (Get-FileHash -LiteralPath $expected).Hash -ne (Get-FileHash -LiteralPath $installed).Hash) {
+                        WithServerStopped 'LZ4 runtime refresh' {
+                            $backup = Join-Path $logDir ('lz4-before-'+[guid]::NewGuid().ToString('N')+'.dll')
+                            Copy-Item -LiteralPath $installed -Destination $backup
+                            try {
+                                Copy-Item -LiteralPath $expected -Destination $installed -Force
+                                if ((Get-FileHash -LiteralPath $expected).Hash -ne (Get-FileHash -LiteralPath $installed).Hash) { throw 'Installed LZ4 hash differs after runtime refresh' }
+                                & "$PSScriptRoot/tests/windows-lz4.ps1" -Library $installed -BuildDirectory (Join-Path $Build 'deps/lz4/regression')
+                            } catch { Copy-Item -LiteralPath $backup -Destination $installed -Force; throw }
+                        }
+                    }
+                }
+                continue
+            }
             $src = $from | ForEach-Object { Join-Path $_ $name } | Where-Object { Test-Path $_ } | Select-Object -First 1
             if (-not $src) { continue }                                       # not ours: Windows' own, or the C runtime
             Copy-Item -LiteralPath $src -Destination $PgBin; $have[$key] = $true; $copied.Add($name); $queue.Enqueue((Join-Path $PgBin $name))
