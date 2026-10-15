@@ -63,6 +63,13 @@
       ],
       "checks": [
         {
+          "id": "lz4-windows-roundtrip",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/windows-lz4.ps1"],
+          "timeout_seconds": 120,
+          "evidence": "Actual named DLL: exact full and partial decompression of a PostgreSQL expression and 10000 deterministic inputs. This does not establish live database or website recovery."
+        },
+        {
           "id": "release-promotion",
           "platform": "any",
           "argv": null,
