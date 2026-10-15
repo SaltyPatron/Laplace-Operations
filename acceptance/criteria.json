@@ -382,6 +382,13 @@
           "evidence": "Real Windows DPAPI encryption, preservation of an existing enrollment, wrong-target refusal and corrupt-file refusal. Live policy enforcement is a separate check."
         },
         {
+          "id": "platform-access-resolution",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/platform-access-resolution.ps1"],
+          "timeout_seconds": 60,
+          "evidence": "Fixture: exact provider tuples resolve fresh local UUIDs; audited administrator roles and serving owner recognition are required. Does not establish live owner activation."
+        },
+        {
           "id": "desktop-workload-enrollment",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "development/verify-enrollment.ps1"],
