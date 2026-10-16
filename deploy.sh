@@ -74,6 +74,9 @@ step build      "$here/build.sh" install
 [ -n "$(ls "$LAPLACE_GRAMMARS" 2>/dev/null)" ] || step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"   # compiled grammar dependencies; no resource admission
 step highway-fingerprint laplace highway --fingerprint
 step deploy     laplace deploy
+if [ -f /etc/laplace/modular.json ] && [ "${db:-laplace}" = laplace ]; then
+  step modular-grants python3 -c 'import importlib.util,json; spec=importlib.util.spec_from_file_location("m","'"$here"'/installation/modular.py"); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); cfg=m.config_load("/etc/laplace/modular.json"); m.sql(cfg, m.grants(cfg))'
+fi
 step status     laplace status
 ss -ltn 2>/dev/null | grep -q "0.0.0.0:5432\|\*:5432" || echo "
 The server listens on localhost only: sudo ./setup.sh declares the machine, this among it (the one step that needs root)."

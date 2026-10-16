@@ -164,6 +164,23 @@ class Installation(unittest.TestCase):
         self.assertEqual((prefix / 'current').resolve(), old)
         self.assertIn(('start',), legacy)
 
+    def test_non_root_sql_uses_operator_role(self):
+        config = self.load()
+        called = []
+
+        def command(args, **kwargs):
+            called.append([str(v) for v in args])
+            return subprocess.CompletedProcess(args, 0, stdout='ok\n')
+
+        with patch.object(modular.os, 'geteuid', return_value=1000), \
+             patch.object(modular, 'checked', side_effect=command):
+            result = modular.sql(config, 'SELECT 1;')
+        self.assertEqual(result, 'ok')
+        self.assertEqual(len(called), 1)
+        self.assertNotIn('runuser', called[0])
+        self.assertIn('-U', called[0])
+        self.assertIn('laplace', called[0])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,13 +2,13 @@
 
 ## 1. Host Topology & Environment Roles
 
-| Host | Role & OS | Public / Local Origin | Databases & Services |
-|---|---|---|---|
-| **`HART-DESKTOP`** | Local Windows 11 development & optional GPU host. **No background GitHub Actions runners.** | `https://dev.hartonomous.com` (IIS), `http://localhost:5187` (dev source run) | Single custom PostgreSQL 18.6 (`laplace-postgres`, port 5432, SSPI + TLS): `laplace-mono`, `laplace-desktop-app`, and `laplace`. |
-| **`hart-server`** | Ubuntu 22.04 server (**damaged GPU must remain disabled**). Staging host, shared secrets, backups, and **default/BCP failover substrate DB for production**. | `https://staging.hartonomous.com` (`laplace-api`, `laplace-mcp`, `laplace-modular-mcp`) | PostgreSQL 18.6 cluster (`laplace-mono`, `laplace`), **OpenBao** (`https://openbao.hartonomous.com`), **Vaultwarden**, SMB shares (`/vault`), Linux GitHub Actions runners. |
-| **`hart-prod`** | Low-cost always-on GCP VM (`us-east1-b`). Production web/API host. | `https://api.hartonomous.com`, `https://mcp.hartonomous.com` | Local PostgreSQL 18.6 (`laplace-app` for accounts, sessions, keys, billing). Connects to `hart-server` (or `hart-cloud` when active) for substrate queries. |
-| **`hart-cloud`** | On-demand GCP `c3-standard-8` AVX-512 database & qualification VM. | Internal / Tailscale | **Kept `TERMINATED` (off) when idle** to preserve GCP trial credit. Auto-stops via `idlestop` once its lease expires. |
-| **`hart-router`** | OpenWrt router | LAN gateway | Split-horizon DNS and LAN routing. |
+| Host | Tailscale / LAN IP | Role & Environment Isolation Contract | Public / Local Origin | Databases & Services |
+|---|---|---|---|---|
+| **`HART-DESKTOP`** (`hart-desktop-1`) | `100.70.222.78`<br>`192.168.1.x` | **Local Interactive Dev**: Windows 11 development & optional GPU host. **Zero gatekeeping, no background GitHub Actions runners.** | `https://dev.hartonomous.com` (IIS), `http://localhost:5187` (dev source run) | Single custom PostgreSQL 18.6 (`laplace-postgres`, port 5432, SSPI + TLS): `laplace-mono`, `laplace-desktop-app`, and `laplace`. |
+| **`hart-server`** | `100.76.181.27`<br>`192.168.1.2` | **Staging (CI/CD App Deployment) + Shared Infra Host**: Ubuntu 22.04 server (**damaged GPU must remain disabled**). App & modular services deployed **via CI/CD only**; host remains accessible for `/vault` storage, OpenBao, Vaultwarden, and DB hosting. | `https://staging.hartonomous.com` (`laplace-api`, `laplace-mcp`, `laplace-modular-mcp`) | PostgreSQL 18.6 cluster (`laplace-mono`, `laplace`), **OpenBao** (`https://openbao.hartonomous.com`), **Vaultwarden**, SMB shares (`/vault`), Linux GitHub Actions runners. |
+| **`hart-prod`** | `100.124.95.17` | **Locked Enterprise Production (CI/CD Promotion Only)**: Low-cost always-on GCP VM (`us-east1-b`). **Never manually SSH-patched or built on.** Receives verified packages promoted from `hart-server` by CI/CD. | `https://api.hartonomous.com`, `https://mcp.hartonomous.com` | Local PostgreSQL 18.6 (`laplace-app` for accounts, sessions, keys, billing). Connects to `hart-server` (or `hart-cloud` when active) over Tailscale for substrate queries. |
+| **`hart-cloud`** | `100.103.255.122` | **On-Demand AVX-512 DB & Qualification Host**: GCP `c3-standard-8` VM. | Internal / Tailscale | **Kept `TERMINATED` (off) when idle** to preserve GCP trial credit. Auto-stops via `idlestop` once its lease expires. |
+| **`hart-router`** | `192.168.1.1` | OpenWrt router | LAN gateway | Split-horizon DNS and LAN routing. |
 
 ---
 

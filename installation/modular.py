@@ -145,9 +145,14 @@ def host_lock(config):
 
 
 def sql(config, statement):
-    return checked(['runuser', '-u', config['pg_os_user'], '--', Path(config['pgbin']) / 'psql',
-        '-XwAt', '-v', 'ON_ERROR_STOP=1', '-h', config['socket'], '-p', config['port'],
-        '-d', config['database'], '-f', '-'], input=statement, capture_output=True).stdout.strip()
+    psql = [Path(config['pgbin']) / 'psql', '-XwAt', '-v', 'ON_ERROR_STOP=1',
+            '-h', config['socket'], '-p', config['port'], '-d', config['database'], '-f', '-']
+    if os.geteuid() == 0:
+        command = ['runuser', '-u', config['pg_os_user'], '--', *psql]
+    else:
+        operator_role = (config.get('operator_client') or {}).get('role') or os.environ.get('LAPLACE_ROLE') or 'laplace'
+        command = [*psql[:-2], '-U', operator_role, '-f', '-']
+    return checked(command, input=statement, capture_output=True).stdout.strip()
 
 
 def grants(config):
@@ -420,6 +425,7 @@ def main():
             if not all(path.is_file() for path in (UNITS / UNIT, Path(config['environment_file']),
                     UNITS / 'laplace-modular-mcp-restart.path')):
                 raise ValueError('Modular installation is incomplete; run sudo ./setup.sh before deployment')
+            sql(config, grants(config))
         receipt_path = Path(config['receipts']) / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex[:8])
         receipt_path.mkdir(parents=True)
         if installing:
