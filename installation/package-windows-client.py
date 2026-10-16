@@ -61,6 +61,9 @@ def main():
     config = json.loads(args.installation.read_text())
     if config['schema'] != 'laplace.modular-installation/v1' or config['host'].lower() != socket.gethostname().split('.')[0].lower():
         raise ValueError('Installation declaration does not select this Windows host')
+    operator_sid = config['operator_client'].get('windows_sid', '')
+    if not re.fullmatch(r'S-1-[0-9-]+', operator_sid):
+        raise ValueError('Declare the Windows operator SID that reads the installed client')
     for key in ('prefix', 'build', 'engine', 'native', 'prepared', 'grammars', 'ucd', 'installed_config'):
         path = Path(config[key])
         if not path.is_absolute() or '..' in path.parts:
@@ -118,6 +121,9 @@ def main():
         shutil.rmtree(candidate)  # checked above: only this operation's private staging directory
     else:
         candidate.rename(release)
+    # A private tempfile created while elevated can admit only the elevated
+    # token. The operator's ordinary token must also read the published release.
+    run(['icacls.exe', release, '/grant', '*' + operator_sid + ':(OI)(CI)(RX)'])
     if config.get('database_artifact_reader'):
         if config['socket'].lower() != socket.gethostname().lower() or not re.fullmatch(r'S-1-[0-9-]+', config['database_artifact_reader']):
             raise ValueError('A database artifact reader must select a Windows SID on the local database host')

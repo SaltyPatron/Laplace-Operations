@@ -59,6 +59,7 @@ Set-Default LAPLACE_PG_IDENTITIES "$env:USERNAME,LaplacePool,LOCAL SERVICE"
 Set-Default LAPLACE_LOCKS   "$env:LAPLACE_WORK\locks"                       # one deployment or ingest per database at a time: the locks
 Set-Default LAPLACE_PGHOST  '127.0.0.1'                                     # where this machine's own tools reach the server: loopback (Windows has no socket)
 Set-Default LAPLACE_PGPORT  '5432'                                          # the port the server listens on; the settings, the access rules and the firewall follow it
+Set-Default LAPLACE_PG_LISTEN_ADDRESSES '*'                                # includes interfaces appearing after service startup; pg_hba owns admission
 Set-Default LAPLACE_CONNINFO "host=$env:LAPLACE_PGHOST port=$env:LAPLACE_PGPORT user=$env:LAPLACE_ROLE dbname=laplace"   # libpq form; names the database. hart-server's: host=192.168.1.2 port=5432 user=laplace dbname=laplace sslmode=require
 # The deployment target, whose operator holds the role's one password for the whole installation (setup.sh access writes
 # it into every operator's ~/.pgpass there): this machine's role takes it, so one pgpass line reaches both databases
