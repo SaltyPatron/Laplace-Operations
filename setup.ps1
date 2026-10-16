@@ -247,7 +247,11 @@ function rights {
     Part 'rights'
     if (-not (Elevated 'rights')) { return }
     Attempt 'rights' { GrantPg; Say $PgAccount "modify $PgData$(if ($PgWal -ne "$PgData\pg_wal") { ", $PgWal" })$(if ($PgTemp) { ", $PgTemp" }), $PgLogs; read $PgDir" }
-    if (Test-Path $PgCanon) { & icacls.exe $PgCanon /inheritance:r /grant '*S-1-5-32-544:F' /Q | Out-Null; Say $PgCanon 'administrators only' }
+    if (Test-Path $PgCanon) {
+        $opSid = ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+        & icacls.exe $PgCanon /inheritance:r /grant '*S-1-5-32-544:F' '*S-1-5-18:F' "*${opSid}:F" /Q | Out-Null
+        Say $PgCanon "administrators and $opSid"
+    }
     Say 'agents' 'none on this machine; nothing runs elevated but this'
 }
 # Dependencies: every manifest row present at its pin, then every row the manifest says to build, built and installed

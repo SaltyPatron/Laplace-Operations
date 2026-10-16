@@ -9,13 +9,14 @@ $scratch = Join-Path ([IO.Path]::GetTempPath()) ('laplace-config-' + [guid]::New
 $keys = @('LAPLACE_SRC','LAPLACE_DATA','LAPLACE_WORK','LAPLACE_BUILD','LAPLACE_BUILD_ROOT','LAPLACE_EXTERNAL','LAPLACE_ENGINE_BUILD','LAPLACE_PGDATA','LAPLACE_PGWAL','LAPLACE_PGUSER','LAPLACE_PG_SERVICE_ACCOUNT','LAPLACE_CONFIG_SOURCE')
 function Run([string]$exe, [string[]]$arguments, [hashtable]$extra = @{}) {
     $p = [Diagnostics.ProcessStartInfo]::new($exe)
-    $p.UseShellExecute = $false; $p.RedirectStandardOutput = $true; $p.RedirectStandardError = $true
+    $p.UseShellExecute = $false; $p.RedirectStandardInput = $true; $p.RedirectStandardOutput = $true; $p.RedirectStandardError = $true
     foreach ($key in @($p.Environment.Keys)) { if ($key -match '^(LAPLACE_|PGPASSWORD$|INGEST$|REPOS$)') { [void]$p.Environment.Remove($key) } }
     $p.Environment['LAPLACE_MACHINE_ENV'] = Join-Path $scratch 'machine.env'
     $p.Environment['LAPLACE_ROOT'] = $LaplaceRoot
     foreach ($key in $extra.Keys) { $p.Environment[$key] = $extra[$key] }
     foreach ($arg in $arguments) { $p.ArgumentList.Add($arg) }
     $child = [Diagnostics.Process]::Start($p)
+    $child.StandardInput.Close()
     $stdout = $child.StandardOutput.ReadToEndAsync(); $stderr = $child.StandardError.ReadToEndAsync()
     if (-not $child.WaitForExit(60000)) { $child.Kill($true); throw "$exe timed out" }
     if ($child.ExitCode -ne 0) { throw "$exe failed ($($child.ExitCode)): $($stderr.GetAwaiter().GetResult()) $($stdout.GetAwaiter().GetResult())" }

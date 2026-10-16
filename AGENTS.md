@@ -1,23 +1,37 @@
-# Operational acceptance
+# Laplace-Operations Engineering & Operational Guide
 
-The user's instructions and product specifications remain authoritative. The audit is evidence, not a replacement specification.
+## 1. Host Topology & Environment Roles
 
-For installation and infrastructure work, read `acceptance/criteria.json` and the parent tracker linked there. Select the
-criterion being implemented, preserve its dependencies and other open criteria, and run its actual checks. Add a missing
-check when implementing the behavior. `acceptance/verify.ps1` saves the command, result, revision, host and scope; use a
-new receipt path for each run. CI publishes receipts as artifacts.
+| Host | Role & OS | Public / Local Origin | Databases & Services |
+|---|---|---|---|
+| **`HART-DESKTOP`** | Local Windows 11 development & optional GPU host. **No background GitHub Actions runners.** | `https://dev.hartonomous.com` (IIS), `http://localhost:5187` (dev source run) | Single custom PostgreSQL 18.6 (`laplace-postgres`, port 5432, SSPI + TLS): `laplace-mono`, `laplace-desktop-app`, and `laplace`. |
+| **`hart-server`** | Ubuntu 22.04 server (**damaged GPU must remain disabled**). Staging host, shared secrets, backups, and **default/BCP failover substrate DB for production**. | `https://staging.hartonomous.com` (`laplace-api`, `laplace-mcp`, `laplace-modular-mcp`) | PostgreSQL 18.6 cluster (`laplace-mono`, `laplace`), **OpenBao** (`https://openbao.hartonomous.com`), **Vaultwarden**, SMB shares (`/vault`), Linux GitHub Actions runners. |
+| **`hart-prod`** | Low-cost always-on GCP VM (`us-east1-b`). Production web/API host. | `https://api.hartonomous.com`, `https://mcp.hartonomous.com` | Local PostgreSQL 18.6 (`laplace-app` for accounts, sessions, keys, billing). Connects to `hart-server` (or `hart-cloud` when active) for substrate queries. |
+| **`hart-cloud`** | On-demand GCP `c3-standard-8` AVX-512 database & qualification VM. | Internal / Tailscale | **Kept `TERMINATED` (off) when idle** to preserve GCP trial credit. Auto-stops via `idlestop` once its lease expires. |
+| **`hart-router`** | OpenWrt router | LAN gateway | Split-horizon DNS and LAN routing. |
 
-Do not mark a criterion implemented because documentation exists, or operationally accepted because a fixture passes.
-Record installation and live-operation evidence separately. Missing, failed, stale or wrong-host evidence does not pass.
-Keep the parent issue open while whole-system criteria remain unmet, and link changes and evidence there so continuation
-does not depend on chat history. Preserve an existing desktop backup-task path until its task has been deliberately
-migrated and read back; a merged source change does not change a registered task action.
+---
 
-Preserve the isolated environments: hart-desktop is development, hart-server is staging, and hart-prod is the inexpensive
-always-on production web host. Hart-cloud is the on-demand AVX-512 database VM; keep it off when unused to preserve trial
-credit. Production can fail over from hart-cloud to hart-server. Hart-prod also has PostgreSQL for local fallback and
-application data such as accounts and billing. A current connection to hart-server is not evidence of a configuration
-error or authorization to redesign placement. Read docs/operating-laplace.md and the cloud-off-serving criterion before
-changing database targets or resetting data. Hart-server's damaged GPU must not run; OpenBao and Vaultwarden already
-live there. Database target selection is distinct from application-data recovery. Network acceptance measures external
-round trips and bytes, not counts of SQL executed inside PostgreSQL.
+## 2. Execution Boundaries (Automation vs. User Execution)
+
+1. **One-Time Host Provisioning (Admin / `sudo`)**:
+   - Linux: `sudo ./setup.sh` (shared/modular infrastructure) and `sudo bash deploy/linux/site-host.sh` (monorepo site/TLS/OpenBao enrollment).
+   - Windows (`HART-DESKTOP`): `pwsh -File setup.ps1` (Admin) and `Laplace/deploy/windows/Install-IisRuntime.ps1` (Admin).
+   - **Windows UAC / ACL Rule**: Non-elevated shells on `HART-DESKTOP` do not hold the `BUILTIN\Administrators` (`S-1-5-32-544`) token. Any elevated script that modifies directory or file ACLs on `E:\Data\Laplace`, `D:\Libraries\build\Laplace`, `D:\Data\Laplace`, or `C:\ProgramData\Laplace` **must** explicitly grant `$declared.windows_sid` (`HART-DESKTOP\ahart`, `S-1-5-21-1955383224-1799969050-1119319971-1001`) `FullControl`. Use `pwsh -File installation/Repair-DesktopPermissions.ps1` in an elevated prompt if permissions ever drift.
+2. **Automated CI/CD Delivery**:
+   - Pushes to `main` in `Laplace-Native`, `Laplace-postgres`, `Laplace-Engine`, or `Laplace-MCP` run component tests and dispatch `main-merged` to `.github/workflows/laplace.yml` in `Laplace-Operations` to deploy and verify on `hart-server`.
+   - Pushes to `main` in `Laplace` run monorepo delivery to `hart-server` (staging) and promote to `hart-prod` (production).
+   - **Database Reseed Policy**: Push/merge workflows never automatically drop or reseed databases. Destructive resets (`drop` / `reseed`) require explicit manual dispatch.
+3. **Normal Operator CLI & Verification (Non-Elevated Shell)**:
+   - Installed CLIs on `HART-DESKTOP`: `laplace` (`%LOCALAPPDATA%\Laplace\bin\laplace.cmd`) and `laplace-mono` (`%LOCALAPPDATA%\Laplace\bin\laplace-mono.cmd`). Re-package the modular Windows client anytime without elevation via `pwsh -File installation/install-windows-client.ps1 -Installation installation/hart-desktop-modular-client.json`.
+   - Lifecycle & verification: `./laplace.ps1`, `./installation/Verify-DesktopDatabases.ps1`, and `./installation/Verify-PlatformAccess.ps1`.
+   - Default platform administrators (`aharttn@gmail.com` Google, `thesaltypatron@gmail.com` Google, `thesaltypatron@gmail.com` Microsoft) are seeded automatically in `Laplace` migration `20261016000000_app_default_platform_administrators.sql` across all application databases (`laplace-desktop-app`, `laplace-mono`, `laplace-app`).
+4. **Frozen Reference (`Laplace-Refactor`)**:
+   - `Laplace-Refactor` is archived as a read-only reference for recipe-driven ingestion. Do not provision, build, or deploy `Laplace-Refactor`.
+
+---
+
+## 3. Operational Acceptance & Verification
+
+For installation and infrastructure work, consult `acceptance/criteria.json` and run the actual verification scripts (`acceptance/verify.ps1`, `installation/Verify-DesktopDatabases.ps1`, `installation/Verify-PlatformAccess.ps1`). Record installation and live-operation evidence accurately, and keep the repositories clean of worktree or scratch-script sprawl.
+

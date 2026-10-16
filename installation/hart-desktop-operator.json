@@ -8,6 +8,29 @@
   "openssl": "D:/Libraries/openssl/3.5.9",
   "state": "C:/Users/ahart/AppData/Local/Laplace/pgadmin",
   "work": "E:/Data/Laplace/work/laplace-mono/operator-access",
+  "platform_access": {
+    "browser_origin": "https://dev.hartonomous.com",
+    "administrators": [
+      {
+        "provider": "google",
+        "issuer": "https://accounts.google.com",
+        "subject": "105368356205536670205",
+        "email": "aharttn@gmail.com"
+      },
+      {
+        "provider": "google",
+        "issuer": "https://accounts.google.com",
+        "subject": "105862061897402259594",
+        "email": "thesaltypatron@gmail.com"
+      },
+      {
+        "provider": "microsoft",
+        "issuer": "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0",
+        "subject": "AAAAAAAAAAAAAAAAAAAAANrDmzXa_OckY6Ame0a1110",
+        "email": "thesaltypatron@gmail.com"
+      }
+    ]
+  },
   "targets": [
     {
       "ssh": "hart-server",

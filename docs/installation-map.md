@@ -18,7 +18,7 @@ and hart-server's interactive login. They are different implementations, not int
 | --- | --- |
 | Monorepo `laplace-mono` | Accepts `ingest document <file-or-directory>`, singular. Desktop launcher selects `E:\Data\Laplace\clients\laplace-mono\client.json` and the CLI in the installed IIS release. Server launcher selects `/home/ahart/.local/share/laplace-mono/client.json` and `/opt/laplace/app/cli/Laplace.Cli`. `--where` prints the resolved executable, profile and database without credentials. |
 | Modular `laplace` | Desktop launcher selects `E:\Data\Laplace\clients\laplace\client.json` and the packaged executable under `E:\Data\Laplace\services\laplace\releases`. It includes native libraries, grammar libraries, recipes and firmware. Live `status` reaches HART-DESKTOP and matches both artifact fingerprints. Server launcher selects `/home/ahart/.config/laplace/client.json` and `/hosting/laplace/modular/current/bin/laplace`. |
-| Refactor `laplace-refactor` | A complete installed command is not yet established; its existing scripts still require build-layout and separate PostgreSQL assumptions to be corrected. |
+| Refactor `Laplace-Refactor` | Frozen historical reference repository retained strictly for recipe-driven ingestion design context; not an active runtime or installation target. |
 | Operations `laplace.ps1` | Development/build/deployment controller, not the ingestion CLI. |
 | Operations `ingest.ps1` / `ingest.sh` | Modular ingestion wrappers still tied to build-tree locations and their environment. |
 
@@ -51,8 +51,8 @@ the word "Laplace" alone. Read the selected client configuration or `--where`.
 | Laplace-MCP | Source; expected Windows executable absent | Separate modular MCP service active | Modular installation location absent on hart-prod |
 | Laplace-Operations | Shared/modular setup; existing mono build/deployment controller delegates CLI publication to Laplace | Default setup owns shared/modular services; explicit mono compatibility stages forward to the monorepo installer | Shared configuration; monorepo owns its own application delivery |
 | Laplace-UCI | IIS connector and its credential agent installed; chess selection remains a separate application capability | Chess controller/client configuration installed | Environment selection belongs to the existing chess controller; complete play/ingest acceptance remains open |
-| Laplace-Refactor | Source | Source/runner present; documented executable/socket absent | Documented runtime location absent on hart-prod |
-| Laplace-Conventional | Not in canonical source root; GPU deployment not established | Source/runner present | No verified deployment |
+| Laplace-Refactor | Frozen reference checkout (recipe-driven ingestion context) | Frozen reference checkout | Frozen reference only; not deployed |
+| Laplace-Conventional | Python/GPU evaluation checkout | Source/runner present | No verified deployment |
 | Laplace-Wiki | Source | Source | Documentation publication workflow, not an application runtime |
 | Laplace-Research | Not in canonical source root | Research checkout | No application deployment established |
 | Laplace-Prototype | Not in canonical source root | Experimental storage checkout; documented DB port 5439 gives no response | Separate experiment |
