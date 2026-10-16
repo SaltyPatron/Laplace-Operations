@@ -3,6 +3,7 @@
 param([string]$Configuration="$PSScriptRoot/hart-desktop-operator.json")
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
+. "$PSScriptRoot/../laplace.env.ps1"
 $config=Get-Content -LiteralPath $Configuration -Raw | ConvertFrom-Json -AsHashtable
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 if($identity.User.Value -ne $config.windows_sid -or $identity.Name -ne $config.windows_identity){throw 'The Windows operator declaration does not match this account.'}
@@ -54,7 +55,7 @@ try{
     [IO.File]::WriteAllText((Join-Path $data 'pg_hba.operator.conf'),(($rules -join "`n")+"`n"))
     if((Query 'SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL') -ne '0'){throw 'PostgreSQL rejected the operator HBA configuration.'}
     if((Query 'SELECT count(*) FROM pg_ident_file_mappings WHERE error IS NOT NULL') -ne '0'){throw 'PostgreSQL rejected the Windows identity map.'}
-    $listeners='localhost,'+$target.host
+    $listeners=$env:LAPLACE_PG_LISTEN_ADDRESSES
     $restart=(Query 'SHOW listen_addresses') -ine $listeners
     $null=Query "ALTER SYSTEM SET listen_addresses = '$listeners'; SELECT pg_reload_conf();"
     if($restart -or (Query "SELECT count(*) FROM pg_settings WHERE pending_restart") -ne '0'){

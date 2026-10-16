@@ -173,7 +173,7 @@ function TuneDeclared {
         log_rotation_size                = '0'
         log_min_messages                 = 'warning'
         log_checkpoints                  = 'on'
-        listen_addresses                 = '*'
+        listen_addresses                 = $(if ($env:LAPLACE_PG_LISTEN_ADDRESSES) { $env:LAPLACE_PG_LISTEN_ADDRESSES } else { '*' })
         ssl                              = $(if (Test-Path (Join-Path $env:LAPLACE_PGDATA 'server.crt')) { 'on' } else { 'off' })
         port                             = $env:LAPLACE_PGPORT
         max_connections                  = "$($p.conns)"

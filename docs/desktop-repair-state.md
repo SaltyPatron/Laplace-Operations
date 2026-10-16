@@ -1,9 +1,33 @@
 # Desktop Laplace repair state
 
-Last updated: 2026-10-13. This is continuation evidence, not a replacement for the
+Last updated: 2026-10-15. This is continuation evidence, not a replacement for the
 invention, the user's instructions, or the installation acceptance criteria.
 
 ## Objective and boundaries
+
+### LZ4 decoder failure isolated on 2026-10-15
+
+Application database repair completed in the operator's session, but substrate
+extension creation failed at `consensus_edge_rank_btree` with PostgreSQL
+`read.c:341 nodeRead: did not find '}' at end of input node`.
+An isolated native probe reproduced that exact error: the installed LZ4 decoder
+left the tail of a 1267-byte PostgreSQL expression unwritten while returning the
+full decompressed length. The uncompressed expression roundtripped correctly
+through the PostgreSQL build's own serialization objects.
+
+Both the PostgreSQL-local LZ4 DLL and the dependency-prefix DLL failed. LZ4
+1.10.0 at pinned source `ebb370ca83af193212df4dcbadcc5d87bc0de2f0`, compiled with
+IntelLLVM 2026.1.1, reproduced the defect with `/O2`. Adding
+`/clang:-fno-vectorize` corrected it; disabling only SLP or the LZ4 fast decode
+loop did not. The fixed decoder passed 10001 full/partial byte-exact cases,
+including blocks compressed by the installed faulty build. This establishes
+the decoder correction for those inputs, not a complete historical data audit.
+
+`setup.ps1` now records the LZ4 build exception in its dependency contract,
+checks decoded bytes, and refreshes a stale PostgreSQL-local LZ4 copy with the
+server stopped. `tests/windows-lz4.ps1` is registered under RELEASE-001.
+The prepared replacement has not yet been activated in the running service;
+live migration and site receipts remain required.
 
 Restore and verify the existing Laplace installation on HART-DESKTOP, including
 the custom PostgreSQL build, isolated local substrate/application databases,

@@ -63,6 +63,13 @@
       ],
       "checks": [
         {
+          "id": "lz4-windows-roundtrip",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/windows-lz4.ps1"],
+          "timeout_seconds": 120,
+          "evidence": "Actual named DLL: exact full and partial decompression of a PostgreSQL expression and 10000 deterministic inputs. This does not establish live database or website recovery."
+        },
+        {
           "id": "release-promotion",
           "platform": "any",
           "argv": null,
@@ -325,6 +332,13 @@
           "argv": ["pwsh", "-NoProfile", "-File", "secrets/application-runtime.ps1", "-Phase", "resources-check", "-Target", "production"],
           "timeout_seconds": 120,
           "evidence": "Read back application-cluster tuning against measured host facts and declared allocations, including service/data-directory identity and no pending restart. This is configuration convergence, not workload saturation or aggregate cloud-host proof."
+        },
+        {
+          "id": "desktop-resource-settings",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "installation/Verify-DesktopResources.ps1"],
+          "timeout_seconds": 90,
+          "evidence": "Compare the existing Windows resource plan, including measured buffer cap, with every live declared setting using SSPI/TLS on the exact local service and data directory. Drift and pending restart fail; this is separate from query performance and browser authorization."
         }
       ]
     },
