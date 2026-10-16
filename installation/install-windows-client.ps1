@@ -19,11 +19,15 @@ try {
         --work $client.work --data $client.data --configuration $client.configuration --command $command --connection $connection
     if ($LASTEXITCODE -ne 0) { throw 'Installed modular command verification failed.' }
     $bin = Split-Path $command
+    $opsCmd = Join-Path $bin 'laplace-ops.cmd'
+    $opsPs1 = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../laplace.ps1'))
+    $pwshExe = (Get-Command pwsh).Source
+    Set-Content -LiteralPath $opsCmd -Value "@echo off`r`nsetlocal DisableDelayedExpansion`r`n`"$pwshExe`" -NoLogo -NoProfile -File `"$opsPs1`" %*`r`nexit /b %errorlevel%`r`n" -NoNewline
     $userPath = [string][Environment]::GetEnvironmentVariable('PATH', 'User')
     if ($bin -notin @($userPath -split ';' | ForEach-Object { $_.TrimEnd('\') })) {
         [Environment]::SetEnvironmentVariable('PATH', (($userPath.TrimEnd(';') + ';' + $bin).TrimStart(';')), 'User')
     }
-    Write-Host "Installed laplace. Run laplace --where and laplace status from any directory."
+    Write-Host "Installed laplace and laplace-ops. Run laplace --where, laplace status, or laplace-ops runs from any directory."
 } finally {
     Remove-Item -LiteralPath $connection -ErrorAction SilentlyContinue
 }

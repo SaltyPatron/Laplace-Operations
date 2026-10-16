@@ -24,8 +24,26 @@ if (-not $PSBoundParameters.ContainsKey('Target')) {
 if ($Operation -in $desktopOperations -and $Target -ne 'desktop') {
     throw "$Operation runs on desktop; target '$Target' is not supported. Use deploy to install a deployment target."
 }
+if ($Operation -eq 'deploy' -and $Target -eq 'desktop') {
+    . "$PSScriptRoot/laplace.env.ps1"
+    $source = if ($SourcePath) { [IO.Path]::GetFullPath($SourcePath) } else { Join-Path $env:LAPLACE_SRC 'Laplace' }
+    Write-Host "Deploying desktop IIS package (https://dev.hartonomous.com) and migrating local databases from $source..."
+    & pwsh -NoProfile -File (Join-Path $source 'deploy/windows/Build-IisPackage.ps1') -Publish
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & pwsh -NoProfile -File (Join-Path $source 'deploy/windows/Invoke-IisDatabase.ps1') -Database application -Operation migrate
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & pwsh -NoProfile -File (Join-Path $source 'deploy/windows/Invoke-IisDatabase.ps1') -Database substrate -Operation migrate
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & pwsh -NoProfile -File "$PSScriptRoot/installation/Verify-DesktopDatabases.ps1"
+    exit $LASTEXITCODE
+}
+if ($Operation -eq 'components' -and $Target -eq 'desktop') {
+    Write-Host "Packaging modular desktop stack (Laplace-Native, Laplace-Engine) and updating laplace CLI..."
+    & pwsh -NoProfile -File "$PSScriptRoot/installation/install-windows-client.ps1" -Installation "$PSScriptRoot/installation/hart-desktop-modular-client.json"
+    exit $LASTEXITCODE
+}
 if ($Operation -eq 'deploy' -and $Target -notin @('staging','production')) {
-    throw 'deploy supports staging or production. Use components -Target cloud for on-demand component qualification.'
+    throw 'deploy supports desktop, staging, or production. Use components -Target cloud for on-demand component qualification.'
 }
 if ($SourcePath -and $Target -ne 'desktop') {
     throw 'SourcePath selects local desktop sources; remote operations use Revision.'
@@ -67,8 +85,15 @@ if ($Operation -eq 'recovery') {
 }
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required; sign in with gh auth login.' }
 if ($Operation -eq 'runs') {
-    & gh run list --repo $Repository --limit 12
-    exit $LASTEXITCODE
+    if ($PSBoundParameters.ContainsKey('Repository')) {
+        & gh run list --repo $Repository --limit 12
+        exit $LASTEXITCODE
+    }
+    foreach ($repo in @('SaltyPatron/Laplace','SaltyPatron/Laplace-Operations','SaltyPatron/Laplace-Native','SaltyPatron/Laplace-postgres','SaltyPatron/Laplace-Engine','SaltyPatron/Laplace-MCP')) {
+        Write-Host "=== $repo ===" -ForegroundColor Cyan
+        & gh run list --repo $repo --limit 4
+    }
+    exit 0
 }
 $workflow = 'product-operator.yml'
 $inputs = @('-f',"operation=$Operation",'-f',"target=$Target")
