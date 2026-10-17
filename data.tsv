@@ -13,6 +13,9 @@
 #            latest of its default branch when there is none
 #   archive  an archive from the publisher, kept under the set's .archive and opened into the set (into: a directory under the
 #            set, or the archive's file name when the URL does not carry one, e.g. a repository's bitstream)
+#   held     a set this estate holds but data.sh does not fetch: the origin it came from, recorded (a pinned commit after @);
+#            into is what of it is held under the set. fetch says whether it is here and fetches nothing; status counts it as
+#            any set. Which held sets become fetched, and from where, is decided source by source (Laplace-Operations#6).
 # set	kind	origin	into
 # Unicode 17.0.0, pinned: the version ICU 78 and tier 0 are built from (laplace.env). The recipes and the Engine read it at
 # Public/UCD/latest, the name the publisher's rolling directory has; what is there is 17.0.0, not whatever is latest today.
@@ -85,3 +88,35 @@ WordFrameNet	extract	XWFN.tar.gz	.
 GeoNames	extract	allCountries.zip	extracted/
 GeoNames	extract	alternateNamesV2.zip	extracted/
 GeoNames	extract	hierarchy.zip	extracted/
+# Held: read by Laplace-Engine recipes, not fetched by data.sh (Laplace-Operations#6, #124). The origins are what each set's own
+# record says (.commit.tsv, PROVENANCE.md, index.toml, README, documentation/) on hart-server, or the publisher's file of the same
+# name; "unrecorded" where none was kept.
+Atomic	held	unrecorded	ATOMIC10X.jsonl
+Atomic	held	unrecorded	Atomic2020/
+ConceptNet	held	https://s3.amazonaws.com/conceptnet/downloads/2019/edges/conceptnet-assertions-5.7.0.csv.gz	conceptnet-assertions-5.7.0.csv.gz
+ConceptNet	held	https://s3.amazonaws.com/conceptnet/downloads/2019/edges/conceptnet-assertions-5.7.0.csv.gz	assertions.csv
+ConceptNet	held	https://github.com/commonsense/conceptnet5/wiki	documentation/
+OMW-2.0	held	https://github.com/omwn/omw-data/releases/download/v2.0/omw-2.0.tar.xz	omw-2.0/
+OpenSubtitles	held	https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2024/moses/	*-*.txt.zip
+OpenSubtitles	held	https://object.pouta.csc.fi/OPUS-OpenSubtitles/v2024/moses/	extracted/
+PredicateMatrix.v1.3	held	http://adimen.si.ehu.es/web/PredicateMatrix	PredicateMatrix.v1.3.txt
+MapNet-0.1	held	unrecorded	MapNet-0.1.zip
+MapNet-0.1	held	unrecorded	mapping_*_synsets.txt
+FrameBase-2.0	held	http://framebase.org/	FrameBase_schema_*.ttl.gz
+Safety/CivilComments	held	https://huggingface.co/datasets/google/civil_comments@f2970eb3a55777454c94069077cc8d9b5866312d	civil-comments-f2970eb3a55777454c94069077cc8d9b5866312d/
+Safety/MeasuringHateSpeech	held	https://huggingface.co/datasets/ucberkeley-dlab/measuring-hate-speech@5468f6e118396646b02a2f691e771f6b6d9502ea	measuring-hate-speech-5468f6e118396646b02a2f691e771f6b6d9502ea/
+Safety/ProsocialDialog	held	https://huggingface.co/datasets/allenai/prosocial-dialog@d77d7ad3c624c51030f2f32c83e892b3d620b3d4	prosocial-dialog-d77d7ad3c624c51030f2f32c83e892b3d620b3d4/
+Safety/RealToxicityPrompts	held	https://huggingface.co/datasets/allenai/real-toxicity-prompts@f21629712ffd6a3d13a54fd2807ccd521c55ef74	real-toxicity-prompts-f21629712ffd6a3d13a54fd2807ccd521c55ef74/
+Safety/ToxiGen	held	https://huggingface.co/datasets/toxigen/toxigen-data@ea082a8973a287097b17973343576e0c8da8eb3b	toxigen-ea082a8973a287097b17973343576e0c8da8eb3b/
+Safety/HateCheck	held	https://github.com/paul-rottger/hatecheck-data.git@3490854f969111a32c55c05f0d9788b471337fa9	hatecheck-3490854f969111a32c55c05f0d9788b471337fa9/
+Safety/SGHateCheck	held	https://github.com/Social-AI-Studio/SGHateCheck.git@8f4284ac1d307a18d454477fd51f963ca3a76f95	sghatecheck-8f4284ac1d307a18d454477fd51f963ca3a76f95/
+Safety/XSTest	held	https://github.com/paul-rottger/xstest.git@d7bb5bd738c1fcbc36edd83d5e7d1b71a3e2d84d	xstest-d7bb5bd738c1fcbc36edd83d5e7d1b71a3e2d84d/
+Safety/SocialBiasFrames	held	https://maartensap.com/social-bias-frames/SBIC.v2.tgz	SBIC.v2.tgz
+Safety/SocialChemistry101	held	https://storage.googleapis.com/ai2-mosaic-public/projects/social-chemistry/data/social-chem-101.zip	social-chem-101/
+# WSD: the WSD Evaluation Framework the wsd-evaluation-framework recipe reads; empty on hart-server and HART-DESKTOP, its origin not recorded
+WSD	held	unrecorded	*
+# Games/Chess: chess.com player archives (the chess.com published-data API), The Week in Chess issues and LumbrasGigaBase, each
+# PGN opened beside its .zip/.7z (Laplace-Engine recipes chess-com, twic, lumbras-gigabase)
+Games/Chess	held	https://api.chess.com/pub/player/	*.pgn
+Games/Chess	held	https://theweekinchess.com/twic	twic/
+Games/Chess	held	https://lumbrasgigabase.com/	Lumbras/
