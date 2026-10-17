@@ -5,7 +5,8 @@
 # rewritten: a file lands as the publisher serves it, at the path the recipe reads it from.
 #
 #   ./data.sh fetch [SET...]    every declared set (or these): mirrored, downloaded when newer, cloned at a pinned commit or the
-#                               latest, the latest release, an archive opened, a dump taken once and then kept
+#                               latest, the latest release, an archive opened, a dump taken once and then kept; a held set
+#                               only said to be here or not
 #   ./data.sh status            each declared set present or missing, then each recipe's roots: resolved or not;
 #                               exit 1 when a declared set is missing
 #   ./data.sh record            set, file, bytes, SHA-256 of what $LAPLACE_DATA holds for the declared sets
@@ -74,6 +75,10 @@ fetch_row(){ local set=$1 kind=$2 origin=$3 into=$4 dest
             unzip -q -o -DD "$LAPLACE_DATA/$set/$origin" -d "$dest"          # the publisher's archive, opened beside itself
             landed "$set" "$(top "$into")"
             printf '  %-28s %s opened into %s\n' "$set" "${origin##*/}" "${into%/}" ;;
+    held)   # declared, not fetched: what it came from is recorded; whether it is here is said, and nothing is brought
+            local have; have=$(ls -d "$LAPLACE_DATA/$set"/$into 2>/dev/null | head -1 || true)
+            if [ -n "$have" ]; then landed "$set" $(for h in "$LAPLACE_DATA/$set"/$into; do [ -e "$h" ] && top "${h#"$LAPLACE_DATA/$set/"}" && echo; done); printf '  %-28s %s held (from %s): not fetched\n' "$set" "${into%/}" "$origin"
+            else printf '  %-28s %s is not here, and data.sh does not fetch it (from %s; Laplace-Operations#6)\n' "$set" "${into%/}" "$origin"; return 1; fi ;;
     *) echo "  $set: $kind is not a kind data.sh fetches"; return 1 ;;
   esac; }
 case $op in
