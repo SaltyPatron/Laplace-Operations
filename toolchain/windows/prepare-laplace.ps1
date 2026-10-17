@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $operations = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 . "$operations/laplace.env.ps1"
 $LaplaceRoot = (Resolve-Path -LiteralPath $LaplaceRoot).Path
-if (-not $env:LAPLACE_UCD_ROOT) { throw 'Declare LAPLACE_UCD_ROOT in machine.env for the pinned Unicode build inputs.' }
+if (-not $env:LAPLACE_UCD_ROOT) { $env:LAPLACE_UCD_ROOT = Join-Path $env:LAPLACE_UCD 'Public/UCD/latest' }
 $manifest = if ($env:LAPLACE_DEPENDENCY_MANIFEST) { $env:LAPLACE_DEPENDENCY_MANIFEST } else { Join-Path $env:ProgramData 'Laplace/dependencies.tsv' }
 [void](New-Item -ItemType Directory -Path (Split-Path $manifest) -Force)
 Copy-Item -LiteralPath "$operations/dependencies.tsv" -Destination $manifest -Force

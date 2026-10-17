@@ -231,6 +231,14 @@ declared() {
   local plan; plan=$(plan) || return 1; v(){ sed -n "s/^$1=//p" <<<"$plan"; }
   local wal_level=minimal wal_senders=0
   if [[ "$PROFILE" == app ]]; then wal_level=replica; wal_senders=3; fi
+  local trace=${LAPLACE_PG_TRACE:-full}
+  local pgss_track=all auto_explain_min=5s io_timing=on
+  case "$trace" in
+    full)    pgss_track=all;  auto_explain_min=5s; io_timing=on ;;
+    reduced) pgss_track=top;  auto_explain_min=5s; io_timing=on ;;
+    off)     pgss_track=none; auto_explain_min=-1; io_timing=off ;;
+    *) echo "tune-pg: LAPLACE_PG_TRACE must be full, reduced, or off (got '$trace')" >&2; return 1 ;;
+  esac
   cat <<SET
 wal_level                        $wal_level
 max_wal_senders                  $wal_senders
@@ -272,10 +280,11 @@ autovacuum_analyze_scale_factor  0.02
 autovacuum_vacuum_insert_scale_factor 0.01
 max_locks_per_transaction        $(v locks)
 shared_preload_libraries         pg_stat_statements,auto_explain
-pg_stat_statements.track         all
-auto_explain.log_min_duration    5s
-track_io_timing                  on
-track_wal_io_timing              on
+pg_stat_statements.track         $pgss_track
+auto_explain.log_min_duration    $auto_explain_min
+auto_explain.log_parameter_max_length 0
+track_io_timing                  $io_timing
+track_wal_io_timing              $io_timing
 listen_addresses                 *
 ssl                              on
 port                             $TUNE_PORT

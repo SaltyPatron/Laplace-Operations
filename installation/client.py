@@ -101,6 +101,15 @@ def main():
     if sys.argv[1:] == ['--where']:
         print(json.dumps(description, indent=2))
         return
+    if sys.argv[1:2] == ['mcp']:
+        lpm = executable.with_name('lpm.exe' if os.name == 'nt' else 'lpm')
+        if lpm.is_file():
+            executable = lpm
+            args = sys.argv[1:] if len(sys.argv) == 2 else sys.argv[2:]
+            Path(environment['LAPLACE_WORK']).mkdir(parents=True, exist_ok=True)
+            if os.name == 'nt':
+                sys.exit(subprocess.run([str(executable), *args], env=process_environment(environment)).returncode)
+            os.execve(executable, [str(executable), *args], process_environment(environment))
     Path(environment['LAPLACE_WORK']).mkdir(parents=True, exist_ok=True)
     if os.name == 'nt':
         sys.exit(subprocess.run([str(executable), *sys.argv[1:]], env=process_environment(environment)).returncode)

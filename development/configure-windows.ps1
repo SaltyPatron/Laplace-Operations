@@ -3,7 +3,8 @@
 param([Parameter(Mandatory)][string]$Installation)
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot/../laplace.env.ps1"
-$c=Get-Content -LiteralPath $Installation -Raw | ConvertFrom-Json
+. "$PSScriptRoot/credentials.ps1"
+$c=Read-DevelopmentConfig $Installation
 if($c.authentication -ne 'sspi' -or $c.database_host -ine $env:COMPUTERNAME){throw 'This operation configures the declared local Windows development database.'}
 foreach($value in $c.substrate_database,$c.application_database,$c.substrate_role,$c.application_role,$c.application_owner,$c.admin_role){if($value -notmatch '^[a-zA-Z0-9_-]+$'){throw 'Invalid database or role declaration.'}}
 $psql=Join-Path $env:LAPLACE_PG_DIR 'bin/psql.exe'

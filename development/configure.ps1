@@ -3,7 +3,8 @@
 param([string]$Installation = $(if ($env:LAPLACE_DEVELOPMENT_INSTALLATION) { $env:LAPLACE_DEVELOPMENT_INSTALLATION } else { "$PSScriptRoot/installation.json" }))
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/../secrets/process.ps1"
-$config = Get-Content -LiteralPath $Installation -Raw | ConvertFrom-Json
+. "$PSScriptRoot/credentials.ps1"
+$config = Read-DevelopmentConfig $Installation
 if($config.PSObject.Properties['authentication'] -and $config.authentication -eq 'sspi'){
     & "$PSScriptRoot/configure-windows.ps1" -Installation $Installation
     return

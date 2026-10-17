@@ -3,7 +3,7 @@
 $ErrorActionPreference='Stop'
 $entry=(Resolve-Path "$PSScriptRoot/../laplace.ps1").Path
 function Dispatch([string[]]$Arguments) {
-    $quoted=@($Arguments | ForEach-Object { if ($_ -in '-Target','-SourcePath') { $_ } else { "'" + $_.Replace("'", "''") + "'" } }) -join ' '
+    $quoted=@($Arguments | ForEach-Object { if ($_ -in '-Target','-SourcePath','-Database','-DatabaseOperation','-Yes') { $_ } else { "'" + $_.Replace("'", "''") + "'" } }) -join ' '
     $program=@"
 function gh {
     `$global:LASTEXITCODE=0
@@ -27,10 +27,31 @@ foreach ($case in @(
         throw "Deployment did not preserve the selected target: $($result.output)"
     }
 }
+foreach ($helpArgs in @(@(), @('help'), @('db','--help'), @('--help'))) {
+    $helpResult=Dispatch $helpArgs
+    if ($helpResult.exit -ne 0 -or $helpResult.output -match 'DISPATCH:' -or $helpResult.output -notmatch 'Laplace Operator & Developer CLI') {
+        throw "Help did not print cheat sheet without dispatching: $($helpResult.output)"
+    }
+}
+foreach ($dbCase in @(
+    @('db','-Target','staging','-Database','substrate','-DatabaseOperation','status'),
+    @('db','staging','substrate','status'),
+    @('db','substrate','staging','status')
+)) {
+    $dbResult=Dispatch $dbCase
+    if ($dbResult.exit -ne 0 -or $dbResult.output -notmatch 'DISPATCH:(\[[^\r\n]+\])') { throw $dbResult.output }
+    $dbArgv=$Matches[1] | ConvertFrom-Json
+    if ($dbArgv -notcontains 'db-ops.yml' -or $dbArgv -notcontains 'target=staging' -or $dbArgv -notcontains 'database=substrate' -or $dbArgv -notcontains 'operation=status') {
+        throw "DB dispatch did not preserve target/database/operation: $($dbResult.output)"
+    }
+}
 foreach ($arguments in @(
     @('build','-Target','production'),
     @('prepare','-Target','staging'),
     @('start','-Target','staging'),
+    @('restart-iis','-Target','staging'),
+    @('db','-Target','production','-Database','substrate'),
+    @('db','-Target','staging','-Database','both'),
     @('deploy','-Target','cloud'),
     @('verify','-Target','production','-SourcePath','C:\local-source')
 )) {

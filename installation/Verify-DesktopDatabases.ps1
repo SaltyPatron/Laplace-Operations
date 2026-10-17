@@ -54,10 +54,11 @@ try{
         }
         $clients+=$selection
     }
-    $ready=Invoke-RestMethod https://dev.hartonomous.com/health/ready -TimeoutSec 20
-    if(-not $ready.ready -or -not $ready.substrate_reachable -or -not $ready.perfcache_ready){throw 'Installed desktop IIS substrate is not ready.'}
+    $readyResp=Invoke-WebRequest https://dev.hartonomous.com/health/ready -TimeoutSec 20 -SkipHttpErrorCheck
+    $ready=$readyResp.Content|ConvertFrom-Json
+    if(-not $ready.substrate_reachable -or -not $ready.perfcache_ready){throw 'Installed desktop IIS substrate or native perfcache is unavailable.'}
     [ordered]@{host=$target.host;checked_utc=[DateTime]::UtcNow.ToString('o');service=$services[0].Name;cluster=$cluster;
-        data=$target.data;wal=$wal.Target;connections=$connections;clients=$clients;iis_ready=$ready.ready;passed=$true}|ConvertTo-Json -Depth 6
+        data=$target.data;wal=$wal.Target;connections=$connections;clients=$clients;iis_ready=$ready.ready;iis_seeded=([bool]$ready.has_entities -and [bool]$ready.has_consensus);passed=$true}|ConvertTo-Json -Depth 6
 }finally{
     foreach($name in $saved.Keys){if($null -eq $saved[$name]){Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue}else{[Environment]::SetEnvironmentVariable($name,$saved[$name])}}
 }

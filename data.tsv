@@ -74,3 +74,14 @@ UD-Docs	git	https://github.com/UniversalDependencies/docs	docs-pages-source/@692
 # The benchmark fixtures the monorepo's suites read (benchmark-evidence.yml: moby_path): Moby-Dick from Project Gutenberg, eBook 2701, the
 # plain-text UTF-8 file as the publisher serves it (sha256 b5e88b71a1cda068…), landing at the path the workflow names
 test-data	file	https://www.gutenberg.org/cache/epub/2701/pg2701.txt	text/moby_dick.txt
+# Project Gutenberg reference works and foundational texts (dictionary, thesaurus, electrical dictionary, Laplace's Essay on Probabilities)
+ProjectGutenberg	file	https://www.gutenberg.org/cache/epub/29765/pg29765.txt	text/webster-unabridged-dictionary-1913.txt
+ProjectGutenberg	file	https://www.gutenberg.org/cache/epub/10681/pg10681.txt	text/rogets-thesaurus-of-english-words-and-phrases.txt
+ProjectGutenberg	file	https://www.gutenberg.org/cache/epub/36776/pg36776.txt	text/standard-electrical-dictionary-sloane.txt
+ProjectGutenberg	file	https://www.gutenberg.org/cache/epub/58881/pg58881.txt	text/laplace-philosophical-essay-on-probabilities.txt
+# WordFrameNet and GeoNames archives already held under $LAPLACE_DATA, extracted in place
+WordFrameNet	extract	WFN.tar.gz	.
+WordFrameNet	extract	XWFN.tar.gz	.
+GeoNames	extract	allCountries.zip	extracted/
+GeoNames	extract	alternateNamesV2.zip	extracted/
+GeoNames	extract	hierarchy.zip	extracted/

@@ -17,7 +17,7 @@ $env:LAPLACE_ROOT = $SourcePath
 . "$PSScriptRoot/../toolchain/windows/devshell.ps1"
 . (Join-Path $SourcePath 'scripts/win/laplace-paths.ps1')
 Import-LaplaceEnv
-$config = Get-Content -LiteralPath $Installation -Raw | ConvertFrom-Json
+$config = Read-DevelopmentConfig $Installation
 $apiPort = if ($env:LAPLACE_API_PORT) { [int]$env:LAPLACE_API_PORT } else { [int]$config.api_port }
 if ($apiPort -lt 1 -or $apiPort -gt 65535) { throw 'Invalid development API port.' }
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,$apiPort)

@@ -3,7 +3,7 @@
 param([string]$Installation = $(if ($env:LAPLACE_DEVELOPMENT_INSTALLATION) { $env:LAPLACE_DEVELOPMENT_INSTALLATION } else { "$PSScriptRoot/installation.json" }))
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/credentials.ps1"
-$config = Get-Content -LiteralPath $Installation -Raw | ConvertFrom-Json
+$config = Read-DevelopmentConfig $Installation
 if ($config.bao_role -ne "laplace-$($config.client)-development") { throw 'Development enrollment requires its own declared workload role.' }
 $address = Get-DevelopmentBaoAddress $config
 $paths = Get-DevelopmentSecretPaths $config

@@ -30,6 +30,39 @@
 #>
 param([Parameter(Position = 0, ValueFromRemainingArguments)][string[]]$Parts = @('development'), [switch]$Check, [string]$Installation)
 $ErrorActionPreference = 'Stop'
+function Install-LaplaceOpsCommand {
+    $bin = Join-Path $env:LOCALAPPDATA 'Laplace\bin'
+    New-Item -ItemType Directory -Path $bin -Force | Out-Null
+    $opsCmd = Join-Path $bin 'laplace-ops.cmd'
+    $opsPs1 = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'laplace.ps1'))
+    $pwshExe = (Get-Command pwsh).Source
+    Set-Content -LiteralPath $opsCmd -Value "@echo off`r`nsetlocal DisableDelayedExpansion`r`n`"$pwshExe`" -NoLogo -NoProfile -File `"$opsPs1`" %*`r`nexit /b %errorlevel%`r`n" -NoNewline
+    $userPath = [string][Environment]::GetEnvironmentVariable('PATH', 'User')
+    if ($bin -notin @($userPath -split ';' | ForEach-Object { $_.TrimEnd('\') })) {
+        [Environment]::SetEnvironmentVariable('PATH', (($userPath.TrimEnd(';') + ';' + $bin).TrimStart(';')), 'User')
+    }
+    if ($bin -notin @($env:PATH -split ';' | ForEach-Object { $_.TrimEnd('\') })) {
+        $env:PATH = "$bin;$env:PATH"
+    }
+    Write-Host "Registered laplace-ops CLI: $opsCmd (run 'laplace-ops' for help)"
+}
+if ($Parts.Count -eq 1 -and $Parts[0] -in @('help','-h','--help','/?')) {
+    @'
+Laplace Windows Host Setup (setup.ps1)
+
+USAGE
+  pwsh -File setup.ps1                  Prepare dev inputs (UCD, grammars, dependency manifest) and install 'laplace-ops' CLI on PATH
+  pwsh -File setup.ps1 all              Full elevated Windows host setup: volumes, packages, rights, deps, postgres, cluster, settings, access, report
+  pwsh -File setup.ps1 <part...>        Run specific setup stages:
+                                          volumes | packages | rights | deps | postgres | cluster | settings | access | report
+                                          network | shares | services | firewall | backup | status
+  pwsh -File setup.ps1 client           Package Laplace-Native + Laplace-Engine and install the modular 'laplace' CLI
+  pwsh -File setup.ps1 secrets-agents   Configure or check OpenBao secrets agents
+
+Once setup.ps1 has been run once, use 'laplace-ops' from any directory for daily builds, database maintenance, IIS, and deployments.
+'@ | Write-Host
+    return
+}
 if ($Parts.Count -eq 1 -and $Parts[0] -eq 'secrets-agents') {
     if (-not $Installation) { $Installation = Join-Path $PSScriptRoot ('installation/'+$env:COMPUTERNAME.ToLowerInvariant()+'-secrets-agents.json') }
     & "$PSScriptRoot/secrets/upgrade-agents.ps1" -Installation $Installation -Check:$Check
@@ -37,7 +70,11 @@ if ($Parts.Count -eq 1 -and $Parts[0] -eq 'secrets-agents') {
 }
 if ($Parts.Count -eq 1 -and $Parts[0] -eq 'client') {
     if ($Check) { throw 'Client installation does not accept -Check; inspect an installed client with laplace --where and laplace status.' }
-    if (-not $Installation) { throw 'Pass -Installation with the modular client declaration.' }
+    if (-not $Installation) {
+        $hostManifest = Join-Path $PSScriptRoot ('installation/' + $env:COMPUTERNAME.ToLowerInvariant() + '-modular-client.json')
+        if (Test-Path -LiteralPath $hostManifest) { $Installation = $hostManifest }
+        else { throw 'Pass -Installation with the modular client declaration.' }
+    }
     & "$PSScriptRoot/installation/install-windows-client.ps1" -Installation $Installation
     return
 }
@@ -48,6 +85,7 @@ if ($Parts.Count -eq 1 -and $Parts[0] -eq 'postgres') {
 if ($Check) { throw '-Check currently applies to the postgres installation operation.' }
 if ($Parts -contains 'development') {
     if ($Parts.Count -ne 1) { throw 'Run the development profile separately from explicit database/service installation steps.' }
+    Install-LaplaceOpsCommand
     & pwsh -NoProfile -File "$PSScriptRoot/dev.ps1" -Operation prepare
     exit $LASTEXITCODE
 }
@@ -150,10 +188,35 @@ function PgWaitReady([int]$minutes) {
     while (-not (PgReady) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
     PgReady
 }
+function OperatorSid {
+    $opConfigPath = Join-Path $PSScriptRoot ('installation\' + $env:COMPUTERNAME.ToLowerInvariant() + '-operator.json')
+    if (Test-Path -LiteralPath $opConfigPath) {
+        return (Get-Content -LiteralPath $opConfigPath -Raw | ConvertFrom-Json).windows_sid
+    }
+    return ([Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+}
 # the service's account: modify the data and the logs, read the install (setup.sh: chown postgres)
 function GrantPg {
-    foreach ($d in @($PgData, $PgWal, $PgTemp, $PgLogs)) { if ($d -and (Test-Path $d)) { & icacls.exe $d /grant '*S-1-5-20:(OI)(CI)M' /T /Q | Out-Null; if ($LASTEXITCODE) { throw "icacls $d exited $LASTEXITCODE" } } }
-    & icacls.exe $PgDir /grant '*S-1-5-20:(OI)(CI)RX' /T /Q | Out-Null; if ($LASTEXITCODE) { throw "icacls $PgDir exited $LASTEXITCODE" }
+    $opSid = OperatorSid
+    foreach ($d in @($PgData, $PgWal, $PgTemp, $PgLogs)) {
+        if ($d -and (Test-Path $d)) {
+            $grants = @('/grant', '*S-1-5-20:(OI)(CI)M')
+            if ($opSid) { $grants += @('/grant', "*${opSid}:(OI)(CI)F") }
+            & icacls.exe $d @grants /T /Q | Out-Null; if ($LASTEXITCODE) { throw "icacls $d exited $LASTEXITCODE" }
+        }
+    }
+    $dirGrants = @('/grant', '*S-1-5-20:(OI)(CI)RX')
+    if ($opSid) { $dirGrants += @('/grant', "*${opSid}:(OI)(CI)F") }
+    & icacls.exe $PgDir @dirGrants /T /Q | Out-Null; if ($LASTEXITCODE) { throw "icacls $PgDir exited $LASTEXITCODE" }
+    $svc = Get-Service -Name $PgService -ErrorAction SilentlyContinue
+    if ($svc -and $opSid) {
+        $sddlOut = (& sc.exe sdshow $PgService 2>$null | Where-Object { $_ -match '^D:' } | Select-Object -First 1)
+        if ($sddlOut -and $sddlOut -notmatch [regex]::Escape($opSid)) {
+            $ace = "(A;;CCLCSWRPWPDTLOCRRC;;;$opSid)"
+            $newSddl = if ($sddlOut -match '^(D:[^\(]*(?:\([^\)]+\))*)(S:.*)$') { "$($Matches[1])$ace$($Matches[2])" } else { "$sddlOut$ace" }
+            & sc.exe sdset $PgService $newSddl | Out-Null
+        }
+    }
 }
 # The floating-point contract as one text (toolchain\determinism.tsv). A build records the contract it was made under
 # beside what it installed, and is made again when the contract has changed since: a build tree keeps the flags it was
@@ -163,6 +226,7 @@ function ContractMark($r) { Join-Path (Prefix $r) ".contract-$($r.name)" }
 function DependencyContract($r) {
     $value = Contract
     if ($r.name -eq 'lz4') { $value += "`nlz4-windows-decoder-v1: /clang:-fno-vectorize" }
+    if ($r.name -eq 'postgresql') { $value += "`npostgresql-windows-int128-struct-align-v1" }
     $value
 }
 # The server stopped around a step that replaces files it holds open (its own binaries, the DLLs beside them): the
@@ -171,11 +235,25 @@ function WithServerStopped([string]$what, [scriptblock]$body) {
     $svc = Get-Service -Name $PgService -ErrorAction SilentlyContinue
     $running = [bool]($svc -and $svc.Status -eq 'Running')
     if (-not $svc -and (Test-Path (Join-Path $PgData 'postmaster.pid'))) { throw "$what replaces files the hand-started server holds; stop it first" }
-    if ($running -and -not (Admin)) { throw "$what replaces files the running server holds; elevated, or stop $PgService first" }
     if ($running -and (TuneIngesting)) { throw "$what needs the server stopped, and an ingest is running" }
-    if ($running) { Stop-Service -Name $PgService -Force; Say $what "$PgService stopped" }
+    if ($running) {
+        Stop-Service -Name $PgService -Force -ErrorAction SilentlyContinue
+        if ((Get-Service -Name $PgService).Status -ne 'Stopped') {
+            & sc.exe stop $PgService | Out-Null
+            $deadline = (Get-Date).AddSeconds(60)
+            while ((Get-Service -Name $PgService).Status -ne 'Stopped' -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+        }
+        if ((Get-Service -Name $PgService).Status -ne 'Stopped') { throw "$what replaces files the running server holds; elevated, or stop $PgService first" }
+        Say $what "$PgService stopped"
+    }
     try { & $body }
-    finally { if ($running) { Start-Service -Name $PgService; if (PgWaitReady 120) { Say $what "$PgService started" } else { Say $what "$PgService DID NOT START; see its log" } } }
+    finally {
+        if ($running) {
+            Start-Service -Name $PgService -ErrorAction SilentlyContinue
+            if ((Get-Service -Name $PgService).Status -ne 'Running') { & sc.exe start $PgService | Out-Null }
+            if (PgWaitReady 120) { Say $what "$PgService started" } else { Say $what "$PgService DID NOT START; see its log" }
+        }
+    }
 }
 # The dependency manifest (dependencies.tsv), this platform's rows, in file order; the row's prefix, and the file that
 # proves it installed (proof, relative to the prefix: the checkout for a row built into Laplace, PostgreSQL's prefix
@@ -424,7 +502,12 @@ function deps {
                 'meson' {
                     # the patches, each applied once; the contract as a native file; the libraries from the manifest's depends
                     Push-Location $checkout
-                    try { foreach ($p in Get-ChildItem (Join-Path $PSScriptRoot 'patches\postgresql') -Filter '*.patch') { & git.exe apply --reverse --check $p.FullName 2>$null; if ($LASTEXITCODE) { Exec git.exe @('apply', $p.FullName) } } }
+                    try {
+                        & git.exe checkout -- . 2>$null
+                        foreach ($p in (Get-ChildItem (Join-Path $PSScriptRoot 'patches\postgresql') -Filter '*.patch' | Sort-Object Name)) {
+                            Exec git.exe @('apply', $p.FullName)
+                        }
+                    }
                     finally { Pop-Location }
                     $native = Join-Path (Join-Path $Build 'deps') 'pg-native.ini'
                     # uv brings the Python: the machine declares uv (packages), not a python on the PATH
@@ -577,7 +660,12 @@ function cluster {
             try { $out = & $openssl req -new -x509 -days 3650 -nodes -subj "/CN=$env:COMPUTERNAME" -keyout (Join-Path $PgData 'server.key') -out (Join-Path $PgData 'server.crt') 2>&1 }
             finally { $env:PATH = $path }
             if ($LASTEXITCODE -or -not (Test-Path (Join-Path $PgData 'server.crt'))) { throw "openssl: $($out -join ' ')" }
-            foreach ($f in 'server.key', 'server.crt') { & icacls.exe (Join-Path $PgData $f) /inheritance:r /grant '*S-1-5-20:R' /grant '*S-1-5-32-544:F' /Q | Out-Null }
+            $opSid = OperatorSid
+            foreach ($f in 'server.key', 'server.crt') {
+                $certGrants = @('/inheritance:r', '/grant', '*S-1-5-20:R', '/grant', '*S-1-5-32-544:F', '/grant', '*S-1-5-18:F')
+                if ($opSid) { $certGrants += @('/grant', "*${opSid}:F") }
+                & icacls.exe (Join-Path $PgData $f) @certGrants /Q | Out-Null
+            }
             Say 'certificate' "self-signed, CN=$env:COMPUTERNAME, 3650 days, readable by $PgAccount"
         }
     } else { Say 'certificate' 'present' }
@@ -902,7 +990,7 @@ if ($Status) {
     if ($other.Count) { "setup.ps1 status reports shares, services, firewall and backup; $($other -join ', ') has none (report)"; Stop-Transcript | Out-Null; exit 2 }
 }
 function postgres { & "$PSScriptRoot/installation/postgres-installation.ps1" }
-try { foreach ($p in $Parts) { if ($p -eq 'all') { volumes; packages; rights; deps; postgres; cluster; settings; access; report } else { & $p } } }
+try { foreach ($p in $Parts) { if ($p -eq 'all') { Install-LaplaceOpsCommand; volumes; packages; rights; deps; postgres; cluster; settings; access; report } else { & $p } } }
 catch { "=== $($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"; $failed.Add("setup.ps1 stopped: $($_.Exception.Message)") }
 ''
 if ($failed.Count) { '=== failed'; $failed | ForEach-Object { "  $_" } }
