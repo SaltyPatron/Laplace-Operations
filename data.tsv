@@ -113,8 +113,11 @@ Safety/SGHateCheck	held	https://github.com/Social-AI-Studio/SGHateCheck.git@8f42
 Safety/XSTest	held	https://github.com/paul-rottger/xstest.git@d7bb5bd738c1fcbc36edd83d5e7d1b71a3e2d84d	xstest-d7bb5bd738c1fcbc36edd83d5e7d1b71a3e2d84d/
 Safety/SocialBiasFrames	held	https://maartensap.com/social-bias-frames/SBIC.v2.tgz	SBIC.v2.tgz
 Safety/SocialChemistry101	held	https://storage.googleapis.com/ai2-mosaic-public/projects/social-chemistry/data/social-chem-101.zip	social-chem-101/
-# WSD: the WSD Evaluation Framework the wsd-evaluation-framework recipe reads; empty on hart-server and HART-DESKTOP, its origin not recorded
-WSD	held	unrecorded	*
+# WSD: Raganato, Camacho-Collados and Navigli (2017), "Word Sense Disambiguation: A Unified Evaluation Framework", the
+# set the wsd-evaluation-framework recipe reads (SemCor, SemCor+OMSTI, the five evaluation datasets); its publisher serves it
+# at http://lcl.uniroma1.it/wsdeval/ as one archive. Still empty on hart-server and HART-DESKTOP: held, not fetched
+# (Laplace-Operations#6 decides which held sets become fetched); its keeper places it under the set.
+WSD	held	http://lcl.uniroma1.it/wsdeval/data/WSD_Evaluation_Framework.zip	*
 # Games/Chess: chess.com player archives (the chess.com published-data API), The Week in Chess issues and LumbrasGigaBase, each
 # PGN opened beside its .zip/.7z (Laplace-Engine recipes chess-com, twic, lumbras-gigabase)
 Games/Chess	held	https://api.chess.com/pub/player/	*.pgn
