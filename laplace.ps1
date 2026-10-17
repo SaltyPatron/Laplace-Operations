@@ -8,6 +8,10 @@ Operate the installed Laplace application through its delivery workflows.
 ./laplace.ps1 deploy -Wait
 .EXAMPLE
 ./laplace.ps1 db -Database substrate -DatabaseOperation recreate -Yes
+.EXAMPLE
+./laplace.ps1 ingest wiktionary tatoeba staging -Wait
+.EXAMPLE
+./laplace.ps1 data status staging
 #>
 [CmdletBinding()]
 param(
@@ -27,7 +31,11 @@ $ErrorActionPreference = 'Stop'
 if ($Help -or $Operation -in @('help','-h','--help','/?') -or ($RemainingArgs | Where-Object { $_ -in @('help','-h','--help','/?') })) {
     $Operation = 'help'
 } else {
+    $Names = @(); $DataOperation = 'status'
+    $takesNames = $Operation -in @('ingest','data')                          # source or data-set names, given after the operation
     foreach ($token in $RemainingArgs) {
+        if ($Operation -eq 'data' -and $token -in @('status','fetch','record')) { $DataOperation = $token; continue }
+        if ($takesNames -and $token -notmatch '^-' -and $token -notin @('desktop','staging','production','cloud','yes','wait')) { $Names += $token; continue }
         switch ($token.ToLowerInvariant()) {
             { $_ -in @('--yes','-y','yes') } { $Yes = $true }
             { $_ -in @('--wait','-w','wait') } { $Wait = $true }
@@ -52,7 +60,7 @@ if ($Help -or $Operation -in @('help','-h','--help','/?') -or ($RemainingArgs | 
         }
     }
 }
-$validOperations = @('help','status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','prepare','build','test','recovery','db','restart-iis')
+$validOperations = @('help','status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','prepare','build','test','recovery','db','restart-iis','ingest','seed','sources','data')
 if ($Operation -notin $validOperations) {
     throw "Unknown operation '$Operation'. Valid operations: $($validOperations -join ', ')"
 }
@@ -89,6 +97,19 @@ LOCAL DESKTOP ONE-TIME SETUP & MODULAR CLI
   laplace-ops enroll-development      Enroll Windows DPAPI workload credentials from OpenBao
   laplace-ops components desktop      Package Laplace-Native + Laplace-Engine and install the 'laplace' CLI
 
+INGESTION AND DATA (Laplace-Engine: the laplace program, recipes/order, the data sets of data.tsv)
+  laplace-ops sources                 Each source, where it is found on this machine, and its recipes (laplace sources)
+  laplace-ops ingest [SOURCE...]      Ingest every source in recipes/order, or the sources named (ingest.ps1)
+  laplace-ops ingest staging [SOURCE...] [-Wait]
+                                      The same on hart-server: dispatches Laplace-Operations ingest.yml
+  laplace-ops seed -Yes               DROP the Engine database, deploy it again empty, ingest every source (deploy.ps1 drop, ingest.ps1)
+  laplace-ops seed staging -Yes [-Wait]
+                                      The same on hart-server: ingest.yml with reseed
+  laplace-ops data [status|fetch|record] [SET...]
+                                      data.sh on this machine (needs bash and python3, as laplace.env does)
+  laplace-ops data staging [status|fetch|record] [SET...]
+                                      data.sh on the deployment target ($LAPLACE_PEER, over SSH)
+
 REMOTE CI/CD & ENVIRONMENT OPERATIONS (GitHub Actions)
   laplace-ops runs                    List recent GitHub Actions runs across all Laplace repositories
   laplace-ops status <staging|production> [-Wait]
@@ -98,7 +119,7 @@ REMOTE CI/CD & ENVIRONMENT OPERATIONS (GitHub Actions)
 '@ | Write-Host
     exit 0
 }
-$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis')
+$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','ingest','seed','sources','data')
 if (-not $PSBoundParameters.ContainsKey('Target')) {
     $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
 }
@@ -167,6 +188,43 @@ if ($Operation -eq 'db') {
         & gh run watch $Matches[1] --repo $Repository --exit-status --interval 10
         exit $LASTEXITCODE
     }
+    exit 0
+}
+if ($Operation -in @('ingest','seed','sources','data')) {
+    if ($Target -notin @('desktop','staging')) { throw "$Operation supports desktop or staging." }
+    if ($Operation -eq 'seed' -and -not $Yes) { throw 'seed drops the database first: pass -Yes.' }
+    if ($Target -eq 'desktop') {
+        . "$PSScriptRoot/laplace.env.ps1"
+        switch ($Operation) {
+            'ingest'  { & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1" @Names; exit $LASTEXITCODE }
+            'seed'    { & pwsh -NoProfile -File "$PSScriptRoot/deploy.ps1" drop; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                        & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1"; exit $LASTEXITCODE }
+            'sources' { $laplace = Join-Path $env:LAPLACE_BUILD 'Laplace-Engine\icx-release\laplace.exe'
+                        if (-not (Test-Path $laplace)) { throw "no laplace program at $laplace`: deploy.ps1 builds it" }
+                        & $laplace sources; exit $LASTEXITCODE }
+            'data'    { $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
+                        if (-not (Test-Path $bash)) { throw "data.sh needs bash: no Git Bash at $bash" }
+                        & $bash -c 'python3 -c 1' 2>$null
+                        if ($LASTEXITCODE -ne 0) { throw 'data.sh reads laplace.env, which needs python3 in bash; none runs here. Run it where the data is kept: laplace-ops data staging' }
+                        & $bash "$PSScriptRoot/data.sh" $DataOperation @Names; exit $LASTEXITCODE }
+        }
+    }
+    if ($Operation -eq 'sources') { throw 'sources reads this machine; on hart-server run laplace sources there.' }
+    if ($Operation -eq 'data') {
+        if (-not $env:LAPLACE_PEER) { . "$PSScriptRoot/laplace.env.ps1" }
+        if (-not $env:LAPLACE_PEER) { throw 'data staging reaches the deployment target over SSH: LAPLACE_PEER (machine.env) names it.' }
+        # the target's own checkout, at the LAPLACE_SRC laplace.env gives hart-server
+        $remote = (@('/repos/src/Laplace-Operations/data.sh', $DataOperation) + $Names | ForEach-Object { "'" + ($_ -replace "'", "'\''") + "'" }) -join ' '
+        & ssh -o BatchMode=yes $env:LAPLACE_PEER $remote
+        exit $LASTEXITCODE
+    }
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required; sign in with gh auth login.' }
+    $ingestInputs = if ($Operation -eq 'seed') { @('-f','reseed=true') } else { @('-f',"sources=$($Names -join ' ')",'-f','reseed=false') }
+    Write-Host ($(if ($Operation -eq 'seed') { 'Reseed hart-server: drop, deploy empty, ingest every source of LAPLACE_SOURCES.' } elseif ($Names) { "Ingest on hart-server: $($Names -join ' ')." } else { 'Ingest on hart-server: every source of LAPLACE_SOURCES.' }))
+    $output = & gh workflow run 'ingest.yml' --repo 'SaltyPatron/Laplace-Operations' --ref main @ingestInputs 2>&1
+    if ($LASTEXITCODE -ne 0) { throw ($output -join "`n") }
+    $text = $output -join "`n"; Write-Output $text
+    if ($Wait -and $text -match '/actions/runs/(\d+)') { & gh run watch $Matches[1] --repo 'SaltyPatron/Laplace-Operations' --exit-status --interval 10; exit $LASTEXITCODE }
     exit 0
 }
 if ($Operation -eq 'restart-iis') {

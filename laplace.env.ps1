@@ -39,6 +39,7 @@ Set-Default LAPLACE_DEPS    "$env:LAPLACE_DATA_ROOT\dependencies"
 Set-Default LAPLACE_DEPSRC  "$env:LAPLACE_DEPS\src"
 Set-Default LAPLACE_EXTERNAL $env:LAPLACE_DEPSRC
 Set-Default LAPLACE_DATA    "$env:LAPLACE_DATA_ROOT\data"
+Set-Default LAPLACE_MODELS  "$env:LAPLACE_DATA_ROOT\models"                 # model files the recipes read (Laplace-Engine recipes/tokenizers)
 
 # The machine, as setup.ps1 declares it (Operations: Setup, Database). Every name here is this installation's choice.
 Set-Default LAPLACE_PG_DIR  (Join-Path "$env:LAPLACE_DEPS\postgresql" ((Get-Content "$PSScriptRoot\dependencies.tsv" | Where-Object { $_ -match '^postgresql\t' } | Select-Object -First 1) -split "`t")[1])
@@ -115,7 +116,7 @@ Set-Default LAPLACE_SPECTRA_DIR "$env:LAPLACE_DEPSRC\spectra"
 Set-Default LAPLACE_MATH       "$env:LAPLACE_BUILD\..\laplace-math\icx-release\laplace-math.lib"   # setup.ps1 deps builds it first (math\CMakeLists.txt)
 
 # What the engine reads is '/'-separated on every platform (Laplace-Engine src/os.h): its paths, whatever a shell wrote
-foreach ($n in 'LAPLACE_DATA', 'LAPLACE_WORK', 'LAPLACE_TIER0', 'LAPLACE_HIGHWAY', 'LAPLACE_RECIPES', 'LAPLACE_FIRMWARE', 'LAPLACE_GRAMMARS', 'LAPLACE_UCD', 'LAPLACE_NATIVE') {
+foreach ($n in 'LAPLACE_DATA', 'LAPLACE_MODELS', 'LAPLACE_WORK', 'LAPLACE_TIER0', 'LAPLACE_HIGHWAY', 'LAPLACE_RECIPES', 'LAPLACE_FIRMWARE', 'LAPLACE_GRAMMARS', 'LAPLACE_UCD', 'LAPLACE_NATIVE') {
     $v = [Environment]::GetEnvironmentVariable($n); if ($v) { [Environment]::SetEnvironmentVariable($n, ($v -replace '\\', '/')) }
 }
 
