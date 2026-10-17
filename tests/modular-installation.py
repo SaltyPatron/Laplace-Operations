@@ -215,6 +215,38 @@ class Installation(unittest.TestCase):
                 waited = time.monotonic() - started
         self.assertTrue(0.5 < waited < 10, waited)
 
+    def test_host_lock_waiting_deployment_is_not_overtaken_by_a_later_reader(self):
+        import fcntl, threading, time
+        lock = self.directory / 'host-resource.lock'
+        config = {'lock': str(lock)}
+        reader = os.open(lock, os.O_WRONLY | os.O_CREAT, 0o660)
+        self.addCleanup(os.close, reader)
+        fcntl.flock(reader, fcntl.LOCK_SH)
+        got = []
+
+        def deploy():
+            with patch.dict(os.environ, {'LAPLACE_HOST_LOCK_WAIT_SECONDS': '20'}):
+                with modular.host_lock(config):
+                    got.append(time.monotonic())
+                    time.sleep(0.5)
+        deployment = threading.Thread(target=deploy)
+        deployment.start()
+        turnstile = str(lock) + '.turnstile'
+        for _ in range(100):
+            if os.path.exists(turnstile):
+                break
+            time.sleep(0.02)
+        time.sleep(0.3)
+        # a later ingest, as operation-lock.sh takes it, waits at the turnstile the deployment holds
+        helper = Path(__file__).resolve().parent.parent / 'operation-lock.sh'
+        env = dict(os.environ, LAPLACE_HOST_LOCK=str(lock), LAPLACE_HOST_LOCK_WAIT_SECONDS='0', HELPER=str(helper))
+        later = subprocess.run(['bash', '-c', '. "$HELPER"; laplace_host_lock shared'], env=env, capture_output=True, text=True)
+        self.assertEqual(later.returncode, 3, later.stderr)
+        self.assertEqual(got, [])
+        fcntl.flock(reader, fcntl.LOCK_UN)
+        deployment.join(10)
+        self.assertEqual(len(got), 1)
+
     def test_non_root_sql_uses_operator_role(self):
         config = self.load()
         called = []

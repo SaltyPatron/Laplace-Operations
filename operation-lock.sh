@@ -1,6 +1,13 @@
 #!/bin/sh
 # Cooperative host lock for shared runtime installation and active ingestion.
 # File descriptor 8 is inherited by nested build/install commands. Never unlink it.
+# Writer preference: the kernel's flock has none. A new shared holder is granted past a waiting exclusive one, so a
+# stream of overlapping ingests and verifications could hold a deployment off until its deadline. So every
+# acquisition, shared or exclusive, first passes a turnstile, the lock's path with .turnstile. It holds the turnstile
+# exclusively only while it waits for the lock itself. A waiting deployment holds the turnstile, so no later reader gets
+# in ahead of it; the readers already in drain, and then it has the lock. Every taker of the lock in shared mode must
+# pass the turnstile the same way (installation/modular.py's host_lock does; the Engine's parity harness and the
+# monorepo's site.sh are to). Descriptor 7 holds the turnstile and is closed before this returns.
 laplace_host_lock() {
   laplace_host_lock_wait=${LAPLACE_HOST_LOCK_WAIT_SECONDS:-0}
   case $laplace_host_lock_wait in
@@ -8,7 +15,10 @@ laplace_host_lock() {
   esac
   laplace_host_lock_path=${LAPLACE_HOST_LOCK:-${LAPLACE_LOCKS:?machine lock directory required}/host-resource.lock}
   [ -d "$(dirname "$laplace_host_lock_path")" ] || { echo "missing host lock directory: $laplace_host_lock_path" >&2; return 1; }
-  if ! [ /proc/self/fd/8 -ef "$laplace_host_lock_path" ]; then
+  laplace_host_lock_inherited=0
+  if [ /proc/self/fd/8 -ef "$laplace_host_lock_path" ]; then
+    laplace_host_lock_inherited=1
+  else
     laplace_host_lock_umask=$(umask)
     umask 002
     exec 8>>"$laplace_host_lock_path"
@@ -19,12 +29,36 @@ laplace_host_lock() {
     shared) laplace_host_lock_mode=-s ;;
     *) echo 'host lock mode must be shared or exclusive' >&2; return 2 ;;
   esac
-  # Try once first so normal and inherited acquisitions remain quiet. CI declares
-  # its queue deadline; an interactive caller can choose zero for immediate refusal.
-  flock "$laplace_host_lock_mode" -n 8 && return 0
-  echo "Waiting up to ${laplace_host_lock_wait}s for $laplace_host_lock_path (${1:-exclusive})" >&2
-  flock "$laplace_host_lock_mode" -w "$laplace_host_lock_wait" 8 || {
-    echo "host lock deadline expired: $laplace_host_lock_path; no shared-runtime changes performed" >&2
-    return 3
-  }
+  # A nested command of the holder: the descriptor it inherited holds the lock already (and a holder never waits at its
+  # own turnstile behind a deployment that waits for it).
+  if [ "$laplace_host_lock_inherited" = 1 ] && flock "$laplace_host_lock_mode" -n 8; then return 0; fi
+  # Try once first so normal acquisitions remain quiet. CI declares its queue
+  # deadline; an interactive caller can choose zero for immediate refusal.
+  laplace_host_lock_umask=$(umask)
+  umask 002
+  exec 7>>"$laplace_host_lock_path.turnstile"
+  umask "$laplace_host_lock_umask"
+  laplace_host_lock_start=$(date +%s)
+  laplace_host_lock_said=0
+  if ! flock -x -n 7; then
+    echo "Waiting up to ${laplace_host_lock_wait}s for $laplace_host_lock_path (${1:-exclusive})" >&2
+    laplace_host_lock_said=1
+    flock -x -w "$laplace_host_lock_wait" 7 || {
+      exec 7>&-
+      echo "host lock deadline expired: $laplace_host_lock_path; no shared-runtime changes performed" >&2
+      return 3
+    }
+  fi
+  if ! flock "$laplace_host_lock_mode" -n 8; then
+    [ "$laplace_host_lock_said" = 1 ] || echo "Waiting up to ${laplace_host_lock_wait}s for $laplace_host_lock_path (${1:-exclusive})" >&2
+    laplace_host_lock_left=$((laplace_host_lock_wait - ($(date +%s) - laplace_host_lock_start)))
+    [ "$laplace_host_lock_left" -ge 0 ] || laplace_host_lock_left=0
+    flock "$laplace_host_lock_mode" -w "$laplace_host_lock_left" 8 || {
+      exec 7>&-
+      echo "host lock deadline expired: $laplace_host_lock_path; no shared-runtime changes performed" >&2
+      return 3
+    }
+  fi
+  exec 7>&-
+  return 0
 }
