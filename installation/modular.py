@@ -175,7 +175,24 @@ def host_lock(config):
     finally:
         os.umask(old)
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # As operation-lock.sh: try once, then wait up to LAPLACE_HOST_LOCK_WAIT_SECONDS (default 0, immediate refusal;
+        # the delivery workflow declares its queue deadline) for another repository's host operation.
+        wait = os.environ.get('LAPLACE_HOST_LOCK_WAIT_SECONDS', '0') or '0'
+        if not wait.isdigit():
+            raise ValueError('LAPLACE_HOST_LOCK_WAIT_SECONDS must be a nonnegative integer')
+        deadline = time.monotonic() + int(wait)
+        waiting = False
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise ValueError('host lock deadline expired: ' + config['lock'] + '; no shared-runtime changes performed')
+                if not waiting:
+                    print('Waiting up to ' + wait + 's for ' + config['lock'] + ' (exclusive)', file=sys.stderr, flush=True)
+                    waiting = True
+                time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
         yield
     finally:
         os.close(descriptor)

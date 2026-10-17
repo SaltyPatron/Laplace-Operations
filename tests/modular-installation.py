@@ -193,6 +193,28 @@ class Installation(unittest.TestCase):
                 modular.provision_token(config)
             self.assertEqual(path.read_text(), 'LAPLACE_MCP_TOKEN=short\n')
 
+    def test_host_lock_waits_for_the_declared_deadline_then_refuses(self):
+        import fcntl, threading, time
+        lock = self.directory / 'host-resource.lock'
+        config = {'lock': str(lock)}
+        held = os.open(lock, os.O_WRONLY | os.O_CREAT, 0o660)
+        self.addCleanup(lambda: os.close(held) if held is not None else None)
+        fcntl.flock(held, fcntl.LOCK_EX)
+        with patch.dict(os.environ, {'LAPLACE_HOST_LOCK_WAIT_SECONDS': '0'}):
+            with self.assertRaisesRegex(ValueError, 'deadline expired'):
+                with modular.host_lock(config):
+                    self.fail('acquired a held lock')
+        with patch.dict(os.environ, {'LAPLACE_HOST_LOCK_WAIT_SECONDS': 'soon'}):
+            with self.assertRaisesRegex(ValueError, 'nonnegative integer'):
+                with modular.host_lock(config):
+                    self.fail('acquired under an invalid deadline')
+        threading.Timer(1.0, lambda: fcntl.flock(held, fcntl.LOCK_UN)).start()
+        started = time.monotonic()
+        with patch.dict(os.environ, {'LAPLACE_HOST_LOCK_WAIT_SECONDS': '20'}):
+            with modular.host_lock(config):
+                waited = time.monotonic() - started
+        self.assertTrue(0.5 < waited < 10, waited)
+
     def test_non_root_sql_uses_operator_role(self):
         config = self.load()
         called = []
