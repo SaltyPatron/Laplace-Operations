@@ -1,6 +1,24 @@
 #Requires -Version 7
 . "$PSScriptRoot/../secrets/process.ps1"
 
+function Read-DevelopmentConfig([string]$Installation) {
+    $c = Get-Content -LiteralPath $Installation -Raw | ConvertFrom-Json
+    if (-not $env:LAPLACE_DEVELOPMENT_INSTALLATION -and $c.PSObject.Properties['authentication'] -and $c.authentication -eq 'sspi' -and $c.database_host -ine $env:COMPUTERNAME) {
+        . "$PSScriptRoot/../laplace.env.ps1"
+        $hostLower = $env:COMPUTERNAME.ToLowerInvariant()
+        $c.client = $hostLower
+        $c.bao_role = "laplace-$hostLower-development"
+        $c.identity_reference = "kv/hosts/$hostLower/laplace-mono-identity"
+        $c.database_host = $env:COMPUTERNAME
+        $c.port = [int]$env:LAPLACE_PGPORT
+        $c.psql = (Join-Path $env:LAPLACE_PG_DIR 'bin/psql.exe') -replace '\\', '/'
+        $c.admin_role = $env:USERNAME
+        $c.root_certificate = (Join-Path $env:LOCALAPPDATA "Laplace/pgadmin/$hostLower-postgresql.crt") -replace '\\', '/'
+        $c.windows_identities = @("$env:COMPUTERNAME\$env:USERNAME", "IIS APPPOOL\laplace-mono")
+    }
+    $c
+}
+
 function Get-DevelopmentCredentialPath($Config) {
     if ($Config.client -notmatch '^[a-z][a-z0-9-]*$') { throw 'Invalid development client name.' }
     if ($env:LAPLACE_DEVELOPMENT_CREDENTIALS) {

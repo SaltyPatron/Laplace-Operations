@@ -68,17 +68,36 @@ def main():
         path = Path(config[key])
         if not path.is_absolute() or '..' in path.parts:
             raise ValueError('Declare an absolute path for ' + key)
+    has_mcp = bool(config.get('mcp') and config.get('mcp_build'))
+    if has_mcp:
+        for key in ('mcp', 'mcp_build'):
+            path = Path(config[key])
+            if not path.is_absolute() or '..' in path.parts:
+                raise ValueError('Declare an absolute path for ' + key)
     revisions = {}
-    for name, key in (('Laplace-Engine', 'engine'), ('Laplace-Native', 'native')):
-        if run(['git', '-C', config[key], 'status', '--porcelain', '--untracked-files=no']):
-            raise ValueError(name + ' has uncommitted changes; package exact source revisions')
-        revisions[name] = run(['git', '-C', config[key], 'rev-parse', 'HEAD'])
+    repo_sources = [('Laplace-Engine', 'engine'), ('Laplace-Native', 'native')]
+    if has_mcp:
+        repo_sources.append(('Laplace-MCP', 'mcp'))
+    for name, key in repo_sources:
+        dirty = run(['git', '-C', config[key], 'status', '--porcelain', '--untracked-files=no'])
+        head = run(['git', '-C', config[key], 'rev-parse', 'HEAD'])
+        if dirty:
+            diff_bytes = subprocess.run(['git', '-C', config[key], 'diff', 'HEAD'], capture_output=True, check=True).stdout
+            revisions[name] = head + '-dirty-' + hashlib.sha256(diff_bytes).hexdigest()[:12]
+        else:
+            revisions[name] = head
     cache = (Path(config['build']) / 'CMakeCache.txt').read_text()
     for variable, key in (('CMAKE_HOME_DIRECTORY', 'engine'), ('LAPLACE_NATIVE', 'native')):
         selected = re.search(r'^' + variable + r':[^=]+=(.+)$', cache, re.M)
         if not selected or Path(selected.group(1).strip()).resolve() != Path(config[key]).resolve():
             raise ValueError('Configured build does not use the declared source: ' + variable)
     run(['cmake', '--build', config['build'], '--target', 'laplace_engine'])
+    if has_mcp:
+        mcp_build = Path(config['mcp_build'])
+        if not (mcp_build / 'CMakeCache.txt').is_file():
+            run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-G', 'Ninja',
+                 '-DCMAKE_C_COMPILER=icx', '-DCMAKE_CXX_COMPILER=icx', '-DCMAKE_BUILD_TYPE=Release'])
+        run(['cmake', '--build', str(mcp_build), '--target', 'lpm_program'])
     prefix = Path(config['prefix']).resolve()
     releases = prefix / 'releases'
     releases.mkdir(parents=True, exist_ok=True)
@@ -88,6 +107,9 @@ def main():
     STAGING.append((candidate, releases))
     (candidate / 'bin').mkdir()
     shutil.copy2(Path(config['build']) / 'laplace.exe', candidate / 'bin/laplace.exe')
+    if has_mcp:
+        shutil.copy2(Path(config['mcp_build']) / 'lpm.exe', candidate / 'bin/lpm.exe')
+        shutil.copy2(Path(config['mcp_build']) / 'lpm.dll', candidate / 'bin/lpm.dll')
     shutil.copytree(Path(config['engine']) / 'recipes', candidate / 'share/recipes')
     shutil.copytree(Path(config['engine']) / 'firmware', candidate / 'share/firmware')
     shutil.copytree(config['prepared'], candidate / 'share/prepared')
@@ -109,8 +131,11 @@ def main():
     closure(candidate, directories)
     files = {str(path.relative_to(candidate)).replace('\\', '/'): digest(path)
              for path in sorted(candidate.rglob('*')) if path.is_file()}
+    components = ['Laplace-Engine']
+    if has_mcp:
+        components.append('Laplace-MCP')
     package = {'schema': 'laplace.modular-package/v1', 'platform': 'windows-x86_64',
-               'components': ['Laplace-Engine'], 'revisions': revisions, 'files': files,
+               'components': components, 'revisions': revisions, 'files': files,
                'grammars': [path.stem.removeprefix('libtree-sitter-') for path in grammars]}
     identity = hashlib.sha256(json.dumps(package, sort_keys=True).encode()).hexdigest()
     release = releases / identity
@@ -154,7 +179,10 @@ def main():
         executable, environment, _ = client.selected(client_candidate)
         environment = client.process_environment(environment)
         environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')
-        for operation in (['text', 'Laplace'], ['status']):
+        operations = [['text', 'Laplace'], ['status']]
+        if config['socket'].lower() == socket.gethostname().split('.')[0].lower():
+            operations = [['text', 'Laplace'], ['deploy'], ['status']]
+        for operation in operations:
             result = subprocess.run([str(executable), *operation], capture_output=True, text=True, env=environment, timeout=120)
             if result.returncode:
                 raise ValueError('Packaged Engine ' + operation[0] + ' failed: ' + result.stderr)

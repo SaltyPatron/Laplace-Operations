@@ -15,7 +15,7 @@
   "admin_socket": "127.0.0.1",
   "admin_role": "ahart",
   "api_port": 5187,
-  "pool_max": 4,
+  "pool_max": 22,
   "authentication": "sspi",
   "root_certificate": "C:/Users/ahart/AppData/Local/Laplace/pgadmin/hart-desktop-postgresql.crt",
   "windows_identities": [

@@ -62,8 +62,30 @@ foreach ($pgDir in @('E:\Data\Laplace\pgdata', 'D:\Data\Laplace\pg_wal', 'E:\Dat
         & icacls.exe $pgDir /grant '*S-1-5-20:(OI)(CI)M' /T /C /Q | Out-Null
     }
 }
+foreach ($tlsFile in @('E:\Data\Laplace\pgdata\server.crt', 'E:\Data\Laplace\pgdata\server.key')) {
+    if (Test-Path -LiteralPath $tlsFile) {
+        & takeown.exe /F $tlsFile *> $null
+        & icacls.exe $tlsFile /inheritance:r /grant '*S-1-5-20:R' /grant "*${operatorSid}:F" /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' /Q | Out-Null
+    }
+}
 if (Test-Path -LiteralPath 'D:\Libraries\postgresql\18.6') {
     & icacls.exe 'D:\Libraries\postgresql\18.6' /grant '*S-1-5-20:(OI)(CI)RX' /grant "*${operatorSid}:(OI)(CI)F" /T /C /Q | Out-Null
+}
+
+# Grant operator SID start/stop/query control over the laplace-postgres Windows service from non-elevated shells
+$pgSvcName = if ($config.targets -and $config.targets[0].postgres_service) { $config.targets[0].postgres_service } else { 'laplace-postgres' }
+$svcCheck = Get-Service -Name $pgSvcName -ErrorAction SilentlyContinue
+if ($svcCheck) {
+    $sddlOut = (& sc.exe sdshow $pgSvcName 2>$null | Where-Object { $_ -match '^D:' } | Select-Object -First 1)
+    if ($sddlOut -and $sddlOut -notmatch [regex]::Escape($operatorSid)) {
+        $ace = "(A;;CCLCSWRPWPDTLOCRRC;;;$operatorSid)"
+        $newSddl = if ($sddlOut -match '^(D:[^\(]*(?:\([^\)]+\))*)(S:.*)$') { "$($Matches[1])$ace$($Matches[2])" } else { "$sddlOut$ace" }
+        & sc.exe sdset $pgSvcName $newSddl | Out-Null
+    }
+    if ($svcCheck.Status -ne 'Running') {
+        Write-Host "   Starting $pgSvcName service ..."
+        Start-Service -Name $pgSvcName
+    }
 }
 
 # Ensure IIS Application Pool retains required access to the IIS service directories

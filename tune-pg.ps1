@@ -25,6 +25,17 @@ if (-not $env:LAPLACE_PGDATA -or -not $env:LAPLACE_PGPORT) { . "$PSScriptRoot\la
 $TunePsqlExe = Join-Path $env:LAPLACE_PG_DIR 'bin\psql.exe'
 $TuneConn = $env:LAPLACE_CONNINFO -replace 'dbname=\S+', 'dbname=postgres'
 if ($TuneConn -notmatch 'dbname=') { $TuneConn += ' dbname=postgres' }
+$TuneOperatorJson = Join-Path $PSScriptRoot ("installation\" + $env:COMPUTERNAME.ToLowerInvariant() + "-operator.json")
+if ((-not $env:LAPLACE_CONNINFO -or $env:LAPLACE_CONNINFO -eq "host=$env:LAPLACE_PGHOST port=$env:LAPLACE_PGPORT user=$env:LAPLACE_ROLE dbname=laplace") -and (Test-Path -LiteralPath $TuneOperatorJson)) {
+    try {
+        $op = Get-Content -LiteralPath $TuneOperatorJson -Raw | ConvertFrom-Json
+        $localTarget = @($op.targets | Where-Object { $_.authentication -eq 'sspi' -and $_.host -ieq $env:COMPUTERNAME }) | Select-Object -First 1
+        $rootCert = (Join-Path $op.state ($env:COMPUTERNAME.ToLowerInvariant() + "-postgresql.crt")) -replace '\\', '/'
+        if ($localTarget -and (Test-Path -LiteralPath $rootCert)) {
+            $TuneConn = "host=$($localTarget.host) hostaddr=$($localTarget.hostaddr) port=$($localTarget.port) dbname=postgres user=$($op.role) sslmode=verify-full sslrootcert=$rootCert require_auth=sspi"
+        }
+    } catch { }
+}
 $TuneProfile = if ($env:LAPLACE_PG_PROFILE) { $env:LAPLACE_PG_PROFILE } else { 'substrate' }
 if ($TuneProfile -eq 'knowledge') { $TuneProfile = 'substrate' }
 if ($TuneProfile -notin 'substrate', 'app') { throw "tune-pg: LAPLACE_PG_PROFILE is substrate or app, not '$TuneProfile'" }
@@ -121,6 +132,8 @@ function TuneDeclared {
         if (-not $found) { Write-Warning "tune-pg: $name is declared for shared_preload_libraries but no $name.dll is in $($libdirs -join ';'): not loaded" }
         [bool]$found
     })
+    $trace = if ($env:LAPLACE_PG_TRACE) { $env:LAPLACE_PG_TRACE.ToLowerInvariant() } else { 'full' }
+    if ($trace -notin @('full', 'reduced', 'off')) { throw "tune-pg: LAPLACE_PG_TRACE must be full, reduced, or off (got '$trace')" }
     $s = [ordered]@{
         wal_level                        = $(if ($TuneProfile -eq 'app') { 'replica' } else { 'minimal' })
         max_wal_senders                  = $(if ($TuneProfile -eq 'app') { '3' } else { '0' })
@@ -162,10 +175,11 @@ function TuneDeclared {
         autovacuum_vacuum_insert_scale_factor = '0.01'
         max_locks_per_transaction        = "$($p.locks)"
         shared_preload_libraries         = ($preload -join ',')
-        'pg_stat_statements.track'       = 'all'
-        'auto_explain.log_min_duration'  = '5s'
-        track_io_timing                  = 'on'
-        track_wal_io_timing              = 'on'
+        'pg_stat_statements.track'       = $(if ($trace -eq 'full') { 'all' } elseif ($trace -eq 'reduced') { 'top' } else { 'none' })
+        'auto_explain.log_min_duration'  = $(if ($trace -eq 'off') { '-1' } else { '5s' })
+        'auto_explain.log_parameter_max_length' = '0'
+        track_io_timing                  = $(if ($trace -eq 'off') { 'off' } else { 'on' })
+        track_wal_io_timing              = $(if ($trace -eq 'off') { 'off' } else { 'on' })
         logging_collector                = 'on'
         log_directory                    = $logs
         log_filename                     = 'postgresql-%Y-%m-%d.log'

@@ -8,7 +8,8 @@ if ($SourcePath) { $env:LAPLACE_ROOT=[IO.Path]::GetFullPath($SourcePath) }
 if (-not $SourcePath) { $SourcePath=Join-Path $env:LAPLACE_SRC 'Laplace' }
 $SourcePath=(Resolve-Path -LiteralPath $SourcePath).Path
 $Installation=(Resolve-Path -LiteralPath $Installation).Path
-$config=Get-Content -LiteralPath $Installation -Raw | ConvertFrom-Json
+. "$PSScriptRoot/credentials.ps1"
+$config=Read-DevelopmentConfig $Installation
 $port=if ($env:LAPLACE_API_PORT) {[int]$env:LAPLACE_API_PORT} else {[int]$config.api_port}
 if ($port -lt 1 -or $port -gt 65535) { throw 'Invalid development API port.' }
 $operations=Join-Path $env:LAPLACE_WORK 'operations'
