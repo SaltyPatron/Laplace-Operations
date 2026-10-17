@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import pwd
 import re
+import secrets
 import shlex
 import socket
 import subprocess
@@ -111,12 +112,48 @@ def sysquote(value):
     return '"' + str(value).replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%').replace('$', '$$') + '"'
 
 
+def token_file(config):
+    """The service's bearer token, beside its environment as the monorepo MCP's secrets/mcp.env is."""
+    return Path(config['environment_file']).parent / 'secrets/modular-mcp.env'
+
+
+def provision_token(config):
+    """Make the listener's token once (64 hex, root:deployment group 0640) and never replace it.
+
+    lpm serve refuses to listen without it; the deployment verification reads it through the group."""
+    path = token_file(config)
+    if any(p.is_symlink() for p in (path, *path.parents)):
+        raise ValueError('Refusing linked credential destination: ' + str(path))
+    gid = grp.getgrnam(config['deployment_group']).gr_gid
+    if not path.parent.is_dir():
+        path.parent.mkdir(parents=True)
+        os.chown(path.parent, 0, gid)
+        path.parent.chmod(0o750)
+    if path.exists():
+        if not re.fullmatch(r'LAPLACE_MCP_TOKEN="[0-9a-f]{64}"\n', path.read_text()):
+            raise ValueError('Installed MCP token is malformed; explicit rotation required: ' + str(path))
+    else:
+        atomic(path, 'LAPLACE_MCP_TOKEN="' + secrets.token_hex(32) + '"\n', 0o640)
+    os.chown(path, 0, gid)
+    path.chmod(0o640)
+    return path
+
+
 def unit_text(config):
     template = (Path(config['source']) / 'Laplace-MCP/laplace-modular-mcp.service.in').read_text()
-    return template.format(user=config['runtime_user'], group=config['runtime_group'],
+    text = template.format(user=config['runtime_user'], group=config['runtime_group'],
         postgres_service=config['postgres_service'], environment_file=config['environment_file'].replace('%', '%%'),
         state=config['state'].replace('%', '%%'), writable_state=sysquote(config['state']),
         executable=sysquote(Path(config['prefix']) / 'current/bin/lpm'))
+    # systemd reads the token as root; the runtime account never sees the file. Before setup has made
+    # the token the unit is the one already installed, so recurring deployment keeps matching it.
+    token = token_file(config)
+    if token.is_file():
+        line = 'EnvironmentFile=' + config['environment_file'].replace('%', '%%') + '\n'
+        if line not in text:
+            raise ValueError('Service template names no environment file')
+        text = text.replace(line, line + 'EnvironmentFile=' + str(token).replace('%', '%%') + '\n', 1)
+    return text
 
 
 def runtime_environment(config, release):
@@ -418,6 +455,7 @@ def main():
     with host_lock(config):
         if installing:
             prepare(config)
+            provision_token(config)
         else:
             live = config_load(config['installed_config'])
             if any(config[k] != live[k] for k in config if k not in ('source', 'operator_client')):

@@ -164,6 +164,35 @@ class Installation(unittest.TestCase):
         self.assertEqual((prefix / 'current').resolve(), old)
         self.assertIn(('start',), legacy)
 
+    def token_config(self):
+        config = self.load()
+        config['environment_file'] = str(self.directory / 'etc/modular.env')
+        config['source'] = str(self.directory / 'source')
+        template = Path(config['source']) / 'Laplace-MCP/laplace-modular-mcp.service.in'
+        template.parent.mkdir(parents=True)
+        template.write_text('[Service]\nUser={user}\nEnvironmentFile={environment_file}\nExecStart={executable} serve\n')
+        return config
+
+    def test_token_is_made_once_and_named_by_the_unit_only_once_made(self):
+        config = self.token_config()
+        before = modular.unit_text(config)
+        self.assertNotIn('modular-mcp.env', before)
+        with patch.object(modular.os, 'chown'), \
+             patch.object(modular.grp, 'getgrnam', return_value=modular.grp.struct_group(('laplace-runner', 'x', os.getgid(), []))):
+            path = modular.provision_token(config)
+            first = path.read_text()
+            self.assertRegex(first, r'^LAPLACE_MCP_TOKEN="[0-9a-f]{64}"\n$')
+            self.assertEqual(path.stat().st_mode & 0o777, 0o640)
+            self.assertEqual(path.parent.stat().st_mode & 0o777, 0o750)
+            self.assertEqual(modular.provision_token(config).read_text(), first)
+            after = modular.unit_text(config)
+            self.assertIn('EnvironmentFile=' + config['environment_file'] + '\nEnvironmentFile=' + str(path) + '\n', after)
+            self.assertEqual(after.count('modular-mcp.env'), 1)
+            path.write_text('LAPLACE_MCP_TOKEN=short\n')
+            with self.assertRaisesRegex(ValueError, 'rotation'):
+                modular.provision_token(config)
+            self.assertEqual(path.read_text(), 'LAPLACE_MCP_TOKEN=short\n')
+
     def test_non_root_sql_uses_operator_role(self):
         config = self.load()
         called = []

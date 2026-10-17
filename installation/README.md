@@ -86,6 +86,11 @@ identity and candidate before changing services. `modular.py deploy` selects a n
 it requires completed OS/service installation before building. Repeated setup does not implicitly
 upgrade an installed modular release.
 
+The modular listener takes a bearer token. Setup makes it once, `LAPLACE_MCP_TOKEN` in `secrets/modular-mcp.env`
+beside the declared environment file (64 hex, root and the deployment group, 0640), and never replaces it.
+The unit names that file once it exists; `lpm serve` refuses to listen without a token, and deployment
+verification reads it through the deployment group. A caller sends `Authorization: Bearer <token>`.
+
 Runtime setup also converges the declared local PostgreSQL certificate before changing service identities.
 Its subject is distinct from the OS default server certificate, its SANs cover the declared database endpoints,
 and both API connections and credential refresh use full certificate verification against
