@@ -26,10 +26,20 @@ foreach($pair in @(@($c.substrate_database,$c.substrate_role),@($c.application_d
     $null=Query ('REVOKE CONNECT ON DATABASE "'+$pair[0]+'" FROM PUBLIC; GRANT CONNECT ON DATABASE "'+$pair[0]+'" TO '+$pair[1]+';')
 }
 $schemas=(Query "SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname NOT IN ('information_schema','app') ORDER BY nspname" $c.substrate_database) -split "`n"
+# The substrate role seeds, so it also refreshes the statistics of what it writes: since PostgreSQL 17
+# ANALYZE needs MAINTAIN on the table and every leaf partition, and skips the rest with only a WARNING,
+# leaving a seeded database reading as empty (Laplace#1879). Defaults cover tables created later, for the
+# administrator and for every role that owns the schema or a table in it (db-reset creates the extension's
+# tables as postgres).
 foreach($schema in $schemas){
     if($schema -notmatch '^[a-zA-Z0-9_]+$'){throw 'Unexpected substrate schema.'}
-    $permissions=if($schema -eq 'public'){'SELECT'}else{'SELECT,INSERT,UPDATE,DELETE'}
-    $null=Query "GRANT USAGE ON SCHEMA $schema TO $($c.substrate_role); GRANT $permissions ON ALL TABLES IN SCHEMA $schema TO $($c.substrate_role); GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA $schema TO $($c.substrate_role); GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA $schema TO $($c.substrate_role); ALTER DEFAULT PRIVILEGES FOR ROLE $($c.admin_role) IN SCHEMA $schema GRANT $permissions ON TABLES TO $($c.substrate_role); ALTER DEFAULT PRIVILEGES FOR ROLE $($c.admin_role) IN SCHEMA $schema GRANT USAGE,SELECT ON SEQUENCES TO $($c.substrate_role);" $c.substrate_database
+    $permissions=if($schema -eq 'public'){'SELECT'}else{'SELECT,INSERT,UPDATE,DELETE,MAINTAIN'}
+    $owners=@($c.admin_role)+@((Query "SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname='$schema' UNION SELECT pg_get_userbyid(relowner) FROM pg_class WHERE relnamespace='$schema'::regnamespace AND relkind IN ('r','p') ORDER BY 1" $c.substrate_database) -split "`n" | Where-Object {$_})
+    $defaults=foreach($owner in @($owners | Select-Object -Unique | Where-Object {$_ -ne $c.substrate_role})){
+        if($owner -notmatch '^[a-zA-Z0-9_]+$'){throw 'Unexpected substrate table owner.'}
+        "ALTER DEFAULT PRIVILEGES FOR ROLE $owner IN SCHEMA $schema GRANT $permissions ON TABLES TO $($c.substrate_role); ALTER DEFAULT PRIVILEGES FOR ROLE $owner IN SCHEMA $schema GRANT USAGE,SELECT ON SEQUENCES TO $($c.substrate_role);"
+    }
+    $null=Query "GRANT USAGE ON SCHEMA $schema TO $($c.substrate_role); GRANT $permissions ON ALL TABLES IN SCHEMA $schema TO $($c.substrate_role); GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA $schema TO $($c.substrate_role); GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA $schema TO $($c.substrate_role); $($defaults -join ' ')" $c.substrate_database
 }
 $null=Query ('ALTER DATABASE "'+$c.application_database+'" OWNER TO '+$c.application_owner+';')
 $null=Query "ALTER SCHEMA app OWNER TO $($c.application_owner); GRANT USAGE ON SCHEMA app TO $($c.application_role); GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA app TO $($c.application_role); GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA app TO $($c.application_role); REVOKE CREATE ON SCHEMA public FROM PUBLIC;" $c.application_database
