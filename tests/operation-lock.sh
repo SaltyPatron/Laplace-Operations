@@ -57,3 +57,24 @@ for invalid in -1 bad 1.5; do
 done
 flock -u 8
 echo 'PASS invalid wait declarations are rejected'
+
+# Writer preference: while a deployment waits for an ingest to finish, a later ingest waits behind it rather than
+# being granted past it (flock alone grants it, and a stream of them would hold the deployment off until its deadline).
+laplace_host_lock shared
+LAPLACE_HOST_LOCK_WAIT_SECONDS=10 bash -c '. "$LOCK_HELPER"; laplace_host_lock exclusive && touch "$LOCK_TEST_WORK/deployed"; sleep 1' 8>&- 2>"$work/deploy-waiting" &
+deployment=$!
+for attempt in {1..100}; do grep -q 'Waiting up to' "$work/deploy-waiting" && break; sleep .02; done
+grep -q 'Waiting up to' "$work/deploy-waiting"
+rc=0; bash -c '. "$LOCK_HELPER"; laplace_host_lock shared && touch "$LOCK_TEST_WORK/barged"' 8>&- >/dev/null 2>&1 || rc=$?
+[[ $rc == 3 && ! -e "$work/barged" ]]
+LAPLACE_HOST_LOCK_WAIT_SECONDS=10 bash -c '. "$LOCK_HELPER"; laplace_host_lock shared && { [[ -e "$LOCK_TEST_WORK/deployed" ]] && touch "$LOCK_TEST_WORK/after"; }' 8>&- 2>/dev/null &
+later=$!
+sleep .3
+[[ ! -e "$work/deployed" ]]
+# the ingest's own nested command inherits its lock and does not queue behind the deployment it holds off
+LAPLACE_HOST_LOCK_WAIT_SECONDS=0 bash -c '. "$LOCK_HELPER"; laplace_host_lock shared'
+flock -u 8
+wait "$deployment"
+wait "$later"
+[[ -e "$work/deployed" && -e "$work/after" ]]
+echo 'PASS a waiting deployment is not overtaken by a later ingest; that ingest runs after it; a nested command of the holder does not queue'
