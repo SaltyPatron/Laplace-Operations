@@ -58,6 +58,7 @@ class RemoteRuntime(unittest.TestCase):
                     self.assertRaises(RuntimeError):
                 module.main()
         grants = next(s for s in statements if s.startswith('BEGIN'))
+        self.assertIn('GRANT pg_read_all_stats, pg_signal_backend TO "runtime"', grants)
         self.assertIn('GRANT SELECT,INSERT,UPDATE,DELETE,MAINTAIN ON ALL TABLES IN SCHEMA "laplace" TO "runtime"', grants)
         self.assertIn('ALTER DEFAULT PRIVILEGES FOR ROLE "administrator" IN SCHEMA "laplace" GRANT SELECT,INSERT,UPDATE,DELETE,MAINTAIN ON TABLES TO "runtime"', grants)
         self.assertIn('GRANT SELECT ON ALL TABLES IN SCHEMA "public" TO "runtime"', grants)

@@ -25,6 +25,7 @@ foreach($role in $c.substrate_role,$c.application_role,$c.application_owner){
 foreach($pair in @(@($c.substrate_database,$c.substrate_role),@($c.application_database,$c.application_role))){
     $null=Query ('REVOKE CONNECT ON DATABASE "'+$pair[0]+'" FROM PUBLIC; GRANT CONNECT ON DATABASE "'+$pair[0]+'" TO '+$pair[1]+';')
 }
+$null=Query "GRANT pg_read_all_stats, pg_signal_backend TO $($c.substrate_role);"
 $schemas=(Query "SELECT nspname FROM pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname NOT IN ('information_schema','app') ORDER BY nspname" $c.substrate_database) -split "`n"
 # The substrate role seeds, so it also refreshes the statistics of what it writes: since PostgreSQL 17
 # ANALYZE needs MAINTAIN on the table and every leaf partition, and skips the rest with only a WARNING,
