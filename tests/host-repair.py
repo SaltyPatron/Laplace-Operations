@@ -8,7 +8,7 @@ import sqlite3
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('repair', ROOT / 'installation/repair.py')
@@ -80,6 +80,27 @@ class RepairBoundaries(unittest.TestCase):
             self.assertEqual(result['sqlite_integrity'], 'ok')
             self.assertEqual(result['tables'], 1)
             self.assertFalse((root / 'escape').exists())
+
+    def test_repair_converges_a_declared_modular_listener_credential(self):
+        modular = Mock()
+        modular.select_manifest.return_value = Path('/declared/hart-server-modular.json')
+        modular.config_load.return_value = {'environment_file': '/etc/laplace/modular.env'}
+        modular.converge_listener_credential.return_value = Path('/etc/laplace/secrets/modular-mcp.env')
+        with patch.object(repair, 'load_module', return_value=modular):
+            result = repair.converge_modular_listener()
+        modular.install_credential_helper.assert_called_once_with(modular.config_load.return_value)
+        modular.converge_listener_credential.assert_called_once_with(modular.config_load.return_value)
+        self.assertEqual(result, {'state': 'converged', 'token_file': '/etc/laplace/secrets/modular-mcp.env'})
+        self.assertNotIn('LAPLACE_MCP_TOKEN=', json.dumps(result))
+
+    def test_repair_records_when_no_modular_runtime_is_declared(self):
+        modular = Mock()
+        modular.select_manifest.return_value = None
+        with patch.object(repair, 'load_module', return_value=modular):
+            result = repair.converge_modular_listener()
+        self.assertEqual(result, {'state': 'no modular runtime declared'})
+        modular.install_credential_helper.assert_not_called()
+        modular.converge_listener_credential.assert_not_called()
 
 
 unittest.main()

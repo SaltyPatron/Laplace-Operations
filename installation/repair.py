@@ -272,6 +272,18 @@ def restore_vaultwarden(directory):
                 'scope': 'extracted SQLite integrity; full Vaultwarden and OpenBao recovery remain separate'}
 
 
+def converge_modular_listener():
+    """The modular listener token is declared installation state. Repair closes it the same way install does."""
+    modular = load_module('modular_listener', ROOT / 'installation/modular.py')
+    manifest = modular.select_manifest()
+    if manifest is None:
+        return {'state': 'no modular runtime declared'}
+    config = modular.config_load(manifest)
+    modular.install_credential_helper(config)
+    path = modular.converge_listener_credential(config)
+    return {'state': 'converged', 'token_file': str(path)}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--installation', type=Path)
@@ -312,6 +324,7 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             # Recheck after acquiring the same host lock used by deployment and ingestion.
             proposed = preflight(config)
+            result['modular_listener_credential'] = converge_modular_listener()
             machine.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
             with sync.configuration_transaction([machine], lambda: None):
                 sync.atomic(machine, proposed, 0o644, 0, 0)

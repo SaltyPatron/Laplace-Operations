@@ -17,7 +17,11 @@ latest production application backup on the backup landing volume, restores it i
 reads its application tables, and removes that scratch database. It repairs the existing secrets backup job,
 runs a checked backup, extracts the backed-up Vaultwarden SQLite database and performs an integrity check.
 It does not stop serving databases, restart application services, change runtime identities or modify source
-checkouts. Sudo is used for this installation operation; ordinary deployment and verification remain unprivileged.
+checkouts. It does converge the modular listener credential when this host declares a modular runtime:
+the token file is made once, the installed unit names that file, and root's credential helper is installed
+so a later deployment can ask for the same convergence. The listener process is left running; deployment's
+existing restart is what loads the named file. Sudo is used for this installation operation; ordinary
+deployment and verification remain unprivileged.
 
 Every attempted repair after preflight saves a public, secret-free receipt under
 `/var/lib/laplace/installation/receipts`. A failure returns nonzero and restores the previous machine declaration.
@@ -86,10 +90,15 @@ identity and candidate before changing services. `modular.py deploy` selects a n
 it requires completed OS/service installation before building. Repeated setup does not implicitly
 upgrade an installed modular release.
 
-The modular listener takes a bearer token. Setup makes it once, `LAPLACE_MCP_TOKEN` in `secrets/modular-mcp.env`
-beside the declared environment file (64 hex, root and the deployment group, 0640), and never replaces it.
-The unit names that file once it exists; `lpm serve` refuses to listen without a token, and deployment
-verification reads it through the deployment group. A caller sends `Authorization: Bearer <token>`.
+The modular listener takes a bearer token. Setup, install and repair converge it as declared state:
+`LAPLACE_MCP_TOKEN` in `secrets/modular-mcp.env` beside the declared environment file (64 hex, root and
+the deployment group, 0640), made once and never replaced. The unit names that file. A host installed
+before the token existed gets the file and the unit line the next time setup, install or repair runs;
+none of those leave the file for someone to place by hand. Recurring deployment does not run as root
+and does not create the file. It asks `laplace-modular-credential.path`, which setup installs, the same
+way a PostgreSQL restart is asked, and waits until the file and the unit line are in place. `lpm serve`
+refuses to listen without a token, and deployment verification reads it through the deployment group.
+A caller sends `Authorization: Bearer <token>`.
 
 Runtime setup also converges the declared local PostgreSQL certificate before changing service identities.
 Its subject is distinct from the OS default server certificate, its SANs cover the declared database endpoints,

@@ -193,6 +193,158 @@ class Installation(unittest.TestCase):
                 modular.provision_token(config)
             self.assertEqual(path.read_text(), 'LAPLACE_MCP_TOKEN=short\n')
 
+    def test_repair_converges_a_missing_listener_credential_once(self):
+        config = self.token_config()
+        units = self.directory / 'units'
+        units.mkdir()
+        unit = units / modular.UNIT
+        unit.write_text(modular.unit_text(config))
+        self.assertNotIn('modular-mcp.env', unit.read_text())
+        commands = []
+
+        def command(argv, **kwargs):
+            commands.append(tuple(argv))
+            return subprocess.CompletedProcess(argv, 0, '', '')
+
+        with patch.object(modular, 'UNITS', units), \
+             patch.object(modular.os, 'geteuid', return_value=0), \
+             patch.object(modular.os, 'chown'), \
+             patch.object(modular.grp, 'getgrnam', return_value=modular.grp.struct_group(('laplace-runner', 'x', os.getgid(), []))), \
+             patch.object(modular, 'checked', side_effect=command):
+            first = modular.converge_listener_credential(config)
+            body = first.read_text()
+            named = unit.read_text()
+            self.assertRegex(body, r'^LAPLACE_MCP_TOKEN="[0-9a-f]{64}"\n$')
+            self.assertEqual(first.stat().st_mode & 0o777, 0o640)
+            self.assertIn('EnvironmentFile=' + config['environment_file'] + '\nEnvironmentFile=' + str(first) + '\n', named)
+            self.assertEqual(commands, [('systemctl', 'daemon-reload')])
+            commands.clear()
+            self.assertEqual(modular.converge_listener_credential(config).read_text(), body)
+            self.assertEqual(unit.read_text(), named)
+            self.assertEqual(commands, [])
+            first.write_text('LAPLACE_MCP_TOKEN=short\n')
+            with self.assertRaisesRegex(ValueError, 'rotation'):
+                modular.converge_listener_credential(config)
+            self.assertEqual(first.read_text(), 'LAPLACE_MCP_TOKEN=short\n')
+            self.assertEqual(unit.read_text(), named)
+        self.assertFalse(modular.credential_signal(config).exists())
+
+    def test_deployment_asks_the_installed_helper_and_does_not_create_the_credential(self):
+        config = self.token_config()
+        config['restart_signal'] = str(self.directory / 'restart-modular-mcp')
+        units = self.directory / 'units'
+        units.mkdir()
+        with patch.object(modular.os, 'geteuid', return_value=1000):
+            with self.assertRaisesRegex(ValueError, 'installed by setup'):
+                modular.converge_listener_credential(config)
+            with self.assertRaisesRegex(ValueError, 'installed by setup'):
+                modular.install_credential_helper(config)
+        self.assertFalse(modular.token_file(config).exists())
+        with patch.object(modular, 'UNITS', units), \
+             patch.object(modular.os, 'geteuid', return_value=1000), \
+             patch.object(modular.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1)):
+            with self.assertRaisesRegex(ValueError, 'not installed'):
+                modular.ensure_listener_credential(config)
+        self.assertFalse(modular.token_file(config).exists())
+        self.assertFalse(modular.credential_signal(config).exists())
+
+        token = modular.token_file(config)
+        token.parent.mkdir(parents=True)
+        token.write_text('LAPLACE_MCP_TOKEN="' + ('cd' * 32) + '"\n')
+        (units / modular.UNIT).write_text('EnvironmentFile=' + config['environment_file'] + '\nEnvironmentFile=' + str(token) + '\n')
+        with patch.object(modular, 'UNITS', units), patch.object(modular.os, 'geteuid', return_value=1000):
+            modular.ensure_listener_credential(config)
+        self.assertFalse(modular.credential_signal(config).exists())
+        token.unlink()
+        (units / modular.UNIT).unlink()
+
+        calls = {'n': 0}
+
+        def show(argv, **kwargs):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                return subprocess.CompletedProcess(argv, 0, 'ExecMainStartTimestamp=\n', '')
+            path = modular.token_file(config)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('LAPLACE_MCP_TOKEN="' + ('ab' * 32) + '"\n')
+            (units / modular.UNIT).write_text('EnvironmentFile=' + config['environment_file'] + '\nEnvironmentFile=' + str(path) + '\n')
+            return subprocess.CompletedProcess(argv, 0, 'ActiveState=inactive\nResult=success\nExecMainStartTimestamp=later\n', '')
+
+        ticks = {'n': 0}
+
+        def clock():
+            ticks['n'] += 1
+            return 0 if ticks['n'] < 8 else 1000
+
+        with patch.object(modular, 'UNITS', units), \
+             patch.object(modular.os, 'geteuid', return_value=1000), \
+             patch.object(modular.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)), \
+             patch.object(modular, 'checked', side_effect=show), \
+             patch.object(modular.time, 'sleep'), \
+             patch.object(modular.time, 'monotonic', side_effect=clock):
+            modular.ensure_listener_credential(config)
+            self.assertTrue(modular.listener_credential_ready(config))
+        signal = modular.credential_signal(config)
+        self.assertTrue(signal.is_file())
+        self.assertNotIn('LAPLACE_MCP_TOKEN', signal.read_text())
+        self.assertIn('EnvironmentFile=' + str(modular.token_file(config)), (units / modular.UNIT).read_text())
+
+    def test_credential_helper_is_root_code_and_not_the_checkout(self):
+        config = self.token_config()
+        config['restart_signal'] = str(self.directory / 'restart-modular-mcp')
+        program = self.directory / 'libexec' / 'laplace-modular.py'
+        binary = self.directory / 'sbin' / 'laplace-modular-credential'
+        units = self.directory / 'units'
+        commands = []
+
+        def command(argv, **kwargs):
+            commands.append(tuple(argv))
+            return subprocess.CompletedProcess(argv, 0, '', '')
+
+        with patch.object(modular, 'HELPER_PROGRAM', program), \
+             patch.object(modular, 'HELPER_BIN', binary), \
+             patch.object(modular, 'UNITS', units), \
+             patch.object(modular.os, 'geteuid', return_value=0), \
+             patch.object(modular.os, 'chown') as chown, \
+             patch.object(modular, 'checked', side_effect=command):
+            modular.install_credential_helper(config)
+        self.assertEqual(program.read_text(), Path(modular.__file__).read_text())
+        self.assertEqual(binary.read_text(), '#!/bin/sh\nexec python3 /usr/local/libexec/laplace-modular.py converge\n')
+        self.assertNotIn(str(ROOT), binary.read_text())
+        service = (units / (modular.HELPER + '.service')).read_text()
+        path_unit = (units / (modular.HELPER + '.path')).read_text()
+        self.assertIn('ExecStart=/usr/local/sbin/laplace-modular-credential\n', service)
+        self.assertNotIn(str(ROOT), service)
+        self.assertNotIn(str(ROOT), path_unit)
+        self.assertIn('PathChanged=' + str(modular.credential_signal(config)) + '\n', path_unit)
+        self.assertIn(('systemctl', 'daemon-reload'), commands)
+        self.assertIn(('systemctl', 'enable', '--now', modular.HELPER + '.path'), commands)
+        self.assertEqual(binary.stat().st_mode & 0o777, 0o755)
+        self.assertEqual({call.args[0] for call in chown.call_args_list}, {program, binary})
+        self.assertTrue(all(call.args[1:] == (0, 0) for call in chown.call_args_list))
+
+    def test_checkout_converge_installs_the_helper_and_the_installed_copy_does_not(self):
+        config = self.token_config()
+        order = []
+        with patch.object(modular.os, 'geteuid', return_value=0), \
+             patch.object(modular, 'config_load', return_value=config), \
+             patch.object(modular, 'HELPER_PROGRAM', self.directory / 'installed.py'), \
+             patch.object(modular, 'install_credential_helper', side_effect=lambda c: order.append(('helper', c))), \
+             patch.object(modular, 'converge_listener_credential', side_effect=lambda c: order.append(('credential', c))):
+            modular.converge_operation()
+        self.assertEqual(order, [('helper', config), ('credential', config)])
+        order.clear()
+        with patch.object(modular.os, 'geteuid', return_value=0), \
+             patch.object(modular, 'config_load', return_value=config), \
+             patch.object(modular, 'HELPER_PROGRAM', Path(modular.__file__)), \
+             patch.object(modular, 'install_credential_helper', side_effect=lambda c: order.append('helper')), \
+             patch.object(modular, 'converge_listener_credential', side_effect=lambda c: order.append(('credential', c))):
+            modular.converge_operation()
+        self.assertEqual(order, [('credential', config)])
+        with patch.object(modular.os, 'geteuid', return_value=1000):
+            with self.assertRaisesRegex(ValueError, 'installed by setup'):
+                modular.converge_operation()
+
     def test_host_lock_waits_for_the_declared_deadline_then_refuses(self):
         import fcntl, threading, time
         lock = self.directory / 'host-resource.lock'

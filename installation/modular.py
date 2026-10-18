@@ -139,21 +139,138 @@ def provision_token(config):
     return path
 
 
+HELPER = 'laplace-modular-credential'
+HELPER_PROGRAM = Path('/usr/local/libexec/laplace-modular.py')
+HELPER_BIN = Path('/usr/local/sbin/laplace-modular-credential')
+
+
+def credential_signal(config):
+    return Path(config['restart_signal']).with_name('converge-modular-credential')
+
+
+def token_environment_line(config):
+    return 'EnvironmentFile=' + str(token_file(config)).replace('%', '%%') + '\n'
+
+
+def with_token_environment(text, config):
+    """Name the token file beside the declared environment file, once."""
+    line = token_environment_line(config)
+    if line in text:
+        return text
+    env = 'EnvironmentFile=' + config['environment_file'].replace('%', '%%') + '\n'
+    if env not in text:
+        raise ValueError('Service template names no environment file')
+    return text.replace(env, env + line, 1)
+
+
 def unit_text(config):
     template = (Path(config['source']) / 'Laplace-MCP/laplace-modular-mcp.service.in').read_text()
     text = template.format(user=config['runtime_user'], group=config['runtime_group'],
         postgres_service=config['postgres_service'], environment_file=config['environment_file'].replace('%', '%%'),
         state=config['state'].replace('%', '%%'), writable_state=sysquote(config['state']),
         executable=sysquote(Path(config['prefix']) / 'current/bin/lpm'))
-    # systemd reads the token as root; the runtime account never sees the file. Before setup has made
-    # the token the unit is the one already installed, so recurring deployment keeps matching it.
-    token = token_file(config)
-    if token.is_file():
-        line = 'EnvironmentFile=' + config['environment_file'].replace('%', '%%') + '\n'
-        if line not in text:
-            raise ValueError('Service template names no environment file')
-        text = text.replace(line, line + 'EnvironmentFile=' + str(token).replace('%', '%%') + '\n', 1)
+    # systemd reads the token as root; the runtime account never sees the file. The file is declared
+    # installation state: setup, install and repair make it once and name it here. Until that file
+    # exists the rendered unit is the one already installed, so a deployment still matches it.
+    if token_file(config).is_file():
+        text = with_token_environment(text, config)
     return text
+
+
+def credential_well_formed(config):
+    path = token_file(config)
+    if not path.is_file():
+        return False
+    try:
+        text = path.read_text()
+    except OSError:
+        return False
+    return re.fullmatch(r'LAPLACE_MCP_TOKEN="[0-9a-f]{64}"\n', text) is not None
+
+
+def listener_credential_ready(config):
+    unit = UNITS / UNIT
+    return credential_well_formed(config) and unit.is_file() and token_environment_line(config) in unit.read_text()
+
+
+def converge_listener_credential(config):
+    """Make the listener token once and name it on the installed unit. A later call changes nothing.
+
+    This does not restart the service. Deployment's existing restart loads the unit after this."""
+    if os.geteuid() != 0:
+        raise ValueError('The listener credential is installed by setup')
+    provision_token(config)
+    unit = UNITS / UNIT
+    if not unit.is_file():
+        return token_file(config)
+    current = unit.read_text()
+    desired = with_token_environment(current, config)
+    if desired != current:
+        atomic(unit, desired)
+        checked(['systemctl', 'daemon-reload'])
+    return token_file(config)
+
+
+def install_credential_helper(config):
+    """Install the one root action a deployment may ask for: converge the listener credential.
+
+    The program is root's copy. The runner writes a signal; it does not get sudo and it does not
+    choose the program that runs."""
+    if os.geteuid() != 0:
+        raise ValueError('The listener credential helper is installed by setup')
+    atomic(HELPER_PROGRAM, Path(__file__).read_text(), 0o755)
+    os.chown(HELPER_PROGRAM, 0, 0)
+    atomic(HELPER_BIN, '#!/bin/sh\nexec python3 /usr/local/libexec/laplace-modular.py converge\n', 0o755)
+    os.chown(HELPER_BIN, 0, 0)
+    signal = str(credential_signal(config)).replace('%', '%%')
+    atomic(UNITS / (HELPER + '.service'), '[Unit]\nDescription=Converge the modular listener credential\n[Service]\nType=oneshot\n'
+        'ExecStart=/usr/local/sbin/laplace-modular-credential\n')
+    atomic(UNITS / (HELPER + '.path'), '[Unit]\nDescription=Deployment asks for the modular listener credential\n'
+        '[Path]\nPathChanged=' + signal + '\n[Install]\nWantedBy=multi-user.target\n')
+    checked(['systemctl', 'daemon-reload'])
+    checked(['systemctl', 'enable', '--now', HELPER + '.path'])
+
+
+def systemctl_show(unit, *properties):
+    result = checked(['systemctl', 'show', unit, *[item for prop in properties for item in ('-p', prop)]],
+                     capture_output=True, check=False)
+    return dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
+
+
+def converge_operation():
+    """Root entry for setup and for the installed helper.
+
+    A checkout run installs the helper, then converges. The helper's own run only converges,
+    so asking it cannot replace the program it is executing."""
+    if os.geteuid() != 0:
+        raise ValueError('The listener credential is installed by setup')
+    config = config_load(Path('/etc/laplace/modular.json'))
+    if Path(__file__).resolve() != HELPER_PROGRAM.resolve():
+        install_credential_helper(config)
+    return converge_listener_credential(config)
+
+
+def ensure_listener_credential(config):
+    """Deployment does not create the credential and does not take sudo. It asks the helper setup installed."""
+    if listener_credential_ready(config):
+        return
+    if os.geteuid() == 0:
+        converge_listener_credential(config)
+        return
+    if subprocess.run(['systemctl', 'is-active', '--quiet', HELPER + '.path']).returncode != 0:
+        raise ValueError('The listener credential is not installed: ' + str(token_file(config)))
+    before = systemctl_show(HELPER + '.service', 'ExecMainStartTimestamp').get('ExecMainStartTimestamp', '')
+    credential_signal(config).write_text(datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ') + '\n')
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        observed = systemctl_show(HELPER + '.service', 'ActiveState', 'Result', 'ExecMainStartTimestamp')
+        started = observed.get('ExecMainStartTimestamp', '')
+        if started and started != before and observed.get('ActiveState') in ('inactive', 'dead'):
+            if observed.get('Result') != 'success' or not listener_credential_ready(config):
+                raise ValueError('The listener credential convergence failed: ' + str(token_file(config)))
+            return
+        time.sleep(0.2)
+    raise ValueError('The listener credential was not converged: ' + str(token_file(config)))
 
 
 def runtime_environment(config, release):
@@ -459,10 +576,15 @@ def restart_units(config):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('install', 'deploy', 'check', 'select'))
+    parser.add_argument('operation', choices=('install', 'deploy', 'check', 'select', 'converge'))
     parser.add_argument('--manifest')
     parser.add_argument('--source')
     args = parser.parse_args()
+    # The installed helper is a root-owned copy of this file. It must converge from the installed
+    # declaration and must not load this checkout (that copy's directory is /usr/local/libexec).
+    if args.operation == 'converge':
+        converge_operation()
+        return
     manifest = Path(args.manifest) if args.manifest else select_manifest()
     if args.operation == 'select':
         print(manifest or '')
@@ -493,6 +615,7 @@ def main():
             if not all(path.is_file() for path in (UNITS / UNIT, Path(config['environment_file']),
                     UNITS / 'laplace-modular-mcp-restart.path')):
                 raise ValueError('Modular installation is incomplete; run sudo ./setup.sh before deployment')
+            ensure_listener_credential(config)
             sql(config, grants(config))
         receipt_path = Path(config['receipts']) / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ-') + uuid.uuid4().hex[:8])
         receipt_path.mkdir(parents=True)
@@ -504,6 +627,7 @@ def main():
         activate(config, release, receipt_path, installing)
         if installing:
             restart_units(config)
+            install_credential_helper(config)
             client = config.get('operator_client')
             if client:
                 checked(['runuser', '-u', config['operator'], '--', 'python3',
