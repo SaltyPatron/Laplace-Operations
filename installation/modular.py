@@ -220,7 +220,9 @@ def install_credential_helper(config):
         raise ValueError('The listener credential helper is installed by setup')
     atomic(HELPER_PROGRAM, Path(__file__).read_text(), 0o755)
     os.chown(HELPER_PROGRAM, 0, 0)
-    atomic(HELPER_BIN, '#!/bin/sh\nexec python3 /usr/local/libexec/laplace-modular.py converge\n', 0o755)
+    # The installed copy has no checkout, so the declaration's installed_config is the only input.
+    atomic(HELPER_BIN, '#!/bin/sh\nexec python3 /usr/local/libexec/laplace-modular.py converge '
+           + shlex.quote(config['installed_config']) + '\n', 0o755)
     os.chown(HELPER_BIN, 0, 0)
     signal = str(credential_signal(config)).replace('%', '%%')
     atomic(UNITS / (HELPER + '.service'), '[Unit]\nDescription=Converge the modular listener credential\n[Service]\nType=oneshot\n'
@@ -237,14 +239,21 @@ def systemctl_show(unit, *properties):
     return dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
 
 
-def converge_operation():
+def converge_operation(config_path=None):
     """Root entry for setup and for the installed helper.
 
-    A checkout run installs the helper, then converges. The helper's own run only converges,
-    so asking it cannot replace the program it is executing."""
+    A checkout run selects this host's declaration, installs the helper aimed at that
+    declaration's installed_config, then converges. The helper's own run loads the path it was
+    given and only converges, so asking it cannot replace the program it is executing."""
     if os.geteuid() != 0:
         raise ValueError('The listener credential is installed by setup')
-    config = config_load(Path('/etc/laplace/modular.json'))
+    if config_path is None:
+        manifest = select_manifest()
+        if manifest is None:
+            raise ValueError('No modular runtime declared for this host')
+        config = config_load(manifest)
+    else:
+        config = config_load(Path(config_path))
     if Path(__file__).resolve() != HELPER_PROGRAM.resolve():
         install_credential_helper(config)
     return converge_listener_credential(config)
@@ -577,13 +586,14 @@ def restart_units(config):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('operation', choices=('install', 'deploy', 'check', 'select', 'converge'))
+    parser.add_argument('config', nargs='?', help='Installed declaration for converge; a checkout run selects the host declaration')
     parser.add_argument('--manifest')
     parser.add_argument('--source')
     args = parser.parse_args()
-    # The installed helper is a root-owned copy of this file. It must converge from the installed
-    # declaration and must not load this checkout (that copy's directory is /usr/local/libexec).
+    # The installed helper is a root-owned copy of this file. It converges the declaration path
+    # setup wrote into it, and must not load this checkout (that copy's directory is /usr/local/libexec).
     if args.operation == 'converge':
-        converge_operation()
+        converge_operation(args.config)
         return
     manifest = Path(args.manifest) if args.manifest else select_manifest()
     if args.operation == 'select':

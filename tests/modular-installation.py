@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -292,6 +293,7 @@ class Installation(unittest.TestCase):
     def test_credential_helper_is_root_code_and_not_the_checkout(self):
         config = self.token_config()
         config['restart_signal'] = str(self.directory / 'restart-modular-mcp')
+        config['installed_config'] = str(self.directory / 'declared' / 'modular.json')
         program = self.directory / 'libexec' / 'laplace-modular.py'
         binary = self.directory / 'sbin' / 'laplace-modular-credential'
         units = self.directory / 'units'
@@ -309,7 +311,9 @@ class Installation(unittest.TestCase):
              patch.object(modular, 'checked', side_effect=command):
             modular.install_credential_helper(config)
         self.assertEqual(program.read_text(), Path(modular.__file__).read_text())
-        self.assertEqual(binary.read_text(), '#!/bin/sh\nexec python3 /usr/local/libexec/laplace-modular.py converge\n')
+        self.assertEqual(binary.read_text(), '#!/bin/sh\nexec python3 /usr/local/libexec/laplace-modular.py converge '
+                         + shlex.quote(config['installed_config']) + '\n')
+        self.assertNotIn('/etc/laplace/modular.json', binary.read_text())
         self.assertNotIn(str(ROOT), binary.read_text())
         service = (units / (modular.HELPER + '.service')).read_text()
         path_unit = (units / (modular.HELPER + '.path')).read_text()
@@ -325,25 +329,48 @@ class Installation(unittest.TestCase):
 
     def test_checkout_converge_installs_the_helper_and_the_installed_copy_does_not(self):
         config = self.token_config()
+        declared = self.directory / 'other-host' / 'modular.json'
         order = []
         with patch.object(modular.os, 'geteuid', return_value=0), \
-             patch.object(modular, 'config_load', return_value=config), \
+             patch.object(modular, 'config_load', return_value=config) as load, \
              patch.object(modular, 'HELPER_PROGRAM', self.directory / 'installed.py'), \
              patch.object(modular, 'install_credential_helper', side_effect=lambda c: order.append(('helper', c))), \
              patch.object(modular, 'converge_listener_credential', side_effect=lambda c: order.append(('credential', c))):
-            modular.converge_operation()
+            modular.converge_operation(declared)
         self.assertEqual(order, [('helper', config), ('credential', config)])
+        self.assertEqual(load.call_args.args[0], declared)
         order.clear()
         with patch.object(modular.os, 'geteuid', return_value=0), \
-             patch.object(modular, 'config_load', return_value=config), \
+             patch.object(modular, 'config_load', return_value=config) as load, \
              patch.object(modular, 'HELPER_PROGRAM', Path(modular.__file__)), \
              patch.object(modular, 'install_credential_helper', side_effect=lambda c: order.append('helper')), \
              patch.object(modular, 'converge_listener_credential', side_effect=lambda c: order.append(('credential', c))):
-            modular.converge_operation()
+            modular.converge_operation(declared)
         self.assertEqual(order, [('credential', config)])
-        with patch.object(modular.os, 'geteuid', return_value=1000):
+        self.assertEqual(load.call_args.args[0], declared)
+        with patch.object(modular.os, 'geteuid', return_value=1000), \
+             patch.object(modular, 'config_load') as load:
             with self.assertRaisesRegex(ValueError, 'installed by setup'):
+                modular.converge_operation(declared)
+        load.assert_not_called()
+
+    def test_checkout_converge_uses_the_host_declaration_when_no_path_is_given(self):
+        config = self.token_config()
+        manifest = self.directory / 'installation' / 'this-host-modular.json'
+        with patch.object(modular.os, 'geteuid', return_value=0), \
+             patch.object(modular, 'select_manifest', return_value=manifest), \
+             patch.object(modular, 'config_load', return_value=config) as load, \
+             patch.object(modular, 'HELPER_PROGRAM', self.directory / 'installed.py'), \
+             patch.object(modular, 'install_credential_helper'), \
+             patch.object(modular, 'converge_listener_credential', return_value=Path('token')):
+            modular.converge_operation()
+        self.assertEqual(load.call_args.args[0], manifest)
+        with patch.object(modular.os, 'geteuid', return_value=0), \
+             patch.object(modular, 'select_manifest', return_value=None), \
+             patch.object(modular, 'config_load') as load:
+            with self.assertRaisesRegex(ValueError, 'No modular runtime declared'):
                 modular.converge_operation()
+        load.assert_not_called()
 
     def test_host_lock_waits_for_the_declared_deadline_then_refuses(self):
         import fcntl, threading, time

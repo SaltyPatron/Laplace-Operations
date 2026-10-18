@@ -95,8 +95,11 @@ The modular listener takes a bearer token. Setup, install and repair converge it
 the deployment group, 0640), made once and never replaced. The unit names that file. A host installed
 before the token existed gets the file and the unit line the next time setup, install or repair runs;
 none of those leave the file for someone to place by hand. Recurring deployment does not run as root
-and does not create the file. It asks `laplace-modular-credential.path`, which setup installs, the same
-way a PostgreSQL restart is asked, and waits until the file and the unit line are in place. `lpm serve`
+and does not create the file. It asks `laplace-modular-credential.path`, which setup installs aimed at
+that host's `installed_config`, the same way a PostgreSQL restart is asked, and waits until the file
+and the unit line are in place. A checkout run of `modular.py converge` selects
+`installation/<hostname>-modular.json`, or `LAPLACE_MODULAR_MANIFEST` when that is set. The installed
+helper loads the path it was given. `lpm serve`
 refuses to listen without a token, and deployment verification reads it through the deployment group.
 A caller sends `Authorization: Bearer <token>`.
 
