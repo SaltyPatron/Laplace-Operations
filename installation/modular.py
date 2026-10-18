@@ -613,7 +613,7 @@ def main():
         return
     installing = args.operation == 'install'
     if installing != (os.geteuid() == 0):
-        raise ValueError('Install uses sudo ./setup.sh modular; recurring deployment runs without sudo')
+        raise ValueError('Install uses sudo ./setup.sh; recurring deployment runs without sudo')
     with host_lock(config):
         if installing:
             prepare(config)
