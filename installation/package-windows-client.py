@@ -94,10 +94,23 @@ def main():
     run(['cmake', '--build', config['build'], '--target', 'laplace_engine'])
     if has_mcp:
         mcp_build = Path(config['mcp_build'])
-        if not (mcp_build / 'CMakeCache.txt').is_file():
+        cache_file = mcp_build / 'CMakeCache.txt'
+        if cache_file.is_file() and 'CMAKE_RUNTIME_OUTPUT_DIRECTORY' in cache_file.read_text():
+            run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-UCMAKE_RUNTIME_OUTPUT_DIRECTORY'])
+        if not cache_file.is_file():
+            toolchain = Path(__file__).resolve().parent.parent / 'toolchain/laplace.cmake'
             run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-G', 'Ninja',
-                 '-DCMAKE_C_COMPILER=icx', '-DCMAKE_CXX_COMPILER=icx', '-DCMAKE_BUILD_TYPE=Release'])
-        run(['cmake', '--build', str(mcp_build), '--target', 'lpm_program'])
+                 f'-DCMAKE_TOOLCHAIN_FILE={toolchain}', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'])
+        for target_bin in ('lpm.exe', 'lpm.dll'):
+            bin_path = mcp_build / target_bin
+            if bin_path.is_file():
+                try:
+                    bin_path.unlink()
+                except PermissionError:
+                    stale = mcp_build / f'{target_bin}.stale-{os.getpid()}'
+                    stale.unlink(missing_ok=True)
+                    bin_path.rename(stale)
+        run(['cmake', '--build', str(mcp_build), '--target', 'lpm_program', 'lpm_lib'])
     prefix = Path(config['prefix']).resolve()
     releases = prefix / 'releases'
     releases.mkdir(parents=True, exist_ok=True)
