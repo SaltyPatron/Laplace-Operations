@@ -4,16 +4,43 @@ param(
     [ValidateSet('fetch','status')][string]$Operation = 'status',
     [Parameter(Mandatory)][string]$Directory,
     [string]$LaplaceRoot,
+    [string]$EngineRoot,
     [string]$Manifest = "$PSScriptRoot/grammars.lock.tsv",
     [ValidateRange(1,16)][int]$Parallelism = 4
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath($Directory)
 $rows = @(Import-Csv -LiteralPath $Manifest -Delimiter "`t")
+$required = @()
 if ($LaplaceRoot) {
     $cmake = Get-Content -LiteralPath (Join-Path $LaplaceRoot 'engine/core/grammars/CMakeLists.txt') -Raw
     $required = @([regex]::Matches($cmake, '\$\{_TSG\}/([^/"\s]+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
     if (-not $required.Count) { throw 'The selected Laplace source declares no external grammars.' }
+}
+if ($EngineRoot) {
+    $engine = [IO.Path]::GetFullPath($EngineRoot)
+    $catalog = Get-Content -LiteralPath (Join-Path $engine 'src/recipe.c') -Raw
+    $table = [regex]::Match($catalog, '(?s)generic_specs\[\]\s*=\s*\{(.*?)\r?\n\};')
+    if (-not $table.Success) { throw 'The selected Engine source declares no generic grammar catalog.' }
+    $languages = @([regex]::Matches($table.Groups[1].Value, '\{\s*"[A-Za-z0-9_-]+"\s*,\s*"([A-Za-z0-9_-]+)"\s*,\s*\{') | ForEach-Object { $_.Groups[1].Value })
+    foreach ($file in Get-ChildItem -LiteralPath (Join-Path $engine 'recipes') -Recurse -File | Where-Object { $_.Extension -in '.recipe','.format' }) {
+        $languages += @(Select-String -LiteralPath $file.FullName -Pattern '^\s*grammar\s+([A-Za-z0-9_-]+)\s*(?:#.*)?$' | ForEach-Object { $_.Matches[0].Groups[1].Value })
+    }
+    foreach ($language in $languages | Sort-Object -Unique) {
+        # Text/layout and the current PGN provider are native Engine grammars.
+        if ($language -in 'text','layout','pgn' -or (Test-Path -LiteralPath (Join-Path $engine "recipes/formats/grammars/$language/grammar.js"))) { continue }
+        $name = switch ($language) {
+            'c_sharp' { 'tree-sitter-c-sharp' }
+            { $_ -in 'tsx','typescript' } { 'tree-sitter-typescript' }
+            { $_ -in 'csv','tsv','psv' } { 'tree-sitter-csv' }
+            { $_ -in 'xml','dtd' } { 'tree-sitter-xml' }
+            default { 'tree-sitter-' + $language }
+        }
+        $required += $name
+    }
+}
+if ($LaplaceRoot -or $EngineRoot) {
+    $required = @($required | Sort-Object -Unique)
     foreach ($name in $required) { if ($name -notin $rows.name) { throw "No locked grammar revision for $name" } }
     $rows = @($rows | Where-Object name -in $required)
 }
@@ -28,7 +55,7 @@ $results = @($rows | ForEach-Object -ThrottleLimit $Parallelism -Parallel {
     $ErrorActionPreference = 'Stop'
     $row = $_; $path = [IO.Path]::Combine($using:root, $row.name); $lock = $null
     function Invoke-GrammarGit([string[]]$Arguments) {
-        $result = & git @Arguments 2>&1
+        $result = & git -c "safe.directory=$($path.Replace('\','/'))" -c core.excludesFile= @Arguments 2>&1
         if ($LASTEXITCODE -ne 0) { throw "git failed for $($row.name): $($result -join ' ')" }
         ($result -join "`n").Trim()
     }
