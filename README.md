@@ -297,10 +297,22 @@ PostgreSQL backup or a versioned/offsite backup. Database recovery needs its own
 Run `pwsh -File tests/backup-continuity.ps1` for local copy, corruption, unreadable-file and failure-propagation checks.
 
 ```powershell
-pwsh -File setup.ps1                  # the machine: volumes, packages, rights, dependencies, cluster, settings, access, report
+pwsh -File setup.ps1                  # prepare locked development inputs and register laplace-ops
+pwsh -File setup.ps1 all              # explicit elevated host provisioning, when the host needs it
 pwsh -File setup.ps1 deps report      # one part, or several
 pwsh -File tune-pg.ps1 -Check         # the server's settings against their declaration; without -Check: apply, restart when allowed, check
+laplace-ops deploy -Target desktop -Plan # show the delivery stages without changing the installation
+laplace-ops deploy -Target desktop    # check tuning, build/publish IIS, migrate both databases, verify
 ```
+
+Desktop deployment uses the enrolled Windows operator and the declared developer shell.
+It reports each stage, retains its full output, and writes a combined receipt under
+`$LAPLACE_WORK/operations/desktop-deploy-*/receipt.json`. Success is printed after
+both database migrations, publication and desktop verification pass. Migrations use
+the staged package's runtime before IIS selects its new application binary. A failed stage
+returns a nonzero exit code with its log path; compiler/npm warnings remain visible
+and are also listed in the receipt. Initial provisioning remains owned by `setup.ps1`
+and `Install-IisRuntime.ps1`; deployment does not reset databases or silently repair ACLs.
 
 `setup.ps1` is `setup.sh`'s counterpart: the same parts, each a declaration compared with the machine, logged under
 `$LAPLACE_WORK\logs\root`; the parts that touch the service, its rights, its settings and its access need an elevated

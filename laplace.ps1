@@ -24,6 +24,7 @@ param(
     [string]$SourcePath,
     [switch]$Yes,
     [switch]$Wait,
+    [switch]$Plan,
     [Alias('h')][switch]$Help,
     [Parameter(ValueFromRemainingArguments)][string[]]$RemainingArgs = @()
 )
@@ -78,7 +79,8 @@ LOCAL DESKTOP DEVELOPMENT (http://localhost:5187)
   laplace-ops verify desktop          Verify the local desktop server (reuses running instance or cold-starts)
 
 LOCAL DESKTOP IIS & DATABASE MAINTENANCE (https://dev.hartonomous.com)
-  laplace-ops deploy desktop          Full desktop build + IIS publish + DB migrations + health check
+  laplace-ops deploy desktop          Check tuning, build, publish IIS, migrate, and verify; save one deployment receipt
+  laplace-ops deploy desktop -Plan    Show desktop deployment stages without changing the installation
   laplace-ops restart-iis             Cleanly recycle the local IIS site (app_offline.htm) and check /health
   laplace-ops db                      Check migration status for both local databases (application + substrate)
   laplace-ops db [both|application|substrate] [status|migrate|repair|remigrate|recreate] [-Yes]
@@ -122,6 +124,9 @@ REMOTE CI/CD & ENVIRONMENT OPERATIONS (GitHub Actions)
 $desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','ingest','seed','sources','data')
 if (-not $PSBoundParameters.ContainsKey('Target')) {
     $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
+}
+if ($Plan -and -not ($Operation -eq 'deploy' -and $Target -eq 'desktop')) {
+    throw '-Plan is supported by deploy -Target desktop; no operation was run.'
 }
 if ($Operation -in @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','restart-iis') -and $Target -ne 'desktop') {
     throw "$Operation runs on desktop; target '$Target' is not supported. Use deploy to install a deployment target."
@@ -234,16 +239,7 @@ if ($Operation -eq 'restart-iis') {
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'deploy' -and $Target -eq 'desktop') {
-    . "$PSScriptRoot/laplace.env.ps1"
-    $source = if ($SourcePath) { [IO.Path]::GetFullPath($SourcePath) } else { Join-Path $env:LAPLACE_SRC 'Laplace' }
-    Write-Host "Deploying desktop IIS package (https://dev.hartonomous.com) and migrating local databases from $source..."
-    & pwsh -NoProfile -File (Join-Path $source 'deploy/windows/Build-IisPackage.ps1') -Publish
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    & pwsh -NoProfile -File (Join-Path $source 'deploy/windows/Invoke-IisDatabase.ps1') -Database application -Operation migrate
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    & pwsh -NoProfile -File (Join-Path $source 'deploy/windows/Invoke-IisDatabase.ps1') -Database substrate -Operation migrate
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    & pwsh -NoProfile -File "$PSScriptRoot/installation/Verify-DesktopDatabases.ps1"
+    & pwsh -NoProfile -File "$PSScriptRoot/installation/Deploy-Desktop.ps1" -SourcePath $SourcePath -Plan:$Plan
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'components' -and $Target -eq 'desktop') {
