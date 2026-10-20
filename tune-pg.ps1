@@ -49,9 +49,71 @@ function TuneDrive([string]$path) { ([IO.Path]::GetPathRoot([IO.Path]::GetFullPa
 
 # ---------------------------------------------------------------------------------------------------- the facts
 # Each read from this machine; TUNE_FACT_* names one instead (-Plan for another machine, and the tests).
-function TuneFactRamKB { if ($env:TUNE_FACT_RAM_KB) { return [int64]$env:TUNE_FACT_RAM_KB }; [int64]((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1KB) }
-function TuneFactThreads { if ($env:TUNE_FACT_THREADS) { return [int]$env:TUNE_FACT_THREADS }; [int](Get-CimInstance Win32_Processor | Measure-Object NumberOfLogicalProcessors -Sum).Sum }
-function TuneFactCores { if ($env:TUNE_FACT_CORES) { return [int]$env:TUNE_FACT_CORES }; [int](Get-CimInstance Win32_Processor | Measure-Object NumberOfCores -Sum).Sum }
+function TuneHardware {
+    if ($script:TuneHardwareFacts) { return $script:TuneHardwareFacts }
+    # These APIs describe the host, across processor groups, without WMI access
+    # or an elevated token. Environment.ProcessorCount can describe a job's CPU
+    # limit instead of the machine running PostgreSQL.
+    if (-not ('LaplaceTuneHardware' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class LaplaceTuneHardware {
+    [StructLayout(LayoutKind.Sequential)]
+    struct MemoryStatus {
+        public uint Length, Load;
+        public ulong TotalPhysical, AvailablePhysical, TotalPageFile, AvailablePageFile;
+        public ulong TotalVirtual, AvailableVirtual, AvailableExtendedVirtual;
+    }
+    [DllImport("kernel32.dll", SetLastError=true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    static extern bool GlobalMemoryStatusEx(ref MemoryStatus status);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    static extern uint GetActiveProcessorCount(ushort group);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    static extern bool GetLogicalProcessorInformationEx(int relationship, IntPtr buffer, ref uint length);
+    public static long[] Read() {
+        var memory = new MemoryStatus();
+        memory.Length = (uint)Marshal.SizeOf<MemoryStatus>();
+        if (!GlobalMemoryStatusEx(ref memory)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        uint threads = GetActiveProcessorCount(0xffff), length = 0;
+        if (threads == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+        // RelationProcessorCore = 0: one variable-length entry per physical core.
+        bool sized = GetLogicalProcessorInformationEx(0, IntPtr.Zero, ref length);
+        int error = Marshal.GetLastWin32Error();
+        if ((!sized && error != 122) || length < 8 || length > int.MaxValue)
+            throw new Win32Exception(error, "Cannot size Windows processor topology");
+        IntPtr buffer = Marshal.AllocHGlobal((int)length);
+        try {
+            if (!GetLogicalProcessorInformationEx(0, buffer, ref length))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            int cores = 0;
+            for (uint offset = 0; offset < length;) {
+                if (length - offset < 8) throw new InvalidOperationException("Truncated processor topology");
+                IntPtr entry = IntPtr.Add(buffer, (int)offset);
+                int size = Marshal.ReadInt32(entry, 4);
+                if (size < 8 || (uint)size > length - offset)
+                    throw new InvalidOperationException("Invalid processor topology entry");
+                if (Marshal.ReadInt32(entry) == 0) cores++;
+                offset += (uint)size;
+            }
+            if (memory.TotalPhysical < 1024 || cores < 1 || threads < cores)
+                throw new InvalidOperationException("Invalid Windows memory/processor facts");
+            return new long[] { (long)(memory.TotalPhysical / 1024), threads, cores };
+        } finally { Marshal.FreeHGlobal(buffer); }
+    }
+}
+'@
+    }
+    $facts = [LaplaceTuneHardware]::Read()
+    $script:TuneHardwareFacts = @{ RamKB = $facts[0]; Threads = $facts[1]; Cores = $facts[2] }
+    $script:TuneHardwareFacts
+}
+function TuneFactRamKB { if ($env:TUNE_FACT_RAM_KB) { return [int64]$env:TUNE_FACT_RAM_KB }; (TuneHardware).RamKB }
+function TuneFactThreads { if ($env:TUNE_FACT_THREADS) { return [int]$env:TUNE_FACT_THREADS }; (TuneHardware).Threads }
+function TuneFactCores { if ($env:TUNE_FACT_CORES) { return [int]$env:TUNE_FACT_CORES }; (TuneHardware).Cores }
 function TuneFactRotational {   # does the disk under the data rotate (MediaType HDD); unknown media does not
     if ($null -ne $env:TUNE_FACT_ROTATIONAL -and $env:TUNE_FACT_ROTATIONAL -ne '') { return [int]$env:TUNE_FACT_ROTATIONAL }
     try {
@@ -86,7 +148,7 @@ function TuneFactBuffersMaxKB { if ($env:LAPLACE_PG_BUFFERS_MAX) { TuneKB $env:L
 function TunePlan {   # every derived quantity, tune-pg.sh's plan(): the same names, the same arithmetic (integers)
     $ramKB = TuneFactRamKB; $threads = TuneFactThreads; $cores = TuneFactCores; $reservedKB = TuneFactReservedKB; $capKB = TuneFactBuffersMaxKB
     $rotational = TuneFactRotational; $wal = TuneFactWal; $walBytes = $wal[0]; $shared = $wal[1]
-    if ($cores -lt 1) { $cores = 1 }; if ($threads -lt $cores) { $threads = $cores }
+    if ($ramKB -le 0 -or $cores -lt 1 -or $threads -lt $cores) { throw 'tune-pg: invalid hardware facts (positive RAM and threads >= cores >= 1 required)' }
     $usableKB = [math]::Max($ramKB - $reservedKB, [int64]($ramKB / 8))
     $sharedKB = [int64]($usableKB / 4); if ($capKB -gt 0) { $sharedKB = [math]::Min($sharedKB, $capKB) }; $sharedKB = [math]::Max($sharedKB, 131072)
     $ecsKB = [int64]($usableKB * 7 / 10)
