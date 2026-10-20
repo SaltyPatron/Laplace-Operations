@@ -16,7 +16,8 @@
   residents keep: the llama-server services), LAPLACE_PG_BUFFERS_MAX (the largest shared memory this Windows build
   maps in every backend), LAPLACE_PG_PROFILE (substrate or app: the connection plan). The memory is tune-pg.sh's one
   equation in four domains: of what the server may use, a quarter the shared cache, a quarter the backends' private
-  memory (divided by the backends the plan allows), a quarter the client's, a quarter the page cache. Windows: huge
+  memory, a quarter the client's, a quarter the page cache. Executor memory is divided by active query leaders and
+  parallel workers, not idle connection slots. Each connection retains its own temporary-buffer allowance. Windows: huge
   pages off (the backends' shared-memory mapping failed at 4 GB before any large page was tried), io_method worker
   (no io_uring), the server's own log under the work tree (no journal).
 #>
@@ -145,42 +146,56 @@ function TuneFactReservedKB { if ($env:LAPLACE_PG_RESERVED) { TuneKB $env:LAPLAC
 function TuneFactBuffersMaxKB { if ($env:LAPLACE_PG_BUFFERS_MAX) { TuneKB $env:LAPLACE_PG_BUFFERS_MAX } else { [int64]0 } }
 
 # ---------------------------------------------------------------------------------------------------- the rules
+function TuneDiv([int64]$n, [int64]$d) { [int64][math]::Floor($n / [decimal]$d) }
 function TunePlan {   # every derived quantity, tune-pg.sh's plan(): the same names, the same arithmetic (integers)
     $ramKB = TuneFactRamKB; $threads = TuneFactThreads; $cores = TuneFactCores; $reservedKB = TuneFactReservedKB; $capKB = TuneFactBuffersMaxKB
     $rotational = TuneFactRotational; $wal = TuneFactWal; $walBytes = $wal[0]; $shared = $wal[1]
     if ($ramKB -le 0 -or $cores -lt 1 -or $threads -lt $cores) { throw 'tune-pg: invalid hardware facts (positive RAM and threads >= cores >= 1 required)' }
-    $usableKB = [math]::Max($ramKB - $reservedKB, [int64]($ramKB / 8))
-    $sharedKB = [int64]($usableKB / 4); if ($capKB -gt 0) { $sharedKB = [math]::Min($sharedKB, $capKB) }; $sharedKB = [math]::Max($sharedKB, 131072)
-    $ecsKB = [int64]($usableKB * 7 / 10)
-    $privateKB = [int64]($usableKB / 4)
-    $walMB = if ($shared -eq 1) { [math]::Min([int64]($walBytes / 1MB / 4), 32768) } else { [int64]($walBytes / 1MB / 2) }
+    $usableKB = [math]::Max($ramKB - $reservedKB, (TuneDiv $ramKB 8))
+    $sharedKB = TuneDiv $usableKB 4; if ($capKB -gt 0) { $sharedKB = [math]::Min($sharedKB, $capKB) }; $sharedKB = [math]::Max($sharedKB, 131072)
+    $ecsKB = TuneDiv ($usableKB * 7) 10
+    $privateKB = TuneDiv $usableKB 4
+    $walMB = if ($shared -eq 1) { [math]::Min((TuneDiv $walBytes (1MB * 4)), 32768) } else { TuneDiv $walBytes (1MB * 2) }
     $walMB = [math]::Max($walMB, 1024)
-    $minWalMB = [math]::Min([math]::Max([int64]($walMB / 8), 80), 4096)
-    $walBufKB = [math]::Min([math]::Max([int64]($sharedKB / 32), 16384), [int64]($walMB * 1024 / 16))
-    $par = $cores; $gather = [int]($cores / 2); $avw = [math]::Max(3, [int]($cores / 2)); $iow = [math]::Min([math]::Max([int]($threads * 2 / 3), 1), 32); $mwp = $par + 4
-    $declaredServing = if ($env:LAPLACE_PG_SERVING) { [int]$env:LAPLACE_PG_SERVING } else { 0 }
+    $minWalMB = [math]::Min([math]::Max((TuneDiv $walMB 8), 80), 4096)
+    $walBufKB = [math]::Min([math]::Max((TuneDiv $sharedKB 32), 16384), (TuneDiv ($walMB * 1024) 16))
+    $par = $cores; $gather = TuneDiv $cores 2; $avw = [math]::Max(3, $gather); $iow = [math]::Min([math]::Max((TuneDiv ($threads * 2) 3), 1), 32); $mwp = $par + 4
+    $declaredServing = $null
+    if ($env:LAPLACE_PG_SERVING) {
+        if ($env:LAPLACE_PG_SERVING -notmatch '^(0|[1-9][0-9]{0,5})$') { throw 'tune-pg: LAPLACE_PG_SERVING must be a nonnegative integer (at most six digits)' }
+        $declaredServing = [int]$env:LAPLACE_PG_SERVING
+    }
     switch ($TuneProfile) {
-        'substrate' { $ingest = 1 + 2 * $cores + 3; $serving = if ($declaredServing) { $declaredServing } else { 4 * $threads }; $locks = 1024 }
-        'app'       { $ingest = 0; $serving = if ($declaredServing) { $declaredServing } else { [math]::Max(16, 8 * $threads) }; $locks = 64 }
+        'substrate' { $ingest = 1 + 2 * $cores + 3; $serving = if ($null -ne $declaredServing) { $declaredServing } else { 4 * $threads }; $locks = 1024 }
+        'app'       { $ingest = 0; $serving = if ($null -ne $declaredServing) { $declaredServing } else { [math]::Max(16, 8 * $threads) }; $locks = 64 }
     }
     $reservedConns = 3; $conns = $ingest + $serving + $avw + $reservedConns
-    $maintDomKB = [int64]($privateKB / 4); $mwmKB = [math]::Max([int64]($maintDomKB / 2), 65536); $avwmKB = [math]::Max([int64]($maintDomKB / 2 / $avw), 1024)
-    $execKB = $privateKB - $maintDomKB; $backends = $conns + $par; $perKB = [int64]($execKB / $backends)
+    $activeText = if ($env:LAPLACE_PG_ACTIVE_QUERIES) { $env:LAPLACE_PG_ACTIVE_QUERIES } else { "$([math]::Min($cores, $conns - $reservedConns))" }
+    if ($activeText -notmatch '^[1-9][0-9]{0,5}$' -or [int]$activeText -gt ($conns - $reservedConns)) {
+        throw 'tune-pg: LAPLACE_PG_ACTIVE_QUERIES must be positive and fit non-reserved connection capacity'
+    }
+    $active = [int]$activeText
+    $maintDomKB = TuneDiv $privateKB 4; $mwmKB = [math]::Max((TuneDiv $maintDomKB 2), 65536); $avwmKB = [math]::Max((TuneDiv $maintDomKB (2 * $avw)), 1024)
+    $tempKB = 8192; $tempTotalKB = $conns * $tempKB
+    $execKB = $privateKB - $mwmKB - $avw * $avwmKB - $tempTotalKB
+    $backends = $active + $par
     $workNodesText = if ($env:LAPLACE_PG_WORK_NODES) { $env:LAPLACE_PG_WORK_NODES } else { '2' }
     if ($workNodesText -notmatch '^[1-9][0-9]{0,5}$') { throw 'tune-pg: LAPLACE_PG_WORK_NODES must be a positive integer (at most six digits)' }
     $workNodes = [int]$workNodesText
-    $workKB = [math]::Max([int64][math]::Floor($perKB / 2 / $workNodes), 4096); $tempKB = [math]::Max([int64]($perKB / 2), 8192)
-    $overKB = [math]::Max([int64]($backends * ($workNodes * $workKB + $tempKB) + $mwmKB + $avw * $avwmKB - $privateKB), 0)
+    # A workload estimate, not admission control: SQL can run more nodes or queries.
+    # Account for every permitted parallel worker and every connection's temp buffers.
+    $workKB = [math]::Max((TuneDiv $execKB ($backends * $workNodes)), 4096)
+    $overKB = [math]::Max([int64]($backends * $workNodes * $workKB + $tempTotalKB + $mwmKB + $avw * $avwmKB - $privateKB), 0)
     if ($rotational -eq 1) { $eic = 2; $rpc = '4' } else { $eic = $iow; $rpc = '1.1' }
     [ordered]@{
         'fact.memory_kb' = $ramKB; 'fact.reserved_kb' = $reservedKB; 'fact.threads' = $threads; 'fact.cores' = $cores
         'fact.wal_volume_bytes' = $walBytes; 'fact.wal_volume_shared' = $shared; 'fact.data_rotational' = $rotational; 'fact.profile' = $TuneProfile
         usable_kb = $usableKB; shared_kb = $sharedKB; ecs_kb = $ecsKB; private_kb = $privateKB; wal_mb = $walMB; min_wal_mb = $minWalMB; wal_buf_kb = $walBufKB
-        par = $par; gather = $gather; avw = $avw; iow = $iow; mwp = $mwp; conns = $conns; backends = $backends
+        par = $par; gather = $gather; avw = $avw; iow = $iow; mwp = $mwp; conns = $conns; active_queries = $active; backends = $backends; temp_total_kb = $tempTotalKB; exec_kb = $execKB
         mwm_kb = $mwmKB; avwm_kb = $avwmKB; work_kb = $workKB; work_nodes = $workNodes; temp_kb = $tempKB; eic = $eic; rpc = $rpc; locks = $locks; over_kb = $overKB
     }
 }
-function TuneMBs([int64]$kb) { "$([int64]($kb / 1024))MB" }
+function TuneMBs([int64]$kb) { "$(TuneDiv $kb 1024)MB" }
 
 # Every setting, from the plan. The reasons are tune-pg.sh's.
 function TuneDeclared {
@@ -264,6 +279,8 @@ function TuneShowPlan {
     $p = TunePlan
     "tune-pg: the facts of $env:COMPUTERNAME for the $TuneProfile profile"
     foreach ($k in $p.Keys) { if ($k -like 'fact.*') { '  {0,-24} {1}' -f $k.Substring(5), $p[$k] } }
+    'tune-pg: workload budget (estimated concurrency, not query admission control)'
+    foreach ($k in @('conns', 'active_queries', 'par', 'backends', 'work_nodes', 'temp_total_kb', 'exec_kb', 'over_kb')) { '  {0,-24} {1}' -f $k, $p[$k] }
     'tune-pg: the settings they give'
     $d = TuneDeclared; foreach ($k in $d.Keys) { '  {0,-40} {1}' -f $k, $d[$k] }
     if ($p.over_kb -gt 0) { Write-Warning "tune-pg: OVER-COMMITTED by $([int64]($p.over_kb / 1024)) MB: the connections declared, at PostgreSQL's floors, want more than the backends' quarter; fewer serving connections (LAPLACE_PG_SERVING) or more memory for the server (LAPLACE_PG_RESERVED)" }
