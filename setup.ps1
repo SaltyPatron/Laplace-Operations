@@ -57,6 +57,7 @@ USAGE
                                           volumes | packages | rights | deps | postgres | cluster | settings | access | report
                                           network | shares | services | firewall | backup | status
   pwsh -File setup.ps1 client           Package Laplace-Native + Laplace-Engine and install the modular 'laplace' CLI
+  pwsh -File setup.ps1 tree-sitter      Build and verify the pinned grammar generator and its isolated Rust SDK
   pwsh -File setup.ps1 secrets-agents   Configure or check OpenBao secrets agents
 
 Once setup.ps1 has been run once, use 'laplace-ops' from any directory for daily builds, database maintenance, IIS, and deployments.
@@ -82,7 +83,11 @@ if ($Parts.Count -eq 1 -and $Parts[0] -eq 'postgres') {
     & "$PSScriptRoot/installation/postgres-installation.ps1" -Check:$Check
     return
 }
-if ($Check) { throw '-Check currently applies to the postgres installation operation.' }
+if ($Parts.Count -eq 1 -and $Parts[0] -eq 'tree-sitter') {
+    & "$PSScriptRoot/installation/build-tree-sitter.ps1" -Check:$Check
+    return
+}
+if ($Check) { throw '-Check applies to the postgres and tree-sitter installation operations.' }
 if ($Parts -contains 'development') {
     if ($Parts.Count -ne 1) { throw 'Run the development profile separately from explicit database/service installation steps.' }
     Install-LaplaceOpsCommand
@@ -545,6 +550,7 @@ function deps {
             Say $what "built and installed at $prefix"
         }
     }
+    Attempt 'Tree-sitter grammar generator' { & "$PSScriptRoot/installation/build-tree-sitter.ps1" }
     Attempt 'runtime closure' { RuntimeClosure }
 }
 # What PostgreSQL loads, beside it. Its service runs as NetworkService and reads no person's PATH (Operations#2), and
