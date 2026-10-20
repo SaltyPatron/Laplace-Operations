@@ -70,7 +70,7 @@ $results = @($rows | ForEach-Object -ThrottleLimit $Parallelism -Parallel {
             }
             if ((Invoke-GrammarGit @('-C',$path,'remote','get-url','origin')) -ne $row.origin) { throw "Origin differs: $path" }
             if (Invoke-GrammarGit @('-C',$path,'status','--porcelain')) { throw "Uncommitted files in $path; no source changed." }
-            $head = & git -C $path rev-parse --verify HEAD 2>$null
+            $head = & git -c "safe.directory=$($path.Replace('\','/'))" -c core.excludesFile= -C $path rev-parse --verify HEAD 2>$null
             if ($LASTEXITCODE -ne 0 -or $head -ne $row.commit) {
                 $null = Invoke-GrammarGit @('-C',$path,'fetch','--quiet','--depth','1','origin',$row.commit)
                 $null = Invoke-GrammarGit @('-C',$path,'checkout','--quiet','--detach',$row.commit)
