@@ -20,9 +20,9 @@
 # The memory is one equation in four domains (the monorepo's PostgresResourcePlan, which the laplace program sizes
 # its own working sets from, so the two never promise the same byte twice): of what the server may use (the memory
 # less LAPLACE_PG_RESERVED), a quarter is the shared cache, a quarter the backends' private memory, a quarter the
-# client's (ingest, build, API) and a quarter the operating system's page cache. The private quarter is divided by the
-# backends the connection plan allows (every connection and every parallel worker), so work_mem is what each may hold
-# and not a number that was right on one host. PostgreSQL's own guidance: 25% of memory for shared_buffers and no
+# client's (ingest, build, API) and a quarter the operating system's page cache. The private quarter reserves maintenance
+# and every connection's temporary buffers, then budgets execution for active query leaders plus parallel workers.
+# Idle connection capacity is not executor concurrency. PostgreSQL's own guidance: 25% of memory for shared_buffers and no
 # more than 40%; work_mem is spent by every sort and hash of every backend at once; maintenance_work_mem is taken by
 # every autovacuum worker unless autovacuum_work_mem bounds it (runtime-config-resource, 18).
 #
@@ -151,7 +151,7 @@ clamp() { min "$(max "$1" "$2")" "$3"; }   # value lo hi
 plan() {  # every derived quantity as NAME=value lines; declared() formats them
   local ram_kb threads cores reserved_kb usable_kb cap_kb rotational wal shared wal_bytes
   local shared_kb ecs_kb private_kb maint_dom_kb exec_kb wal_mb min_wal_mb wal_buf_kb
-  local par gather avw iow mwp ingest serving reserved_conns conns backends per_kb work_kb temp_kb mwm_kb avwm_kb eic rpc locks over_kb
+  local par gather avw iow mwp ingest serving reserved_conns conns active backends work_kb temp_kb temp_total_kb mwm_kb avwm_kb eic rpc locks over_kb
   ram_kb=$(fact_ram_kb); threads=$(fact_threads); cores=$(fact_cores); reserved_kb=$(fact_reserved_kb); cap_kb=$(fact_buffers_max_kb)
   rotational=$(fact_rotational); set -- $(fact_wal_bytes); wal_bytes=$1; shared=$2
   [ "$cores" -ge 1 ] || cores=1; [ "$threads" -ge "$cores" ] || threads=$cores
@@ -177,20 +177,26 @@ plan() {  # every derived quantity as NAME=value lines; declared() formats them
     substrate) ingest=$((1 + 2 * cores + 3)); serving=${LAPLACE_PG_SERVING:-$((4 * threads))}; locks=1024 ;;
     app)       ingest=0; serving=${LAPLACE_PG_SERVING:-$(max 16 $((8 * threads)))}; locks=64 ;;
   esac
+  [[ "$serving" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo 'tune-pg: LAPLACE_PG_SERVING must be a nonnegative integer (at most six digits)' >&2; return 1; }
   reserved_conns=3; conns=$((ingest + serving + avw + reserved_conns))
-  # the private quarter: a quarter of it for maintenance (one explicit operation and the autovacuum workers between
-  # them), the rest for the executor, divided by every backend that may run a sort or a hash at once
+  active=${LAPLACE_PG_ACTIVE_QUERIES:-$(min "$cores" "$((conns - reserved_conns))")}
+  [[ "$active" =~ ^[1-9][0-9]{0,5}$ ]] && [ "$active" -le "$((conns - reserved_conns))" ] || {
+    echo 'tune-pg: LAPLACE_PG_ACTIVE_QUERIES must be positive and fit non-reserved connection capacity' >&2; return 1;
+  }
+  # Connection slots are capacity, not busy executors. Keep their full temporary-buffer
+  # allowance, but do not allocate half the executor budget to unused temp tables.
   maint_dom_kb=$((private_kb / 4)); mwm_kb=$(max $((maint_dom_kb / 2)) 65536); avwm_kb=$(max $((maint_dom_kb / 2 / avw)) 1024)
-  exec_kb=$((private_kb - maint_dom_kb)); backends=$((conns + par)); per_kb=$((exec_kb / backends))
+  temp_kb=8192; temp_total_kb=$((conns * temp_kb))
+  exec_kb=$((private_kb - mwm_kb - avw * avwm_kb - temp_total_kb)); backends=$((active + par))
   local work_nodes=${LAPLACE_PG_WORK_NODES:-2}
   [[ "$work_nodes" =~ ^[1-9][0-9]{0,5}$ ]] || { echo 'tune-pg: LAPLACE_PG_WORK_NODES must be a positive integer (at most six digits)' >&2; return 1; }
   # work_mem applies to each simultaneous sort/hash node, not once per connection.
   # This declared population is a workload estimate; arbitrary SQL is not memory-bounded by it.
-  work_kb=$(max $((per_kb / 2 / work_nodes)) 4096); temp_kb=$(max $((per_kb / 2)) 8192)
+  work_kb=$(max $((exec_kb / backends / work_nodes)) 4096)
   # the floors (work_mem 4 MB, temp_buffers 8 MB, maintenance 64 MB, autovacuum 1 MB) are PostgreSQL's useful minimums;
   # when the declared connections at their floors want more than the private quarter, the host is over-committed by
   # its declarations, and the plan says by how much rather than promising what is not there
-  over_kb=$(( backends * (work_nodes * work_kb + temp_kb) + mwm_kb + avw * avwm_kb - private_kb )); [ "$over_kb" -gt 0 ] || over_kb=0
+  over_kb=$(( backends * work_nodes * work_kb + temp_total_kb + mwm_kb + avw * avwm_kb - private_kb )); [ "$over_kb" -gt 0 ] || over_kb=0
   if [ "$rotational" = 1 ]; then eic=2; rpc=4; else eic=$iow; rpc=1.1; fi
   cat <<PLAN
 fact.memory_kb=$ram_kb
@@ -214,7 +220,10 @@ avw=$avw
 iow=$iow
 mwp=$mwp
 conns=$conns
+active_queries=$active
 backends=$backends
+temp_total_kb=$temp_total_kb
+exec_kb=$exec_kb
 mwm_kb=$mwm_kb
 avwm_kb=$avwm_kb
 work_kb=$work_kb
@@ -300,6 +309,8 @@ tune_plan() {
   local p; p=$(plan) || return 1
   echo "tune-pg: the facts of $(hostname) for the $PROFILE profile"
   sed -n 's/^fact\.//p' <<<"$p" | awk -F= '{printf "  %-24s %s\n", $1, $2}'
+  echo 'tune-pg: workload budget (estimated concurrency, not query admission control)'
+  awk -F= '$1 ~ /^(conns|active_queries|par|backends|work_nodes|temp_total_kb|exec_kb|over_kb)$/ {printf "  %-24s %s\n", $1, $2}' <<<"$p"
   echo "tune-pg: the settings they give"
   declared | awk '{printf "  %-40s %s\n", $1, $2}'
   local over; over=$(sed -n 's/^over_kb=//p' <<<"$p")
