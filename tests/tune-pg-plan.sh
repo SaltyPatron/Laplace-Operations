@@ -34,13 +34,15 @@ while IFS=$'\t' read -r name profile ram threads cores wal shared rot reserved c
   if ! awk 'NF && $1 !~ /^#/ { if (seen[$1]++) { print "  FAIL duplicate setting: " $1; bad=1 } } END { exit bad }' <<<"$d"; then fail=1; fi
   declared_locks=$(awk '$1 == "max_locks_per_transaction" {print $2}' <<<"$d")
   [ "$declared_locks" = "$(v locks)" ] || { echo "  FAIL declared locks differ from plan on $name"; fail=1; }
-  echo "$name ($profile): usable $(( $(v usable_kb) / 1024 )) MB of $((ram / 1024)), $(v conns) connections, $(v backends) backends"
+  echo "$name ($profile): usable $(( $(v usable_kb) / 1024 )) MB of $((ram / 1024)), $(v conns) connection slots, $(v active_queries) active queries, $(v backends) executors"
   # the four domains: shared + private + client + page cache = usable; nothing promised twice
   check "shared_buffers within PostgreSQL's 40% of memory" "$(v shared_kb)" $((ram * 2 / 5))
   check "shared_buffers a quarter of what the server may use" "$(v shared_kb)" $(( $(v usable_kb) / 4 ))
   check "effective_cache_size within what the server may use" "$(v ecs_kb)" "$(v usable_kb)"
-  # the private quarter: every backend's work_mem and temp_buffers, one maintenance operation, every autovacuum worker
-  private=$(( $(v backends) * ( $(v work_nodes) * $(v work_kb) + $(v temp_kb) ) + $(v mwm_kb) + $(v avw) * $(v avwm_kb) ))
+  # Executor work memory, every connection's temp buffers, maintenance and autovacuum.
+  private=$(( $(v backends) * $(v work_nodes) * $(v work_kb) + $(v conns) * $(v temp_kb) + $(v mwm_kb) + $(v avw) * $(v avwm_kb) ))
+  [ "$(v backends)" -eq "$(( $(v active_queries) + $(v par) ))" ] || { echo 'FAIL missing parallel executor population'; fail=1; }
+  [ "$(v temp_total_kb)" -eq "$(( $(v conns) * $(v temp_kb) ))" ] || { echo 'FAIL missing session temporary buffers'; fail=1; }
   actual_wal=$(awk '$1 == "wal_level" {print $2}' <<<"$d")
   expected_wal=minimal; [[ "$profile" != app ]] || expected_wal=replica
   [[ "$actual_wal" == "$expected_wal" ]] || { echo 'FAIL WAL mode differs from recovery profile'; fail=1; }
@@ -64,7 +66,7 @@ while IFS=$'\t' read -r name profile ram threads cores wal shared rot reserved c
 done < <(fixtures)
 echo
 printf '%-34s' "setting"; for n in hart-server hart-cloud hart-prod HART-DESKTOP; do printf '%14s' "$n"; done; echo
-for k in shared_kb ecs_kb work_kb mwm_kb avwm_kb temp_kb wal_buf_kb wal_mb min_wal_mb conns backends par gather iow mwp avw locks; do
+for k in shared_kb ecs_kb work_kb mwm_kb avwm_kb temp_kb wal_buf_kb wal_mb min_wal_mb conns active_queries backends par gather iow mwp avw locks; do
   printf '%-34s' "$k"; for n in hart-server hart-cloud hart-prod HART-DESKTOP; do printf '%14s' "$(sed -n "s/^$k=//p" <<<"${plans[$n]}")"; done; echo
 done
 [ "$fail" = 0 ] && echo "tune-pg plans: every invariant holds" || { echo "tune-pg plans: FAILED"; exit 1; }
