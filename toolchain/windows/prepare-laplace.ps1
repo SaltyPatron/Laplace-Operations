@@ -4,13 +4,22 @@ param([Parameter(Mandatory)][string]$LaplaceRoot)
 $ErrorActionPreference = 'Stop'
 $operations = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 . "$operations/laplace.env.ps1"
+& "$operations/installation/build-tree-sitter.ps1"
 $LaplaceRoot = (Resolve-Path -LiteralPath $LaplaceRoot).Path
 if (-not $env:LAPLACE_UCD_ROOT) { $env:LAPLACE_UCD_ROOT = Join-Path $env:LAPLACE_UCD 'Public/UCD/latest' }
 $manifest = if ($env:LAPLACE_DEPENDENCY_MANIFEST) { $env:LAPLACE_DEPENDENCY_MANIFEST } else { Join-Path $env:ProgramData 'Laplace/dependencies.tsv' }
 [void](New-Item -ItemType Directory -Path (Split-Path $manifest) -Force)
 Copy-Item -LiteralPath "$operations/dependencies.tsv" -Destination $manifest -Force
-& pwsh -NoProfile -File "$operations/grammars.ps1" fetch -Directory (Join-Path $env:LAPLACE_EXTERNAL 'tree-sitter-grammars') -LaplaceRoot $LaplaceRoot
+$grammarSource = Join-Path $env:LAPLACE_EXTERNAL 'tree-sitter-grammars'
+$grammarArguments = @('fetch','-Directory',$grammarSource,'-LaplaceRoot',$LaplaceRoot)
+$engine = Join-Path $env:LAPLACE_SRC 'Laplace-Engine'
+if (Test-Path -LiteralPath (Join-Path $engine 'src/recipe.c')) { $grammarArguments += @('-EngineRoot',$engine) }
+& pwsh -NoProfile -File "$operations/grammars.ps1" @grammarArguments
 if ($LASTEXITCODE) { throw 'Grammar provisioning failed.' }
+if (Test-Path -LiteralPath (Join-Path $engine 'recipes/formats/grammars')) {
+    & "$operations/installation/build-grammars.ps1" -Source $grammarSource -Output $env:LAPLACE_GRAMMARS
+    & "$operations/installation/build-grammars.ps1" -Source (Join-Path $engine 'recipes/formats/grammars') -Output $env:LAPLACE_GRAMMARS
+}
 $unicode = Get-Content -LiteralPath "$operations/toolchain/unicode.lock.json" -Raw | ConvertFrom-Json
 $ucdRoot = [IO.Path]::GetFullPath($env:LAPLACE_UCD_ROOT)
 $cmake = Get-Content -LiteralPath (Join-Path $LaplaceRoot 'engine/CMakeLists.txt') -Raw

@@ -1,0 +1,13 @@
+{
+  "version": "1.90.0",
+  "target": "x86_64-pc-windows-msvc",
+  "origin": "https://static.rust-lang.org/dist/2025-09-18",
+  "license": "MIT OR Apache-2.0",
+  "reason": "Minimum compiler required by the pinned Tree-sitter workspace. Review with every Tree-sitter pin change.",
+  "checksum_source": "https://github.com/oxalica/rust-overlay/blob/master/manifests/stable/1.90.0.nix",
+  "components": [
+    {"name":"rustc", "archive":"rustc-1.90.0-x86_64-pc-windows-msvc.tar.xz", "sha256":"a18b3912905f154c34a7572954dda9e9849ac6411a1e02fa390bf742f918fbcb"},
+    {"name":"rust-std", "archive":"rust-std-1.90.0-x86_64-pc-windows-msvc.tar.xz", "sha256":"3b8c22f81c93c7e914369433430792bd6c06403806ae25b0b95f3cfc540a8b48"},
+    {"name":"cargo", "archive":"cargo-1.90.0-x86_64-pc-windows-msvc.tar.xz", "sha256":"a238d6a87cb0935e4f1bf0b4d093cbac3833d2f8b04413417bb622779669bec5"}
+  ]
+}

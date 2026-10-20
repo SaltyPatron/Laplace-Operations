@@ -8,12 +8,16 @@
 #           $LAPLACE_DATA/<proof> and verified by its pin; never part of a build and never content Laplace depends on.
 # build     how the build part makes it: cmake, configure, meson, openssl, headers, amalgamation (one C file, compiled
 #           as a DLL), none (consumed as source by Laplace-Native or the Engine), unpack, sfx (a self-extracting
-#           archive). PostGIS on Windows:
+#           archive). cargo builds a tool from an existing source dependency;
+#           rust-components installs the compiler/standard-library/Cargo archives
+#           in toolchain/rust.lock.json (pin = SHA-256 of that lock file).
+#           PostGIS on Windows:
 #           toolchain/windows/postgis.sh. The chess lab's rows (chess/provision.sh on Linux): stockfish (make
 #           profile-build), make (a release's source, make), lc0 (meson with CUDA), file and zip (data rows: the file as
 #           downloaded, or the one file the zip holds).
 # profile   icx-deterministic: Laplace-Native's flags (precise FP, no contraction, no fast math), spelled per driver.
 #           icx: icx with precise FP (icx defaults to -fp-model=fast; Laplace-Operations#3). none: not compiled here.
+#           upstream-default: build tools whose numbers never reach substrate results.
 # use       who needs it. A row without a consumer does not belong here.
 # proof     the file that says the row is installed, relative to its prefix: <deps>/<name>/<version>, the checkout for a row
 #           built into Laplace (build none), PostgreSQL's prefix for PostGIS; .pin for an unpacked archive. setup.ps1 builds a row
@@ -22,7 +26,9 @@
 name	version	kind	origin	ref	pin	build	profile	platforms	depends	use	proof
 blake3	1.8.3	source	https://github.com/BLAKE3-team/BLAKE3.git	1.8.3	8b829b697fa4cfe35de35e9aa8c20b56266cb091	none	icx-deterministic	linux,windows	-	Laplace-Native identity; held at hart-server's pin until both machines move to 1.8.7 together	c/blake3.h
 core-math	a0fce68	source	https://gitlab.inria.fr/core-math/core-math.git	-	a0fce681ad2f73dcf4876a375ada09e0519dbf70	none	icx-deterministic	linux,windows	-	Laplace-Native lp_crmath (correctly rounded sin, cos for tier 0)	src/binary64/cos/cos.c
-tree-sitter	dcdc8cc	source	https://github.com/tree-sitter/tree-sitter.git	-	dcdc8cc55e5dfedfc858080835f153999a29ec40	none	icx	linux,windows	-	Laplace-Engine parsing runtime; held at hart-server's pin until both move to v0.27.0	lib/src/lib.c
+tree-sitter	dcdc8cc	source	https://github.com/tree-sitter/tree-sitter.git	-	dcdc8cc55e5dfedfc858080835f153999a29ec40	none	icx	linux,windows	-	Laplace-Engine parsing runtime; retain ABI pin until runtime and grammar generator move together	lib/src/lib.c
+rust	1.90.0	tool	https://static.rust-lang.org/dist/2025-09-18	toolchain/rust.lock.json	af94076a602c34f46f7c98ff9d26d0cfd8a82f32317dbc6b0a97dc804f004d01	rust-components	upstream-default	windows	-	Tree-sitter generator build compiler only; minimum upstream MSRV, review with each Tree-sitter pin change; MIT OR Apache-2.0	bin/rustc.exe
+tree-sitter-cli	0.28.0-dcdc8cc	tool	https://github.com/tree-sitter/tree-sitter.git	-	dcdc8cc55e5dfedfc858080835f153999a29ec40	cargo	upstream-default	windows	tree-sitter,rust	Engine packaging and injected grammar generation; discrete C generator, never substrate numerical computation; same checkout as runtime; MIT	bin/tree-sitter.exe
 musl	1.2.5	source	https://git.musl-libc.org/git/musl	v1.2.5	0784374d561435f7c787a555aeab8ede699ed298	none	none	windows	-	Laplace-Engine on Windows: POSIX regex (TRE, leftmost-longest, as glibc matches on Linux) from its sources, src/win/musl	src/regex/regcomp.c
 icu	78.3	release	https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-Win64-MSVC2022.zip	release-78.3	446b671f9437227daa79e221d4521d75793f9ecd65ac44c06e34dd848f201ac2	unpack	none	windows	-	Laplace-Native text (Unicode 17 segmentation); PostgreSQL ICU collations	.pin
 zlib	1.3.2	source	https://github.com/madler/zlib.git	v1.3.2	da607da739fa6047df13e66a2af6b8bec7c2a498	cmake	icx	windows	-	PostgreSQL, libxml2, curl, libtiff, Laplace-Engine	lib/z.lib

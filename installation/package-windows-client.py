@@ -127,6 +127,11 @@ def main():
     shutil.copytree(Path(config['engine']) / 'firmware', candidate / 'share/firmware')
     shutil.copytree(config['prepared'], candidate / 'share/prepared')
     grammar_source = Path(config['grammars'])
+    definitions = Path(config['engine']) / 'recipes/formats/grammars'
+    if definitions.is_dir():
+        builder = Path(__file__).resolve().parent / 'build-grammars.ps1'
+        run(['pwsh', '-NoProfile', '-File', str(builder), '-Source', str(definitions),
+             '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['build']) / 'grammars')])
     grammars = sorted(grammar_source.glob('*.dll'))
     if not grammars:
         raise ValueError('No compiled Windows grammars at the declared path')

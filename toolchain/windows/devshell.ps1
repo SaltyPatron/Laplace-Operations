@@ -65,7 +65,7 @@ if (-not $env:SETVARS_COMPLETED) {
 # the manifest's tools: the directories under each unpacked tool that hold its programs
 $tools = foreach ($line in Get-Content (Join-Path $PSScriptRoot '..\..\dependencies.tsv')) {
     if (-not $line.Trim() -or $line.StartsWith('#')) { continue }
-    $f = $line -split "`t"; if ($f.Count -lt 9 -or $f[2] -ne 'tool' -or $f[6] -ne 'unpack' -or ($f[8] -split ',') -notcontains 'windows') { continue }
+    $f = $line -split "`t"; if ($f.Count -lt 9 -or $f[2] -ne 'tool' -or $f[6] -notin 'unpack','cargo','rust-components' -or ($f[8] -split ',') -notcontains 'windows') { continue }
     $prefix = Join-Path (Join-Path $env:LAPLACE_DEPS $f[0]) $f[1]
     if (-not (Test-Path $prefix)) { continue }
     # the tool's own programs only. Strawberry Perl also carries a compiler suite (c\bin: gcc, an old cmake, make):

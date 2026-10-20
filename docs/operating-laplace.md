@@ -47,6 +47,19 @@ and native decomposition must work outside the developer shell. The resulting de
 does not replace the installed IIS release. `start` runs the built API, and repeated `start`/`verify`
 reuse its owned process. Receipts record the executable paths and hashes under `$LAPLACE_WORK/operations`.
 
+Windows grammar generation is a declared external dependency. `./setup.ps1 tree-sitter`
+builds the CLI from the same pinned checkout as the Engine's Tree-sitter runtime;
+`./setup.ps1 tree-sitter -Check` verifies the installed binary against its receipt.
+Both `deps` and desktop `prepare` also provision it. The Rust compiler, standard
+library and Cargo are checksum-pinned in `toolchain/rust.lock.json` and installed
+under `$LAPLACE_DEPS/rust/<version>`. The generator goes under
+`$LAPLACE_DEPS/tree-sitter-cli/<version>/bin`; the developer shell adds it to the
+current process's PATH. Cargo downloads and build outputs stay under
+`$LAPLACE_BUILD/deps`. No Rust installation or configuration is written to the
+operator's profile. The build verifies generation, ICX compilation and parsing
+before recording success. For an offline build using already cached archives
+and crates, invoke `installation/build-tree-sitter.ps1 -Offline`.
+
 Workflow operations return a GitHub run link. `-Wait` follows that run and returns failure if it fails. The GitHub
 **Product — maintenance** workflow offers the same controls. `-Revision` selects a published ref; local uncommitted
 changes are not uploaded by this command. No repository or build directory is mounted on a deployment target.
