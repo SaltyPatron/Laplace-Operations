@@ -1,6 +1,6 @@
 #Requires -Version 7
 <# The desktop deployment behind laplace-ops. Setup owns provisioning; this
-   workflow checks the existing installation, then records every delivery stage. #>
+   workflow converges tuning on the existing installation and records every delivery stage. #>
 [CmdletBinding()]
 param([string]$SourcePath, [switch]$Plan)
 $ErrorActionPreference = 'Stop'
@@ -9,7 +9,7 @@ $operations = Split-Path -Parent $PSScriptRoot
 $source = if ($SourcePath) { [IO.Path]::GetFullPath($SourcePath) } else { Join-Path $env:LAPLACE_SRC 'Laplace' }
 $installation = $env:LAPLACE_IIS_INSTALLATION
 $steps = @(
-    @{name='Check PostgreSQL tuning'; script="$operations/tune-pg.ps1"; arguments=@('-Check')},
+    @{name='Apply and verify PostgreSQL tuning'; script="$operations/tune-pg.ps1"; arguments=@()},
     @{name='Build all components, migrate both databases, then publish IIS'; script="$source/deploy/windows/Build-IisPackage.ps1"; arguments=@('-Publish')},
     @{name='Verify application database'; script="$source/deploy/windows/Invoke-IisDatabase.ps1"; arguments=@('-Database','application','-Operation','status')},
     @{name='Verify substrate database'; script="$source/deploy/windows/Invoke-IisDatabase.ps1"; arguments=@('-Database','substrate','-Operation','status')},
@@ -88,8 +88,7 @@ try {
         $record.exit_code = $exitCode
         if ($exitCode -ne 0) {
             $record.status = 'failed'
-            $repair = if ($i -eq 0) { ' Reconcile settings with setup.ps1 settings, then retry.' } else { '' }
-            throw "$($step.name) failed (exit $exitCode).$repair Log: $log"
+            throw "$($step.name) failed (exit $exitCode). Log: $log"
         }
         $record.status = 'passed'
         Write-Host "Completed in $($record.seconds)s." -ForegroundColor Green

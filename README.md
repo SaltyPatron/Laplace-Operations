@@ -302,10 +302,13 @@ pwsh -File setup.ps1 all              # explicit elevated host provisioning, whe
 pwsh -File setup.ps1 deps report      # one part, or several
 pwsh -File tune-pg.ps1 -Check         # the server's settings against their declaration; without -Check: apply, restart when allowed, check
 laplace-ops deploy -Target desktop -Plan # show the delivery stages without changing the installation
-laplace-ops deploy -Target desktop    # check tuning, build/publish IIS, migrate both databases, verify
+laplace-ops deploy -Target desktop    # apply/verify tuning, build/publish IIS, migrate both databases, verify
 ```
 
 Desktop deployment uses the enrolled Windows operator and the declared developer shell.
+It runs the maintained tuner in apply mode before building: changed settings are
+written, reloaded and verified. A required service restart follows the tuner's
+existing permission and active-ingestion checks; unresolved changes fail the stage.
 It reports each stage, retains its full output, and writes a combined receipt under
 `$LAPLACE_WORK/operations/desktop-deploy-*/receipt.json`. Success is printed after
 both database migrations, publication and desktop verification pass. Migrations use
