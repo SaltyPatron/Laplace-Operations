@@ -22,6 +22,16 @@ function Query([string]$Sql){
     if($LASTEXITCODE){throw ($result -join "`n")}
     ($result -join "`n").Trim()
 }
+function Invoke-InstalledClient([string]$Command,[string[]]$Arguments){
+    $output=@(& $Command @Arguments 2>&1)
+    $exitCode=$LASTEXITCODE
+    if($exitCode){
+        Write-Host "$Command $($Arguments -join ' ') output:"
+        foreach($line in $output){Write-Host ([string]$line)}
+        throw "Installed client failed (exit $exitCode): $Command $($Arguments -join ' ')"
+    }
+    $output
+}
 try{
     $env:PGSSLMODE='verify-full';$env:PGSSLROOTCERT=Join-Path $c.state 'hart-desktop-postgresql.crt'
     $env:PGREQUIREAUTH='sspi';$env:PGCONNECT_TIMEOUT='10';$env:PGPASSFILE=Join-Path $c.state 'unused-no-password-file'
@@ -41,16 +51,17 @@ try{
     $env:PGPASSWORD='invalid-ambient-password-must-not-be-used'
     foreach($name in 'laplace-mono','laplace'){
         $command=Join-Path $env:LOCALAPPDATA "Laplace/bin/$name.cmd"
-        $where=& $command --where
-        if($LASTEXITCODE){throw "$name cannot resolve its installed selection."}
+        $where=Invoke-InstalledClient $command @('--where')
         $selection=$where|ConvertFrom-Json
         if($selection.database_host -ine $target.host){throw "$name selects another environment."}
         if($name -eq 'laplace'){
-            $status=& $command status 2>&1
-            if($LASTEXITCODE -or @($status|Where-Object {$_ -match "the same as this engine's"}).Count -ne 2){throw 'Modular SQL and client artifacts do not agree.'}
+            $status=Invoke-InstalledClient $command @('status')
+            if(@($status|Where-Object {$_ -match "the same as this engine's"}).Count -ne 2){
+                foreach($line in $status){Write-Host ([string]$line)}
+                throw 'Modular SQL and client artifacts do not agree.'
+            }
         }else{
-            $status=& $command inspect Laplace 2>&1
-            if($LASTEXITCODE){throw 'Installed monorepo client cannot query the local substrate.'}
+            $null=Invoke-InstalledClient $command @('inspect','Laplace')
         }
         $clients+=$selection
     }
