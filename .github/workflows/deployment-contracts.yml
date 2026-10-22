@@ -26,6 +26,21 @@ jobs:
       - name: Verify acceptance result failure boundaries
         shell: pwsh
         run: pwsh -NoProfile -File tests/acceptance-runner.ps1
+      - name: Verify PostgreSQL installer service and recovery boundaries
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/postgres-service-repair.ps1
+      - name: Verify Zstd synthetic codec regression
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'Visual Studio C compiler is missing' }
+          & cmd.exe /d /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && cl /nologo /MD /Od tests\zstd-roundtrip.c /Fe:`"$env:RUNNER_TEMP\zstd-roundtrip.exe`" /Fo:`"$env:RUNNER_TEMP\zstd-roundtrip.obj`""
+          if ($LASTEXITCODE) { throw 'Zstd regression probe compilation failed' }
+          $gitRoot = Split-Path (Split-Path (Get-Command git.exe).Source)
+          $dll = @("$gitRoot/ucrt64/bin/libzstd.dll", "$gitRoot/mingw64/bin/libzstd.dll") | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $dll) { throw 'Git Zstd runtime is missing' }
+          & "$env:RUNNER_TEMP/zstd-roundtrip.exe" $dll $dll
+          if ($LASTEXITCODE) { throw 'Zstd synthetic regression failed' }
       - name: Check out the application configuration contract
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:

@@ -58,6 +58,8 @@ USAGE
                                           network | shares | services | firewall | backup | status
   pwsh -File setup.ps1 client           Package Laplace-Native + Laplace-Engine and install the modular 'laplace' CLI
   pwsh -File setup.ps1 tree-sitter      Build and verify the pinned grammar generator and its isolated Rust SDK
+  pwsh -File setup.ps1 repair-postgres  Repair codec DLLs and service startup; verify the original cluster (no database reset)
+  pwsh -File setup.ps1 repair-postgres -Check  Inspect the selected service and required repair without changing it
   pwsh -File setup.ps1 secrets-agents   Configure or check OpenBao secrets agents
 
 Once setup.ps1 has been run once, use 'laplace-ops' from any directory for daily builds, database maintenance, IIS, and deployments.
@@ -87,13 +89,14 @@ if ($Parts.Count -eq 1 -and $Parts[0] -eq 'tree-sitter') {
     & "$PSScriptRoot/installation/build-tree-sitter.ps1" -Check:$Check
     return
 }
-if ($Check) { throw '-Check applies to the postgres and tree-sitter installation operations.' }
+if ($Check -and -not ($Parts.Count -eq 1 -and $Parts[0] -eq 'repair-postgres')) { throw '-Check applies to postgres, tree-sitter and repair-postgres.' }
 if ($Parts -contains 'development') {
     if ($Parts.Count -ne 1) { throw 'Run the development profile separately from explicit database/service installation steps.' }
     Install-LaplaceOpsCommand
     & pwsh -NoProfile -File "$PSScriptRoot/dev.ps1" -Operation prepare
     exit $LASTEXITCODE
 }
+$ReadOnlyPgRepair = [bool]$Check
 . "$PSScriptRoot\laplace.env.ps1"
 . "$PSScriptRoot\tune-pg.ps1"
 
@@ -106,9 +109,11 @@ $Math = $env:LAPLACE_MATH; $DevShell = $env:LAPLACE_DEVSHELL
 $Toolchain = Join-Path $PSScriptRoot 'toolchain\laplace.cmake'
 
 $logDir = Join-Path $Work 'logs\root'
-New-Item -ItemType Directory -Force $logDir | Out-Null
 $log = Join-Path $logDir ("setup-{0:yyyyMMddTHHmmssZ}.log" -f (Get-Date).ToUniversalTime())
-Start-Transcript -Path $log | Out-Null
+if (-not $ReadOnlyPgRepair) {
+    New-Item -ItemType Directory -Force $logDir | Out-Null
+    Start-Transcript -Path $log | Out-Null
+}
 $failed = [System.Collections.Generic.List[string]]::new()
 
 # ------------------------------------------------------------------------------------------------------ the sets
@@ -128,7 +133,9 @@ $DepOptions = @{
     # ICX 2026.1 loop vectorization leaves bytes unwritten in the LZ4 decoder.
     # Keep /O2 and SLP; tests/windows-lz4.ps1 reproduces the installed failure.
     lz4       = @('-DLZ4_BUILD_CLI=OFF', '-DBUILD_STATIC_LIBS=OFF', '-DCMAKE_C_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG /clang:-fno-vectorize')
-    zstd      = @('-DZSTD_BUILD_PROGRAMS=OFF', '-DZSTD_BUILD_TESTS=OFF', '-DZSTD_BUILD_CONTRIB=OFF')
+    # The same optimizer also corrupts overlapping Zstd matches during WAL recovery.
+    # tests/windows-zstd.ps1 checks the actual installed DLL with synthetic data.
+    zstd      = @('-DZSTD_BUILD_PROGRAMS=OFF', '-DZSTD_BUILD_TESTS=OFF', '-DZSTD_BUILD_CONTRIB=OFF', '-DCMAKE_C_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG /clang:-fno-vectorize')
     libxml2   = @('-DLIBXML2_WITH_PROGRAMS=OFF', '-DLIBXML2_WITH_PYTHON=OFF', '-DLIBXML2_WITH_TESTS=OFF', '-DLIBXML2_WITH_ICONV=OFF', '-DLIBXML2_WITH_HTTP=OFF')
     'json-c'  = @('-DBUILD_APPS=OFF')
     libtiff   = @("-DCMath_LIBRARY=$Math")   # its required CMath (libm) is laplace-math itself: Intel's libm, found otherwise, collides with it on atan2/exp/log/pow
@@ -231,6 +238,7 @@ function ContractMark($r) { Join-Path (Prefix $r) ".contract-$($r.name)" }
 function DependencyContract($r) {
     $value = Contract
     if ($r.name -eq 'lz4') { $value += "`nlz4-windows-decoder-v1: /clang:-fno-vectorize" }
+    if ($r.name -eq 'zstd') { $value += "`nzstd-windows-decoder-v1: /clang:-fno-vectorize" }
     if ($r.name -eq 'postgresql') { $value += "`npostgresql-windows-int128-struct-align-v1" }
     $value
 }
@@ -344,9 +352,13 @@ function rights {
 # downloaded, its hash printed, and not used until that hash is written into the manifest. The builds run in the
 # developer shell under the floating-point contract (toolchain\laplace.cmake; toolchain\meson-native.py), laplace-math
 # first, and PostGIS last under MSYS2 (toolchain\windows\postgis.sh).
-function deps {
+function deps([string[]]$Names, [switch]$SkipRuntimeClosure) {
     Part 'dependencies'
     $rows = @(Manifest)
+    if ($Names.Count) {
+        $rows = @($rows | Where-Object name -In $Names)
+        foreach ($name in $Names) { if ($name -notin $rows.name) { throw "Unknown dependency: $name" } }
+    }
     foreach ($r in $rows) {
         $what = "$($r.name) $($r.version)"
         if ($r.kind -eq 'source') {
@@ -434,6 +446,7 @@ function deps {
     $mathMark = Join-Path (Split-Path $Math) '.contract'
     if ((Test-Path $Math) -and (Test-Path $mathMark) -and (Get-Content $mathMark -Raw) -eq (Contract)) { Say 'laplace-math' $Math }
     else {
+        if ($Names.Count) { throw 'The declared math contract must be installed by setup.ps1 deps before targeted codec repair.' }
         if (Test-Path $Math) { Say 'laplace-math' $(if (Test-Path $mathMark) { 'the contract changed since it was built: built again' } else { 'built before the contract was recorded: built again' }) }
         if (-not (DevShell)) { Say 'laplace-math' "NOT BUILT: no icx; the developer shell $DevShell is missing or does not provide it"; $failed.Add('deps: no icx'); return }
         Attempt 'laplace-math' {
@@ -459,6 +472,7 @@ function deps {
         if (Test-Path $proof) {
             if (-not $compiled -or ((Test-Path $mark) -and (Get-Content $mark -Raw) -eq (DependencyContract $r))) {
                 if ($r.name -eq 'lz4') { & "$PSScriptRoot/tests/windows-lz4.ps1" -Library (Join-Path $prefix 'bin/lz4.dll') -BuildDirectory (Join-Path $b 'regression') }
+                if ($r.name -eq 'zstd') { & "$PSScriptRoot/tests/windows-zstd.ps1" -Library (Join-Path $prefix 'bin/zstd.dll') -BuildDirectory (Join-Path $b 'regression') }
                 Say $what "installed at $prefix"; continue
             }
             Say $what $(if (Test-Path $mark) { 'the contract changed since it was built: built again' } else { 'built before the contract was recorded: built again' })
@@ -467,12 +481,12 @@ function deps {
         if (-not (DevShell)) { Say $what "NOT BUILT: no icx; the developer shell $DevShell is missing or does not provide it"; $failed.Add('deps: no icx'); continue }
         $libs = @(DependsPrefixes $r)
         Attempt $what {
-            if (Test-Path $b) { Remove-Item $b -Recurse -Force }
+            if (-not $Names.Count -and (Test-Path $b)) { Remove-Item $b -Recurse -Force }
             New-Item -ItemType Directory -Force $b | Out-Null
             switch ($r.build) {
                 'cmake' {
                     if ($DepSourceDir[$r.name]) { $checkout = Join-Path $checkout $DepSourceDir[$r.name] }
-                    $opts = @('-S', $checkout, '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DLAPLACE_MATH=$Math",
+                    $opts = @('--fresh', '-S', $checkout, '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DLAPLACE_MATH=$Math",
                               "-DCMAKE_INSTALL_PREFIX=$prefix", '-DBUILD_TESTING=OFF', '-DBUILD_SHARED_LIBS=ON')
                     if ($libs.Count) { $opts += "-DCMAKE_PREFIX_PATH=$(($libs -replace '\\', '/') -join ';')" }
                     if ($DepOptions[$r.name]) { $opts += $DepOptions[$r.name] }
@@ -546,12 +560,14 @@ function deps {
             }
             if (-not (Test-Path $proof)) { throw "DID NOT INSTALL: no $proof; the build is $b" }
             if ($r.name -eq 'lz4') { & "$PSScriptRoot/tests/windows-lz4.ps1" -Library (Join-Path $prefix 'bin/lz4.dll') -BuildDirectory (Join-Path $b 'regression') }
+            if ($r.name -eq 'zstd') { & "$PSScriptRoot/tests/windows-zstd.ps1" -Library (Join-Path $prefix 'bin/zstd.dll') -BuildDirectory (Join-Path $b 'regression') }
             if ($compiled) { Set-Content -Path $mark -Value (DependencyContract $r) -NoNewline }
             Say $what "built and installed at $prefix"
         }
     }
-    Attempt 'Tree-sitter grammar generator' { & "$PSScriptRoot/installation/build-tree-sitter.ps1" }
-    Attempt 'runtime closure' { RuntimeClosure }
+    if ($Names.Count -and $failed.Count) { throw ($failed -join '; ') }
+    if (-not $Names.Count) { Attempt 'Tree-sitter grammar generator' { & "$PSScriptRoot/installation/build-tree-sitter.ps1" } }
+    if (-not $SkipRuntimeClosure) { Attempt 'runtime closure' { RuntimeClosure } }
 }
 # What PostgreSQL loads, beside it. Its service runs as NetworkService and reads no person's PATH (Operations#2), and
 # the libraries it was built against are each under a prefix of their own (ICU, zlib, lz4, zstd, OpenSSL, libxml2;
@@ -575,18 +591,20 @@ function RuntimeClosure {
             $name = $line.Trim(); if ($name -notmatch '^[\w.+-]+\.dll$') { continue }
             $key = $name.ToLowerInvariant()
             if ($have[$key]) {
-                # Existing LZ4 copies previously survived every dependency rebuild.
-                if ($key -eq 'lz4.dll') {
+                # Existing codec copies must not survive a corrected dependency rebuild.
+                if ($key -in 'lz4.dll', 'zstd.dll') {
+                    $codec = [IO.Path]::GetFileNameWithoutExtension($key)
                     $expected = $from | ForEach-Object { Join-Path $_ $name } | Where-Object { Test-Path $_ } | Select-Object -First 1
                     $installed = Join-Path $PgBin $name
                     if ($expected -and (Get-FileHash -LiteralPath $expected).Hash -ne (Get-FileHash -LiteralPath $installed).Hash) {
-                        WithServerStopped 'LZ4 runtime refresh' {
-                            $backup = Join-Path $logDir ('lz4-before-'+[guid]::NewGuid().ToString('N')+'.dll')
+                        & "$PSScriptRoot/tests/windows-$codec.ps1" -Library $expected -BuildDirectory (Join-Path $Build "deps/$codec/regression")
+                        WithServerStopped "$codec runtime refresh" {
+                            $backup = Join-Path $logDir ("$codec-before-"+[guid]::NewGuid().ToString('N')+'.dll')
                             Copy-Item -LiteralPath $installed -Destination $backup
                             try {
                                 Copy-Item -LiteralPath $expected -Destination $installed -Force
-                                if ((Get-FileHash -LiteralPath $expected).Hash -ne (Get-FileHash -LiteralPath $installed).Hash) { throw 'Installed LZ4 hash differs after runtime refresh' }
-                                & "$PSScriptRoot/tests/windows-lz4.ps1" -Library $installed -BuildDirectory (Join-Path $Build 'deps/lz4/regression')
+                                if ((Get-FileHash -LiteralPath $expected).Hash -ne (Get-FileHash -LiteralPath $installed).Hash) { throw "Installed $codec hash differs after runtime refresh" }
+                                & "$PSScriptRoot/tests/windows-$codec.ps1" -Library $installed -BuildDirectory (Join-Path $Build "deps/$codec/regression")
                             } catch { Copy-Item -LiteralPath $backup -Destination $installed -Force; throw }
                         }
                     }
@@ -601,6 +619,108 @@ function RuntimeClosure {
     $v = & (Join-Path $PgBin 'postgres.exe') --version 2>&1
     if ($LASTEXITCODE) { throw "postgres.exe does not start from its own directory (exit $LASTEXITCODE): a library it loads is in none of the manifest's prefixes" }
     Say 'runtime closure' "$(if ($copied.Count) { "copied $($copied.Count) beside postgres.exe: $($copied -join ' ')" } else { 'complete' }); $v"
+}
+function Get-PgRepairPlan {
+    $service = Get-Service -Name $PgService -ErrorAction Stop
+    $registration = Get-ItemProperty -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Services\$PgService"
+    $command = '"{0}" runservice -N "{1}" -D "{2}" -w' -f (Join-Path $PgBin 'pg_ctl.exe'), $PgService, $PgData
+    $match = [regex]::Match($registration.ImagePath, '^'+[regex]::Escape($command)+'(?: -t (?<seconds>\d+))?$', 'IgnoreCase')
+    if (-not $match.Success -or $registration.ObjectName -ine $PgAccount) {
+        throw 'The PostgreSQL service does not select the declared executable, data directory and service account; no service changed.'
+    }
+    $seconds = if ($match.Groups['seconds'].Success) { [int]$match.Groups['seconds'].Value } else { 60 }
+    [pscustomobject]@{ service=$PgService; account=$registration.ObjectName; status=[string]$service.Status;
+        command=$registration.ImagePath; desired_command=($command+' -t '+[Math]::Max(1200,$seconds));
+        startup_timeout_seconds=$seconds; change_required=($seconds -lt 1200); data=$PgData; prefix=$PgDir }
+}
+function Set-PgServiceStartupTimeout($Plan) {
+    if (-not $Plan.change_required) { return }
+    # pg_ctl's default 60-second wait can exit while crash recovery continues.
+    # SCM then reports Stopped although the surviving postmaster accepts connections.
+    Exec sc.exe @('config', $PgService, 'binPath=', $Plan.desired_command)
+    if ((Get-PgRepairPlan).change_required) { throw 'PostgreSQL service startup timeout did not converge.' }
+}
+function Confirm-PgRecovery([string]$ExpectedCluster) {
+    $row = ((TunePsql "SELECT system_identifier, pg_is_in_recovery(), current_setting('data_directory'), current_user, coalesce(system_user,'') FROM pg_control_system()") -join '').Trim()
+    $values = $row -split '\|'
+    if ($values.Count -ne 5 -or $values[0] -ne $ExpectedCluster -or $values[1] -ne 'f' -or
+        [IO.Path]::GetFullPath($values[2]).TrimEnd('\','/') -ine [IO.Path]::GetFullPath($PgData).TrimEnd('\','/')) {
+        throw 'Authenticated readback did not verify the original cluster, data directory and completed recovery.'
+    }
+    [pscustomobject]@{cluster=$values[0];in_recovery=$false;data=$values[2];role=$values[3];authenticated_identity=$values[4]}
+}
+function Stop-UnmanagedPostgres([string]$ExpectedCluster) {
+    if ((Get-Service -Name $PgService).Status -ne 'Stopped') { return }
+    $pidFile = Join-Path $PgData 'postmaster.pid'
+    if (-not (Test-Path -LiteralPath $pidFile)) { return }
+    $lines = @(Get-Content -LiteralPath $pidFile)
+    $server = Get-Process -Id ([int]$lines[0]) -ErrorAction SilentlyContinue
+    if (-not $server) { return } # PostgreSQL itself checks stale PID files at startup.
+    if ($lines.Count -lt 2 -or $server.ProcessName -ne 'postgres' -or
+        [IO.Path]::GetFullPath($lines[1]).TrimEnd('\','/') -ine [IO.Path]::GetFullPath($PgData).TrimEnd('\','/')) {
+        throw 'The stopped service has an unverified live PID file; no process stopped.'
+    }
+    if (TuneIngesting) { throw 'An ingest owns the database; no PostgreSQL process stopped.' }
+    if (PgReady) { $null = Confirm-PgRecovery $ExpectedCluster }
+    else {
+        $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($server.Id)"
+        if (-not $process.ExecutablePath -or [IO.Path]::GetFullPath($process.ExecutablePath) -ine (Join-Path $PgBin 'postgres.exe')) {
+            throw 'The recovering postmaster executable cannot be verified; no process stopped.'
+        }
+    }
+    Say 'PostgreSQL repair' 'cleanly stopping the verified postmaster left by the failed service wrapper'
+    Exec (Join-Path $PgBin 'pg_ctl.exe') @('-D',$PgData,'-m','fast','-w','-t','1200','stop')
+    if (Test-Path -LiteralPath $pidFile) { throw 'The unmanaged postmaster did not stop cleanly; no replacement server started.' }
+}
+function Get-PgClusterIdentity {
+    $control = @(& (Join-Path $PgBin 'pg_controldata.exe') $PgData 2>&1)
+    if ($LASTEXITCODE) { throw "Cannot read the original cluster control file: $($control -join ' ')" }
+    $cluster = (($control | Select-String '^Database system identifier:\s+(\d+)$').Matches.Groups[1].Value)
+    if (-not $cluster) { throw 'Cannot identify the original PostgreSQL cluster.' }
+    $cluster
+}
+function repair-postgres {
+    Part 'PostgreSQL runtime repair'
+    $plan = Get-PgRepairPlan
+    $cluster = Get-PgClusterIdentity
+    if ($ReadOnlyPgRepair) {
+        [ordered]@{mode='read-only';cluster=$cluster;service=$plan;codecs=@('lz4','zstd');
+            actions=@('converge service timeout','build and verify declared codec DLLs',
+                'stop a verified unmanaged postmaster if present','refresh runtime with binary backups',
+                'start service','verify authenticated original-cluster recovery')} | ConvertTo-Json -Depth 6
+        return
+    }
+    $receiptPath = Join-Path $logDir ('postgres-repair-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')+'.json')
+    $receipt = [ordered]@{host=$env:COMPUTERNAME;cluster=$cluster;service=$PgService;data=$PgData;
+        started_utc=[DateTime]::UtcNow.ToString('o');status='started';stage='service-configuration';completed=$false}
+    function Save-PgRepair { $receipt | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptPath }
+    Save-PgRepair
+    try {
+        # Configure first: an access refusal must not stop a database that recovered.
+        Set-PgServiceStartupTimeout $plan
+        $receipt.stage='repair-codecs'; Save-PgRepair
+        deps -Names @('lz4','zstd') -SkipRuntimeClosure
+        if ($failed.Count) { throw ($failed -join '; ') }
+        $receipt.stage='activate-runtime'; Save-PgRepair
+        Stop-UnmanagedPostgres $cluster
+        RuntimeClosure
+        $receipt.stage='start-and-verify'; Save-PgRepair
+        if ((Get-Service -Name $PgService).Status -eq 'Stopped') { Start-Service -Name $PgService }
+        $deadline = [DateTime]::UtcNow.AddSeconds(1200)
+        while ((Get-Service -Name $PgService).Status -ne 'Stopped' -and -not (PgReady) -and [DateTime]::UtcNow -lt $deadline) {
+            Start-Sleep -Seconds 2
+        }
+        if ((Get-Service -Name $PgService).Status -ne 'Running' -or -not (PgReady)) {
+            throw "PostgreSQL service did not become running and ready; see $PgLogs. Corrected codec binaries remain installed."
+        }
+        $receipt.readback = Confirm-PgRecovery $cluster
+        $receipt.codecs = @(foreach ($codec in 'lz4','zstd') {
+            $library = Join-Path $PgBin "${codec}.dll"
+            [ordered]@{name=$codec;path=$library;sha256=(Get-FileHash -LiteralPath $library).Hash}
+        })
+        $receipt.status='passed'; $receipt.completed=$true; $receipt.stage='verified'
+    } catch { $receipt.status='failed'; $receipt.error=$_.Exception.Message; throw }
+    finally { Save-PgRepair; Say 'PostgreSQL repair' "$($receipt.status); receipt: $receiptPath" }
 }
 # The cluster: made once (Sequence 8: UTF-8, the C.UTF-8 locale, data checksums, the log where LAPLACE_PGWAL says),
 # run as the Windows service, its account over its directories; then the certificate, before ssl = on is declared (a
@@ -637,13 +757,14 @@ function cluster {
             }
             # pg_ctl registers the service as LocalSystem unless -U names the account (pg_ctl.c: register_username NULL);
             # a built-in account takes no password
-            $out = & "$PgBin\pg_ctl.exe" register -N $PgService -U $PgAccount -D $PgData -S auto -w 2>&1
+            $out = & "$PgBin\pg_ctl.exe" register -N $PgService -U $PgAccount -D $PgData -S auto -w -t 1200 2>&1
             if ($LASTEXITCODE) { throw "pg_ctl register: $($out -join ' ')" }
             Say "service $PgService" "registered: automatic start, as $PgAccount"
         }
         $svc = Get-Service -Name $PgService -ErrorAction SilentlyContinue
     } else { Say "service $PgService" "$($svc.Status), start $($svc.StartType)" }
     if (-not $svc) { return }
+    Set-PgServiceStartupTimeout (Get-PgRepairPlan)
     if ($svc.Status -ne 'Running') { Attempt "service $PgService start" { Start-Service -Name $PgService; Say "service $PgService" 'started' } }
     # after an unclean stop the server replays its log before it listens
     if (-not (PgWaitReady 120)) { Say 'cluster' 'FAILED: not accepting connections after two hours; see the log'; $failed.Add('cluster: not ready'); return }
@@ -986,7 +1107,7 @@ function backup {
     }
 }
 
-$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'postgres', 'cluster', 'settings', 'access', 'report', 'network', 'shares', 'services', 'firewall', 'backup', 'status'
+$known = 'all', 'drop', 'volumes', 'packages', 'rights', 'deps', 'postgres', 'repair-postgres', 'cluster', 'settings', 'access', 'report', 'network', 'shares', 'services', 'firewall', 'backup', 'status'
 foreach ($p in $Parts) { if ($known -notcontains $p) { "setup.ps1 [drop] [$(($known | Select-Object -Skip 1) -join '|') ...]"; Stop-Transcript | Out-Null; exit 2 } }
 # status: the desktop's own parts named with it (all three, when none is) report and change nothing
 $Status = $Parts -contains 'status'
@@ -1000,6 +1121,7 @@ try { foreach ($p in $Parts) { if ($p -eq 'all') { Install-LaplaceOpsCommand; vo
 catch { "=== $($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"; $failed.Add("setup.ps1 stopped: $($_.Exception.Message)") }
 ''
 if ($failed.Count) { '=== failed'; $failed | ForEach-Object { "  $_" } }
+if ($ReadOnlyPgRepair) { if ($failed.Count) { exit 1 }; return }
 "=== done   {0:HH:mm:ss}   $log" -f (Get-Date).ToUniversalTime()
 Stop-Transcript | Out-Null
 if ($failed.Count) { exit 1 }

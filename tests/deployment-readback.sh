@@ -18,7 +18,7 @@ LAPLACE_CONNINFO='dbname=fixture'
 LAPLACE_TIER0=$FIXTURE/tier0
 LAPLACE_HIGHWAY=$FIXTURE/highway
 ENV
-for f in tier0 highway highway.layout highway.keys; do printf 'artifact\n' > "$fixture/$f"; done
+for f in tier0 tier0.flags tier0.flags.layout highway; do printf 'artifact\n' > "$fixture/$f"; done
 cat > "$fixture/bin/laplace" <<'STUB'
 #!/bin/sh
 case "$*" in
