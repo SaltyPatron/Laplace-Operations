@@ -26,6 +26,9 @@ jobs:
       - name: Verify acceptance result failure boundaries
         shell: pwsh
         run: pwsh -NoProfile -File tests/acceptance-runner.ps1
+      - name: Verify PostgreSQL installer service and recovery boundaries
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/postgres-service-repair.ps1
       - name: Verify Zstd synthetic codec regression
         shell: pwsh
         run: |

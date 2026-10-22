@@ -24,6 +24,25 @@ closure verifies replacement codec DLLs before stopping a running service,
 backs up the installed copy, refreshes the PostgreSQL-adjacent DLL and
 checks it again. Copy or regression failure restores the old binary.
 
+Use `laplace-ops repair-postgres` (or `pwsh -File setup.ps1 repair-postgres`)
+to apply the repair through the maintained installer. `-Plan` on the CLI
+or `-Check` on setup inspects the selected service without changing it.
+The repair rebuilds only the declared LZ4/Zstd dependencies, verifies the
+replacement DLLs and refreshes PostgreSQL's runtime with backups. It sets
+the service's startup wait to at least 1200 seconds: the default 60 seconds
+expired during this cluster's successful WAL recovery and left a ready
+postmaster behind a stopped Windows service. A surviving postmaster is
+verified and stopped cleanly before the service takes ownership again.
+The first service-command correction requires Windows service configuration
+rights; that check happens before stopping a recovered database. Host setup
+also registers new PostgreSQL services with the corrected wait.
+
+The repair completes only when the service is Running, PostgreSQL accepts
+connections and an authenticated read verifies the original system identifier,
+data directory and completed recovery. It saves a repair receipt and the
+installed codec hashes. A startup failure preserves the corrected binaries.
+It does not reset WAL, recreate databases or use OpenBao to start PostgreSQL.
+
 Run `tests/windows-zstd.ps1 -Library <absolute-dll-path>` for an explicit
 library, or the named `zstd-windows-roundtrip` acceptance check for the
 declared PostgreSQL runtime. PostgreSQL startup and completed WAL replay
