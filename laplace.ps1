@@ -25,6 +25,7 @@ param(
     [switch]$Yes,
     [switch]$Wait,
     [switch]$Plan,
+    [switch]$Json,
     [Alias('h')][switch]$Help,
     [Parameter(ValueFromRemainingArguments)][string[]]$RemainingArgs = @()
 )
@@ -102,7 +103,7 @@ LOCAL DESKTOP ONE-TIME SETUP & MODULAR CLI
   laplace-ops components desktop      Package Laplace-Native + Laplace-Engine and install the 'laplace' CLI
 
 INGESTION AND DATA (Laplace-Engine: the laplace program, recipes/order, the data sets of data.tsv)
-  laplace-ops sources                 Each source, where it is found on this machine, and its recipes (laplace sources)
+  laplace-ops sources [-Json]         Complete installed recipe catalog: source aliases, content, prerequisites and decomposers
   laplace-ops ingest [SOURCE...]      Ingest every source in recipes/order, or the sources named (ingest.ps1)
   laplace-ops ingest staging [SOURCE...] [-Wait]
                                       The same on hart-server: dispatches Laplace-Operations ingest.yml
@@ -214,7 +215,24 @@ if ($Operation -in @('ingest','seed','sources','data')) {
                         & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1"; exit $LASTEXITCODE }
             'sources' { $laplace = Join-Path $env:LAPLACE_BUILD 'Laplace-Engine\icx-release\laplace.exe'
                         if (-not (Test-Path $laplace)) { throw "no laplace program at $laplace`: deploy.ps1 builds it" }
-                        & $laplace sources; exit $LASTEXITCODE }
+                        $raw = & $laplace ingest --catalog
+                        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+                        if ($Json) { $raw; exit 0 }
+                        $catalog = ($raw -join "`n") | ConvertFrom-Json
+                        foreach ($source in $catalog.sources) {
+                            $command = if ($source.aliases.Count) { $source.aliases[0] } else { $source.name }
+                            "${command}: $($source.name)"
+                            if ($source.aliases.Count) { "  aliases: $($source.aliases -join ', ')" }
+                            "  witness: $($source.witness)"
+                            "  content: $(($source.files + $source.roots) -join '; ')"
+                            "  decomposers: $(($source.recipes | ForEach-Object { "$($_.name) [$($_.grammar)]" }) -join ', ')"
+                            if ($source.reads.Count) { "  formats: $($source.reads -join ', ')" }
+                            if ($source.after.Count) { "  after: $($source.after -join ', ')" }
+                            if ($source.held) { "  held: $($source.held)" }
+                        }
+                        'File decomposers:'
+                        foreach ($format in $catalog.formats) { "  $($format.name) [$($format.grammar)]: $($format.match -join ' ')" }
+                        exit 0 }
             'data'    { $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
                         if (-not (Test-Path $bash)) { throw "data.sh needs bash: no Git Bash at $bash" }
                         & $bash -c 'python3 -c 1' 2>$null
