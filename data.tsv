@@ -119,6 +119,8 @@ Safety/SocialChemistry101	held	https://storage.googleapis.com/ai2-mosaic-public/
 # directory, WSD_Evaluation_Framework/, is what the recipe reads under the set (its source: root $LAPLACE_DATA/WSD).
 # Fetched as every other publisher's archive is (Laplace#1879): kept under the set's .archive and opened into it.
 WSD	archive	http://lcl.uniroma1.it/wsdeval/data/WSD_Evaluation_Framework.zip	.
+# Brown's NLTK tagged distribution opens into Brown/brown, as the source declares.
+Brown	archive	https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/brown.zip	.
 # Games/Chess: chess.com player archives (the chess.com published-data API), The Week in Chess issues and LumbrasGigaBase, each
 # PGN opened beside its .zip/.7z (Laplace-Engine recipes chess-com, twic, lumbras-gigabase)
 Games/Chess	held	https://api.chess.com/pub/player/	*.pgn

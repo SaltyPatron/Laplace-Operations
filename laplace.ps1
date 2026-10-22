@@ -225,7 +225,7 @@ if ($Operation -in @('ingest','seed','sources','data')) {
                             if ($source.aliases.Count) { "  aliases: $($source.aliases -join ', ')" }
                             "  witness: $($source.witness)"
                             "  content: $(($source.files + $source.roots) -join '; ')"
-                            "  decomposers: $(($source.recipes | ForEach-Object { "$($_.name) [$($_.grammar)]" }) -join ', ')"
+                            foreach ($recipe in $source.recipes) { "  $($recipe.name) [$($recipe.grammar)]: $($recipe.match -join ' ')" }
                             if ($source.reads.Count) { "  formats: $($source.reads -join ', ')" }
                             if ($source.after.Count) { "  after: $($source.after -join ', ')" }
                             if ($source.held) { "  held: $($source.held)" }
