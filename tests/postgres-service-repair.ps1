@@ -11,8 +11,10 @@ foreach ($name in 'Get-PgRepairPlan','Set-PgServiceStartupTimeout','Confirm-PgRe
     . ([scriptblock]::Create($definition.Extent.Text))
 }
 $PgService='laplace-postgres'; $PgAccount='NT AUTHORITY\NetworkService'
-$PgDir='E:\fixture\postgres'; $PgBin=Join-Path $PgDir 'bin'; $PgData='E:\fixture\data'
-$base='"E:\fixture\postgres\bin\pg_ctl.exe" runservice -N "laplace-postgres" -D "E:\fixture\data" -w'
+$fixture=Join-Path ([IO.Path]::GetTempPath()) 'laplace-pg-fixture'
+$PgDir=Join-Path $fixture 'postgres'; $PgBin=Join-Path $PgDir 'bin'; $PgData=Join-Path $fixture 'data'
+$otherData=Join-Path $fixture 'other-data'
+$base='"{0}\pg_ctl.exe" runservice -N "laplace-postgres" -D "{1}" -w' -f $PgBin,$PgData
 $script:registration=[pscustomobject]@{ImagePath=$base;ObjectName=$PgAccount}
 $script:calls=0
 function Get-Service { param($Name) [pscustomobject]@{Status='Stopped'} }
@@ -34,18 +36,18 @@ Set-PgServiceStartupTimeout (Get-PgRepairPlan)
 Assert ($script:calls -eq 1) 'Repeated repair changed an already corrected service'
 $script:registration.ImagePath=$base+' -t 2400'
 Assert (-not (Get-PgRepairPlan).change_required) 'Longer operator-declared wait was rejected'
-$script:registration.ImagePath=$base.Replace('E:\fixture\data','E:\other\data')
+$script:registration.ImagePath=$base.Replace($PgData,$otherData)
 Refuses { Get-PgRepairPlan } 'Another cluster was accepted'
 $script:registration.ImagePath=$base; $script:registration.ObjectName='LocalSystem'
 Refuses { Get-PgRepairPlan } 'Another service account was accepted'
 Assert ($script:calls -eq 1) 'Rejected service selection performed a mutation'
-$script:row='12345|f|E:\fixture\data|ahart|sspi:fixture-owner'
+$script:row="12345|f|$PgData|ahart|sspi:fixture-owner"
 function TunePsql { param($Sql) $script:row }
 Assert ((Confirm-PgRecovery '12345').cluster -eq '12345') 'Original cluster recovery was rejected'
 Refuses { Confirm-PgRecovery '99999' } 'Different cluster passed authenticated readback'
-$script:row='12345|t|E:\fixture\data|ahart|sspi:fixture-owner'
+$script:row="12345|t|$PgData|ahart|sspi:fixture-owner"
 Refuses { Confirm-PgRecovery '12345' } 'Incomplete recovery was accepted'
-$script:row='12345|f|E:\other\data|ahart|sspi:fixture-owner'
+$script:row="12345|f|$otherData|ahart|sspi:fixture-owner"
 Refuses { Confirm-PgRecovery '12345' } 'Different storage passed authenticated readback'
 function TunePsql { throw 'Authentication failed' }
 Refuses { Confirm-PgRecovery '12345' } 'Authentication refusal was accepted as recovery'
