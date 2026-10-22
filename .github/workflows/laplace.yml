@@ -71,8 +71,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
         run: python3 .github/scripts/resolve-dependencies.py
-  deploy:
+  qualify-engine:
     needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Require the selected Engine revision to build and pass its tests
+        env:
+          GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
+          ENGINE_SHA: ${{ needs.resolve.outputs.engine }}
+        run: python3 .github/scripts/resolve-dependencies.py qualify-engine "$ENGINE_SHA"
+  deploy:
+    needs: [resolve, qualify-engine]
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 240
     outputs:

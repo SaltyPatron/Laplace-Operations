@@ -69,5 +69,62 @@ class NativeInputs(unittest.TestCase):
             resolver.verified_native_run('owner', 'a' * 40, self.request(revision='b' * 40))
 
 
+class EngineQualification(unittest.TestCase):
+    def setUp(self):
+        self.mutations = []
+        self.run = {'id': 9, 'head_sha': 'a' * 40, 'head_branch': 'main',
+                    'path': '.github/workflows/laplace.yml', 'event': 'push',
+                    'status': 'in_progress', 'html_url': 'https://github.com/owner/Laplace-Engine/actions/runs/9'}
+
+    def qualify(self, state='active', conclusion='success', runs=None, main='a' * 40):
+        calls = []
+        def request(path):
+            calls.append(path)
+            if path.endswith('/actions/workflows/laplace.yml'):
+                return {'state': state}
+            if '/actions/runs?' in path:
+                return {'workflow_runs': [self.run] if runs is None else runs(calls)}
+            if '/jobs?' in path:
+                return {'jobs': [{'name': 'engine', 'status': 'completed' if conclusion else 'in_progress',
+                                  'conclusion': conclusion}]}
+            if path.endswith('/commits/main'):
+                return {'sha': main}
+            self.fail('Unexpected endpoint: ' + path)
+        return resolver.qualify_engine('owner', 'a' * 40, request,
+            lambda path, method, body: self.mutations.append((path, method, body)),
+            sleep=lambda _: None, attempts=2)
+
+    def test_successful_engine_job_qualifies_while_optional_jobs_finish(self):
+        self.assertEqual(self.qualify(), 9)
+        self.assertEqual(self.mutations, [])
+
+    def test_disabled_required_workflow_is_enabled_and_missing_run_dispatched(self):
+        def runs(_):
+            return [self.run] if len(self.mutations) == 2 else []
+        self.assertEqual(self.qualify(state='disabled_manually', runs=runs), 9)
+        self.assertEqual(self.mutations, [
+            ('/repos/owner/Laplace-Engine/actions/workflows/laplace.yml/enable', 'PUT', None),
+            ('/repos/owner/Laplace-Engine/actions/workflows/laplace.yml/dispatches', 'POST', {'ref': 'main'})])
+
+    def test_failed_or_skipped_engine_is_rejected(self):
+        for conclusion in ('failure', 'skipped', 'cancelled', 'timed_out'):
+            with self.subTest(conclusion=conclusion), self.assertRaisesRegex(ValueError, 'qualification failed'):
+                self.qualify(conclusion=conclusion)
+
+    def test_invalid_workflow_run_without_jobs_is_rejected(self):
+        self.run['status'] = 'completed'
+        with self.assertRaisesRegex(ValueError, 'qualification failed'):
+            self.qualify(conclusion=None)
+
+    def test_other_revision_cannot_qualify_selected_revision(self):
+        self.run['head_sha'] = 'b' * 40
+        with self.assertRaisesRegex(ValueError, 'no longer main'):
+            self.qualify(main='b' * 40)
+
+    def test_queued_engine_cannot_qualify_release(self):
+        with self.assertRaises(TimeoutError):
+            self.qualify(conclusion=None)
+
+
 if __name__ == '__main__':
     unittest.main()
