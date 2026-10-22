@@ -56,6 +56,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       native: ${{ steps.refs.outputs.native }}
+      native_run: ${{ steps.refs.outputs.native_run }}
       postgres: ${{ steps.refs.outputs.postgres }}
       engine: ${{ steps.refs.outputs.engine }}
       mcp: ${{ steps.refs.outputs.mcp }}
@@ -63,6 +64,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - name: Verify immutable revision and prepared input selection
+        run: python3 tests/dependency-revisions.py
       - name: Resolve immutable dependency revisions
         id: refs
         env:
@@ -75,6 +78,7 @@ jobs:
     outputs:
       ingest: ${{ steps.policy.outputs.ingest }}
       native: ${{ steps.revisions.outputs.native }}
+      native_run: ${{ needs.resolve.outputs.native_run }}
       postgres: ${{ steps.revisions.outputs.postgres }}
       engine: ${{ steps.revisions.outputs.engine }}
     steps:
@@ -119,9 +123,22 @@ jobs:
             echo "- triggered by: $TRIGGER_EVENT $TRIGGER_REPOSITORY $TRIGGER_SHA"
             echo "- reseed policy (LAPLACE_RESEED=$LAPLACE_RESEED): drop $drop, ingest $ingest: $why"; echo
             echo '```'; ./Laplace-Operations/seed-stamp.sh show; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Receive the canonical caches verified for the selected Native revision
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          repository: SaltyPatron/Laplace-Native
+          run-id: ${{ needs.resolve.outputs.native_run }}
+          github-token: ${{ secrets.LAPLACE_CHECKOUT }}
+          name: native-prepared-inputs
+          path: ${{ runner.temp }}/native-prepared-inputs
+      - name: Provide the pinned Rust compiler for recipe grammar generation
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: 1.90.0
       - name: build/install prepared artifacts and deploy database infrastructure
         env:
           DROP: ${{ steps.policy.outputs.drop }}
+          LAPLACE_PREPARED_INPUTS: ${{ runner.temp }}/native-prepared-inputs
         run: |
           if [ "$DROP" = true ]; then ./Laplace-Operations/deploy.sh drop; else ./Laplace-Operations/deploy.sh; fi
       - name: a database dropped for a reseed carries the stamp it is being seeded to
@@ -193,7 +210,21 @@ jobs:
         with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-postgres", ref: "${{ needs.deploy.outputs.postgres }}", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-Engine", ref: "${{ needs.deploy.outputs.engine }}", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}" }
+      - name: Receive the canonical caches verified for the selected Native revision
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          repository: SaltyPatron/Laplace-Native
+          run-id: ${{ needs.deploy.outputs.native_run }}
+          github-token: ${{ secrets.LAPLACE_CHECKOUT }}
+          name: native-prepared-inputs
+          path: ${{ runner.temp }}/native-prepared-inputs
+      - name: Provide the pinned Rust compiler for recipe grammar generation
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: 1.90.0
       - name: build/install prepared artifacts and deploy database infrastructure
+        env:
+          LAPLACE_PREPARED_INPUTS: ${{ runner.temp }}/native-prepared-inputs
         run: |
           { echo "## hart-cloud: the deployment"; echo; echo "- $(lscpu | sed -n 's/^Model name: *//p')"
             echo '- `'"$(grep -o -wE 'avx2|avx_vnni|avx512f|avx512_vnni|avx512_bf16|amx_tile' /proc/cpuinfo | sort -u | tr '\n' ' ')"'`'; echo; } >> "$GITHUB_STEP_SUMMARY"

@@ -34,6 +34,25 @@ def resolve(owner, event_name, event, request):
     return revisions
 
 
+def verified_native_run(owner, revision, request):
+    repository = f'/repos/{owner}/Laplace-Native'
+    runs = request(repository + f'/actions/runs?head_sha={revision}&per_page=100')['workflow_runs']
+    required = {'native (icx-release)', 'native (gcc-release)', 'isa'}
+    for run in runs:
+        if (run.get('head_sha') != revision or run.get('head_branch') != 'main'
+                or run.get('path') != '.github/workflows/laplace.yml'
+                or run.get('event') not in ('push', 'workflow_dispatch')):
+            continue
+        jobs = request(repository + f'/actions/runs/{run["id"]}/jobs?per_page=100')['jobs']
+        passed = {job['name'] for job in jobs if job.get('conclusion') == 'success'}
+        if not required.issubset(passed):
+            continue
+        artifacts = request(repository + f'/actions/runs/{run["id"]}/artifacts?per_page=100')['artifacts']
+        if any(a['name'] == 'native-prepared-inputs' and not a.get('expired', True) for a in artifacts):
+            return run['id']
+    raise ValueError('No verified Native cache artifact for revision ' + revision)
+
+
 def main():
     token = os.environ['GH_TOKEN']
     def request(path):
@@ -44,6 +63,7 @@ def main():
             return json.load(response)
     revisions = resolve(os.environ['GITHUB_REPOSITORY_OWNER'], os.environ['GITHUB_EVENT_NAME'],
         json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text()), request)
+    revisions['native_run'] = verified_native_run(os.environ['GITHUB_REPOSITORY_OWNER'], revisions['native'], request)
     with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
         for key, sha in revisions.items():
             output.write(f'{key}={sha}\n')
