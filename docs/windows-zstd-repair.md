@@ -29,6 +29,10 @@ to apply the repair through the maintained installer. `-Plan` on the CLI
 or `-Check` on setup inspects the selected service without changing it.
 The repair rebuilds only the declared LZ4/Zstd dependencies, verifies the
 replacement DLLs and refreshes PostgreSQL's runtime with backups. It sets
+up a fresh CMake configuration in the existing declared dependency build tree,
+discarding cached paths to removed checkouts. Codec builds and verification
+finish before stopping a recovered database; a build failure leaves it running.
+The service repair sets
 the service's startup wait to at least 1200 seconds: the default 60 seconds
 expired during this cluster's successful WAL recovery and left a ready
 postmaster behind a stopped Windows service. A surviving postmaster is

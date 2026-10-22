@@ -44,7 +44,12 @@ foreach ($definition in $definitions) {
     $previousLibdir = $env:TREE_SITTER_LIBDIR
     try {
         $env:TREE_SITTER_LIBDIR = Join-Path $BuildDirectory 'cache'
-        & $generator generate $definition.FullName --output (Join-Path $generated 'src') --abi 15 --js-runtime native *> $log
+        # QuickJS treats a Windows absolute path as a module specifier, not a file.
+        # Resolve imports from the package and pass a relative grammar path.
+        $relative = [IO.Path]::GetRelativePath($package.FullName, $definition.FullName).Replace('\','/')
+        Push-Location $package.FullName
+        try { & $generator generate $relative --output (Join-Path $generated 'src') --abi 15 --js-runtime native *> $log }
+        finally { Pop-Location }
     } finally { $env:TREE_SITTER_LIBDIR = $previousLibdir }
     if ($LASTEXITCODE) { throw "Grammar generation failed: $log" }
     $parser = Get-Item -LiteralPath (Join-Path $generated 'src/parser.c')

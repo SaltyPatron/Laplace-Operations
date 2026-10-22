@@ -6,12 +6,14 @@ if ($begin -lt 0 -or $end -le $begin) { throw 'preflight boundary missing' }
 $preflight=[scriptblock]::Create($source.Substring($begin,$end-$begin))
 if (-not $env:TMPDIR) { throw "set TMPDIR to build scratch storage" }
 $root=Join-Path $env:TMPDIR ([guid]::NewGuid().ToString())
+$root=[IO.Path]::GetFullPath($root)
+if (-not $root.StartsWith([IO.Path]::GetFullPath($env:TMPDIR).TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Scratch path escaped TMPDIR' }
 New-Item -ItemType Directory $root | Out-Null
 try {
     $env:LAPLACE_TIER0=Join-Path $root tier0.bin
     $env:LAPLACE_HIGHWAY=Join-Path $root tier0.highway
     $env:LAPLACE_FLAGS=''
-    $files=@($env:LAPLACE_TIER0,(Join-Path $root tier0.flags),$env:LAPLACE_HIGHWAY,"$env:LAPLACE_HIGHWAY.layout","$env:LAPLACE_HIGHWAY.keys")
+    $files=@($env:LAPLACE_TIER0,(Join-Path $root tier0.flags),(Join-Path $root tier0.flags.layout),$env:LAPLACE_HIGHWAY)
     foreach ($f in $files) { Set-Content -LiteralPath $f -Value prepared }
     & $preflight
     foreach ($f in $files) {

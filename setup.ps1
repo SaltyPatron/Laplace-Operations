@@ -352,7 +352,7 @@ function rights {
 # downloaded, its hash printed, and not used until that hash is written into the manifest. The builds run in the
 # developer shell under the floating-point contract (toolchain\laplace.cmake; toolchain\meson-native.py), laplace-math
 # first, and PostGIS last under MSYS2 (toolchain\windows\postgis.sh).
-function deps([string[]]$Names) {
+function deps([string[]]$Names, [switch]$SkipRuntimeClosure) {
     Part 'dependencies'
     $rows = @(Manifest)
     if ($Names.Count) {
@@ -486,7 +486,7 @@ function deps([string[]]$Names) {
             switch ($r.build) {
                 'cmake' {
                     if ($DepSourceDir[$r.name]) { $checkout = Join-Path $checkout $DepSourceDir[$r.name] }
-                    $opts = @('-S', $checkout, '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DLAPLACE_MATH=$Math",
+                    $opts = @('--fresh', '-S', $checkout, '-B', $b, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_TOOLCHAIN_FILE=$Toolchain", "-DLAPLACE_MATH=$Math",
                               "-DCMAKE_INSTALL_PREFIX=$prefix", '-DBUILD_TESTING=OFF', '-DBUILD_SHARED_LIBS=ON')
                     if ($libs.Count) { $opts += "-DCMAKE_PREFIX_PATH=$(($libs -replace '\\', '/') -join ';')" }
                     if ($DepOptions[$r.name]) { $opts += $DepOptions[$r.name] }
@@ -567,7 +567,7 @@ function deps([string[]]$Names) {
     }
     if ($Names.Count -and $failed.Count) { throw ($failed -join '; ') }
     if (-not $Names.Count) { Attempt 'Tree-sitter grammar generator' { & "$PSScriptRoot/installation/build-tree-sitter.ps1" } }
-    Attempt 'runtime closure' { RuntimeClosure }
+    if (-not $SkipRuntimeClosure) { Attempt 'runtime closure' { RuntimeClosure } }
 }
 # What PostgreSQL loads, beside it. Its service runs as NetworkService and reads no person's PATH (Operations#2), and
 # the libraries it was built against are each under a prefix of their own (ICU, zlib, lz4, zstd, OpenSSL, libxml2;
@@ -672,17 +672,21 @@ function Stop-UnmanagedPostgres([string]$ExpectedCluster) {
     Exec (Join-Path $PgBin 'pg_ctl.exe') @('-D',$PgData,'-m','fast','-w','-t','1200','stop')
     if (Test-Path -LiteralPath $pidFile) { throw 'The unmanaged postmaster did not stop cleanly; no replacement server started.' }
 }
-function repair-postgres {
-    Part 'PostgreSQL runtime repair'
-    $plan = Get-PgRepairPlan
+function Get-PgClusterIdentity {
     $control = @(& (Join-Path $PgBin 'pg_controldata.exe') $PgData 2>&1)
     if ($LASTEXITCODE) { throw "Cannot read the original cluster control file: $($control -join ' ')" }
     $cluster = (($control | Select-String '^Database system identifier:\s+(\d+)$').Matches.Groups[1].Value)
     if (-not $cluster) { throw 'Cannot identify the original PostgreSQL cluster.' }
+    $cluster
+}
+function repair-postgres {
+    Part 'PostgreSQL runtime repair'
+    $plan = Get-PgRepairPlan
+    $cluster = Get-PgClusterIdentity
     if ($ReadOnlyPgRepair) {
         [ordered]@{mode='read-only';cluster=$cluster;service=$plan;codecs=@('lz4','zstd');
-            actions=@('converge service timeout','stop a verified unmanaged postmaster if present',
-                'build and verify declared codec DLLs','refresh runtime with binary backups',
+            actions=@('converge service timeout','build and verify declared codec DLLs',
+                'stop a verified unmanaged postmaster if present','refresh runtime with binary backups',
                 'start service','verify authenticated original-cluster recovery')} | ConvertTo-Json -Depth 6
         return
     }
@@ -694,11 +698,12 @@ function repair-postgres {
     try {
         # Configure first: an access refusal must not stop a database that recovered.
         Set-PgServiceStartupTimeout $plan
-        $receipt.stage='stop-unmanaged-postmaster'; Save-PgRepair
-        Stop-UnmanagedPostgres $cluster
         $receipt.stage='repair-codecs'; Save-PgRepair
-        deps -Names @('lz4','zstd')
+        deps -Names @('lz4','zstd') -SkipRuntimeClosure
         if ($failed.Count) { throw ($failed -join '; ') }
+        $receipt.stage='activate-runtime'; Save-PgRepair
+        Stop-UnmanagedPostgres $cluster
+        RuntimeClosure
         $receipt.stage='start-and-verify'; Save-PgRepair
         if ((Get-Service -Name $PgService).Status -eq 'Stopped') { Start-Service -Name $PgService }
         $deadline = [DateTime]::UtcNow.AddSeconds(1200)

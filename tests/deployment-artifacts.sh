@@ -34,7 +34,7 @@ exit 91
 STUB
 chmod +x "$work/bin/laplace" "$work/bin/psql"
 export FIXTURE="$work" CALL_LOG="$work/calls"
-artifacts=(tier0.bin tier0.flags tier0.highway tier0.highway.layout tier0.highway.keys)
+artifacts=(tier0.bin tier0.flags tier0.flags.layout tier0.highway)
 for artifact in "${artifacts[@]}"; do printf 'prepared\n' > "$work/$artifact"; done
 bash "$work/deploy.sh" as-is > "$work/output" 2>&1
 cat > "$work/expected" <<'EXPECTED'
