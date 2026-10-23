@@ -435,6 +435,22 @@ def peer_check(config):
             raise ValueError('Runtime database privilege boundary was not enforced')
 
 
+def package_api(program):
+    spec = importlib.util.spec_from_file_location('modular_package', program)
+    delivery = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(delivery)
+    return delivery
+
+
+def release_controller(config, release):
+    delivery = package_api(Path(config['source']) / 'Laplace-MCP/deployment.py')
+    receipt = delivery.verify_package(release)
+    relative = 'libexec/laplace-mcp-deployment.py'
+    if relative not in receipt['files']:
+        raise ValueError('Modular package lacks its deployment controller; rebuild a compatible release')
+    return Path(release) / relative
+
+
 def prepared_package(config, program):
     """Repair the installed release, or resume the last matching prepared install."""
     prefix = Path(config['prefix'])
@@ -454,10 +470,15 @@ def prepared_package(config, program):
             return None
     if release.parent.resolve() != (prefix / 'releases').resolve() or release.is_symlink():
         raise ValueError('Prepared release is outside the declared installation')
-    spec = importlib.util.spec_from_file_location('modular_package', program)
-    delivery = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(delivery)
-    receipt = delivery.verify_package(release)
+    delivery = package_api(program)
+    try:
+        receipt = delivery.verify_package(release)
+    except ValueError as error:
+        if isinstance(error, getattr(delivery, 'PackageUpgradeRequired', ())):
+            return None
+        raise
+    if 'libexec/laplace-mcp-deployment.py' not in receipt['files']:
+        return None
     return {'release': str(release), 'package_id': release.name, 'revisions': receipt['revisions']}
 
 
@@ -501,7 +522,7 @@ def activate(config, release, receipt_path, install):
     if release.parent.resolve() != (prefix / 'releases').resolve() or release.is_symlink():
         raise ValueError('Selected release is outside the declared release directory')
     previous = os.readlink(current) if current.is_symlink() else None
-    program = Path(config['source']) / 'Laplace-MCP/deployment.py'
+    program = release_controller(config, release)
     # The service environment points through current, so a release switch includes
     # Engine and recipes atomically and recurring deployment needs no root write.
     environment = runtime_environment(config, current)
