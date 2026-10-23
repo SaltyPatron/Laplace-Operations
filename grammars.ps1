@@ -1,7 +1,7 @@
 #Requires -Version 7
 [CmdletBinding()]
 param(
-    [ValidateSet('fetch','status')][string]$Operation = 'status',
+    [ValidateSet('fetch','status','list')][string]$Operation = 'status',
     [Parameter(Mandatory)][string]$Directory,
     [string]$LaplaceRoot,
     [string]$EngineRoot,
@@ -19,23 +19,19 @@ if ($LaplaceRoot) {
 }
 if ($EngineRoot) {
     $engine = [IO.Path]::GetFullPath($EngineRoot)
-    $catalog = Get-Content -LiteralPath (Join-Path $engine 'src/recipe.c') -Raw
-    $table = [regex]::Match($catalog, '(?s)generic_specs\[\]\s*=\s*\{(.*?)\r?\n\};')
-    if (-not $table.Success) { throw 'The selected Engine source declares no generic grammar catalog.' }
-    $languages = @([regex]::Matches($table.Groups[1].Value, '\{\s*"[A-Za-z0-9_-]+"\s*,\s*"([A-Za-z0-9_-]+)"\s*,\s*\{') | ForEach-Object { $_.Groups[1].Value })
+    $languages = @()
+    $grammarAliases = @{}
+    foreach ($alias in Import-Csv -LiteralPath (Join-Path $engine 'grammar-sources.tsv') -Delimiter "`t") {
+        if ($grammarAliases.ContainsKey($alias.grammar)) { throw "Duplicate grammar alias: $($alias.grammar)" }
+        $grammarAliases[$alias.grammar] = $alias.source
+    }
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $engine 'recipes') -Recurse -File | Where-Object { $_.Extension -in '.recipe','.format' }) {
         $languages += @(Select-String -LiteralPath $file.FullName -Pattern '^\s*grammar\s+([A-Za-z0-9_-]+)\s*(?:#.*)?$' | ForEach-Object { $_.Matches[0].Groups[1].Value })
     }
     foreach ($language in $languages | Sort-Object -Unique) {
         # Text/layout and the current PGN provider are native Engine grammars.
         if ($language -in 'text','layout','pgn' -or (Test-Path -LiteralPath (Join-Path $engine "recipes/formats/grammars/$language/grammar.js"))) { continue }
-        $name = switch ($language) {
-            'c_sharp' { 'tree-sitter-c-sharp' }
-            { $_ -in 'tsx','typescript' } { 'tree-sitter-typescript' }
-            { $_ -in 'csv','tsv','psv' } { 'tree-sitter-csv' }
-            { $_ -in 'xml','dtd' } { 'tree-sitter-xml' }
-            default { 'tree-sitter-' + $language }
-        }
+        $name = if ($grammarAliases.ContainsKey($language)) { $grammarAliases[$language] } else { 'tree-sitter-' + $language }
         $required += $name
     }
 }
@@ -49,6 +45,10 @@ foreach ($row in $rows) {
     $origin = [uri]$row.origin
     if ($row.name -notmatch '^[A-Za-z0-9_-]+$' -or $row.commit -notmatch '^[a-f0-9]{40}$' -or
         $origin.Scheme -ne 'https' -or $origin.UserInfo -or -not $names.Add($row.name)) { throw 'Invalid or duplicate locked grammar record.' }
+}
+if ($Operation -eq 'list') {
+    [pscustomobject]@{directory=$root; selected=$rows.Count; grammars=$rows} | ConvertTo-Json -Depth 5
+    return
 }
 if ($Operation -eq 'fetch') { [void](New-Item -ItemType Directory -Path $root -Force) }
 $results = @($rows | ForEach-Object -ThrottleLimit $Parallelism -Parallel {
@@ -70,7 +70,7 @@ $results = @($rows | ForEach-Object -ThrottleLimit $Parallelism -Parallel {
             }
             if ((Invoke-GrammarGit @('-C',$path,'remote','get-url','origin')) -ne $row.origin) { throw "Origin differs: $path" }
             if (Invoke-GrammarGit @('-C',$path,'status','--porcelain')) { throw "Uncommitted files in $path; no source changed." }
-            $head = & git -C $path rev-parse --verify HEAD 2>$null
+            $head = & git -c "safe.directory=$($path.Replace('\','/'))" -c core.excludesFile= -C $path rev-parse --verify HEAD 2>$null
             if ($LASTEXITCODE -ne 0 -or $head -ne $row.commit) {
                 $null = Invoke-GrammarGit @('-C',$path,'fetch','--quiet','--depth','1','origin',$row.commit)
                 $null = Invoke-GrammarGit @('-C',$path,'checkout','--quiet','--detach',$row.commit)
