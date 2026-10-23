@@ -7,8 +7,9 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('modular', ROOT / 'installation/modular.py')
@@ -28,6 +29,41 @@ class Installation(unittest.TestCase):
         path = self.directory / 'host.json'
         path.write_text(json.dumps(self.value))
         return modular.config_load(path)
+
+    def prepared_release(self):
+        prefix = self.directory / 'installed'
+        release = prefix / 'releases/selected'
+        release.mkdir(parents=True)
+        (prefix / 'current').symlink_to(release, target_is_directory=True)
+        return {'prefix': str(prefix), 'source': str(self.directory / 'mutable-source')}, release
+
+    def test_controller_is_selected_from_the_verified_release(self):
+        config, release = self.prepared_release()
+        relative = 'libexec/laplace-mcp-deployment.py'
+        api = SimpleNamespace(verify_package=Mock(return_value={'files': {relative: 'verified'}}))
+        with patch.object(modular, 'package_api', return_value=api):
+            self.assertEqual(modular.release_controller(config, release), release / relative)
+        api.verify_package.assert_called_once_with(release)
+
+    def test_prepared_package_without_controller_requires_rebuild(self):
+        config, release = self.prepared_release()
+        api = SimpleNamespace(verify_package=Mock(return_value={'files': {}, 'revisions': {}}))
+        with patch.object(modular, 'package_api', return_value=api):
+            self.assertIsNone(modular.prepared_package(config, 'checkout-controller'))
+            with self.assertRaisesRegex(ValueError, 'lacks its deployment controller'):
+                modular.release_controller(config, release)
+
+    def test_prepared_package_upgrade_request_is_not_a_corruption_fallback(self):
+        config, _ = self.prepared_release()
+        class UpgradeRequired(ValueError):
+            pass
+        api = SimpleNamespace(PackageUpgradeRequired=UpgradeRequired,
+                              verify_package=Mock(side_effect=UpgradeRequired('old release')))
+        with patch.object(modular, 'package_api', return_value=api):
+            self.assertIsNone(modular.prepared_package(config, 'checkout-controller'))
+            api.verify_package.side_effect = ValueError('Package file differs')
+            with self.assertRaisesRegex(ValueError, 'Package file differs'):
+                modular.prepared_package(config, 'checkout-controller')
 
     def test_alternate_paths_and_independent_identities(self):
         for key in ('source', 'build', 'state', 'prefix'):
@@ -72,6 +108,7 @@ class Installation(unittest.TestCase):
             called.append(args)
             return subprocess.CompletedProcess(args, 0, stdout='')
         with patch.object(modular, 'UNITS', self.directory / 'units'), \
+             patch.object(modular, 'release_controller', return_value=release / 'libexec/laplace-mcp-deployment.py'), \
              patch.object(modular, 'checked', side_effect=command), \
              patch.object(modular, 'legacy_command', return_value=subprocess.CompletedProcess([], 1)), \
              patch.object(modular, 'peer_check', side_effect=ValueError('denied preflight')), \
@@ -111,7 +148,8 @@ class Installation(unittest.TestCase):
             observed_switch.append(current.resolve())
             raise RuntimeError('injected activation failure')
 
-        with patch.object(modular, 'checked', side_effect=command), patch.object(modular.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
+        with patch.object(modular, 'release_controller', return_value=new / 'libexec/laplace-mcp-deployment.py'), \
+             patch.object(modular, 'checked', side_effect=command), patch.object(modular.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
             with self.assertRaisesRegex(RuntimeError, 'injected'):
                 modular.activate(config, new, self.directory, False)
         self.assertEqual(observed_switch, [new])
@@ -155,6 +193,7 @@ class Installation(unittest.TestCase):
             return subprocess.CompletedProcess(args, 0)
 
         with patch.object(modular, 'UNITS', units), patch.object(modular, 'checked', side_effect=command), \
+             patch.object(modular, 'release_controller', return_value=new / 'libexec/laplace-mcp-deployment.py'), \
              patch.object(modular, 'legacy_command', side_effect=legacy_command), patch.object(modular, 'peer_check'), \
              patch.object(modular, 'unit_text', return_value='new unit'), \
              patch.object(modular.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
@@ -164,6 +203,9 @@ class Installation(unittest.TestCase):
         self.assertEqual(Path(config['environment_file']).read_text(), 'old configuration')
         self.assertEqual((prefix / 'current').resolve(), old)
         self.assertIn(('start',), legacy)
+        probes = [args for args in called if 'probe' in args]
+        self.assertEqual(len(probes), 1)
+        self.assertIn(str(new / 'libexec/laplace-mcp-deployment.py'), probes[0])
 
     def token_config(self):
         config = self.load()
