@@ -3,7 +3,7 @@
 #
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
-#                              appdb | backup | site | runtime | modular | agents | idlestop | report
+#                              appdb | backup | site | runtime | modular | agents | shared | locks | logging | idlestop | report
 #   sudo ./setup.sh machine    public declaration permissions only; no packages, database or service changes
 #   sudo ./setup.sh secrets-stack  converge the existing hart-server Vaultwarden/OpenBao stack; not part of all
 #   sudo ./setup.sh secrets-recover recover nginx and unseal existing Bao from its private escrow; no initialization
@@ -91,7 +91,7 @@ VOLUMES=$LAPLACE_VOLUMES
 PACKAGES="build-essential cmake ninja-build meson pkg-config flex bison liburing-dev libssl-dev liblz4-dev libzstd-dev
 libreadline-dev zlib1g-dev libxml2-dev libsqlite3-dev libtiff-dev libcurl4-openssl-dev libprotobuf-c-dev
 protobuf-c-compiler libjson-c-dev libeigen3-dev xfsprogs lvm2 openssl linux-tools-$(uname -r) linux-tools-generic
-sqlite3 autoconf automake libtool libgmp-dev libmpfr-dev curl ca-certificates"   # linux-tools: perf for the running kernel; sqlite3: PROJ's build runs it; autotools: PostGIS's autogen; GMP, MPFR: PostGIS 3.6
+sqlite3 autoconf automake libtool libgmp-dev libmpfr-dev curl ca-certificates jq logrotate rsyslog"   # linux-tools: perf for the running kernel; sqlite3: PROJ's build runs it; autotools: PostGIS's autogen; GMP, MPFR: PostGIS 3.6
 # Dependencies built from source under $LAPLACE_SRC, in this order; each is known by the file it installs, and is
 # cloned when its source is not there. name  proof  how  origin  branch
 DEPS="
@@ -191,9 +191,29 @@ shared(){
     chgrp -R "$LAPLACE_GROUP" "$d" 2>/dev/null || true; chmod -R g+rwX "$d" 2>/dev/null || true; find "$d" -type d -exec chmod g+s {} + 2>/dev/null || true
   done
   install -d "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"; chgrp "$LAPLACE_PG_GROUP" "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"; chmod 2775 "$LAPLACE_PG_DIR/lib" "$LAPLACE_PG_DIR/share/extension"
+  locks
+  say "shared trees" "group $LAPLACE_GROUP, set-group-id, group-writable"; say "$LAPLACE_PG_DIR/{lib,share/extension}" "group $LAPLACE_PG_GROUP"
+}
+locks(){
   # the locks: one deployment per database at a time, whoever runs it; the directory is on tmpfs, so it is declared to be made at every boot
-  printf 'd %s 2775 root %s -\nz %s/* 0664 - %s -\n' "$LAPLACE_LOCKS" "$LAPLACE_GROUP" "$LAPLACE_LOCKS" "$LAPLACE_GROUP" > /etc/tmpfiles.d/laplace.conf; systemd-tmpfiles --create /etc/tmpfiles.d/laplace.conf
-  say "shared trees" "group $LAPLACE_GROUP, set-group-id, group-writable"; say "$LAPLACE_PG_DIR/{lib,share/extension}" "group $LAPLACE_PG_GROUP"; say "locks" "$LAPLACE_LOCKS, at every boot"
+  printf 'd %s 2775 root %s -\nf %s/host-resource.lock 0664 root %s -\nf %s/host-resource.lock.turnstile 0664 root %s -\nz %s/* 0664 - %s -\n' \
+    "$LAPLACE_LOCKS" "$LAPLACE_GROUP" "$LAPLACE_LOCKS" "$LAPLACE_GROUP" "$LAPLACE_LOCKS" "$LAPLACE_GROUP" "$LAPLACE_LOCKS" "$LAPLACE_GROUP" \
+    > /etc/tmpfiles.d/laplace.conf
+  systemd-tmpfiles --create /etc/tmpfiles.d/laplace.conf
+  say "locks" "$LAPLACE_LOCKS, group $LAPLACE_GROUP, at every boot"
+}
+logging(){ part logging
+  # Give syslog its own size-triggered policy; keep the distribution's policies
+  # for other logs. Check often enough that a burst does not wait a whole week.
+  sed -i '\|^[[:space:]]*/var/log/syslog[[:space:]]*$|d' /etc/logrotate.d/rsyslog
+  install -o root -g root -m 644 "$here/installation/syslog.logrotate" /etc/logrotate.d/laplace-syslog
+  install -d -o root -g root -m 755 /etc/systemd/system/logrotate.timer.d
+  install -o root -g root -m 644 "$here/installation/logrotate.timer.conf" /etc/systemd/system/logrotate.timer.d/laplace.conf
+  logrotate --debug /etc/logrotate.conf
+  systemctl daemon-reload
+  systemctl restart logrotate.timer
+  systemctl reset-failed logrotate.service
+  say 'syslog rotation' '64M threshold, checked every five minutes, seven rotated files'
 }
 packages(){ part packages
   missing=$(for p in $PACKAGES; do dpkg-query -W -f '${Status}\n' "$p" 2>/dev/null | grep -q "install ok installed" || echo "$p"; done)
@@ -212,6 +232,7 @@ packages(){ part packages
   id "$LAPLACE_AGENT_USER" >/dev/null 2>&1 || useradd -r -d "$LAPLACE_AGENT_HOME" -s /usr/sbin/nologin -g "$LAPLACE_GROUP" "$LAPLACE_AGENT_USER"
   for u in "$op" "$LAPLACE_AGENT_USER"; do id -nG "$u" | tr ' ' '\n' | grep -qx "$LAPLACE_GROUP" || usermod -aG "$LAPLACE_GROUP" "$u"; id -nG "$u" | tr ' ' '\n' | grep -qx "$LAPLACE_PG_GROUP" || usermod -aG "$LAPLACE_PG_GROUP" "$u"; done
   say "group $LAPLACE_GROUP" "$(getent group "$LAPLACE_GROUP" | cut -d: -f4)"; say "group $LAPLACE_PG_GROUP" "$(getent group "$LAPLACE_PG_GROUP" | cut -d: -f4)"
+  logging
 }
 hugepage_access_group(){
   local group
@@ -445,7 +466,7 @@ access(){ part access
 # .NET 10 for 22.04); Node 24 from NodeSource; the GitHub CLI (agents.sh registers runners with it) from GitHub.
 SITE_PACKAGES="nginx dotnet-sdk-10.0 nodejs gh"
 site_sources(){
-  [ -e /etc/apt/sources.list.d/dotnet-ubuntu-backports-jammy.sources ] || [ -e /etc/apt/sources.list.d/dotnet-ubuntu-backports-*.list ] \
+  [ -e /etc/apt/sources.list.d/dotnet-ubuntu-backports-jammy.sources ] || compgen -G '/etc/apt/sources.list.d/dotnet-ubuntu-backports-*.list' >/dev/null \
     || { DEBIAN_FRONTEND=noninteractive apt-get install -y -q software-properties-common >/dev/null; add-apt-repository -y ppa:dotnet/backports >/dev/null 2>&1; say "source" "ppa:dotnet/backports"; }
   [ -e /etc/apt/sources.list.d/nodesource.list ] \
     || { curl -fsSL https://deb.nodesource.com/setup_24.x | bash - >/dev/null 2>&1; say "source" "NodeSource (Node 24)"; }
