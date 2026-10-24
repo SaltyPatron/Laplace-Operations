@@ -25,6 +25,10 @@ rows(){
     fi
   done < <(tail -n +2 "$manifest")
 }
+grammar_git(){
+  local source=$1; shift
+  git -c "safe.directory=$source" -c core.excludesFile= -C "$source" "$@"
+}
 case $op in
   fetch)
     mkdir -p "$dir"; n=0; bad=0
@@ -35,26 +39,26 @@ case $op in
       exec {grammar_lock}>"$dir/.$name.lock"; flock -xn "$grammar_lock" || { echo "$name is being updated" >&2; exit 1; }
       if [ ! -d "$d/.git" ]; then
         [[ ! -e "$d" || -z "$(ls -A "$d")" ]] || { echo "Nonempty source directory: $d" >&2; exit 1; }
-        git init -q "$d"; git -C "$d" remote add origin "$origin"
+        git init -q "$d"; grammar_git "$d" remote add origin "$origin"
       fi
-      [[ "$(git -C "$d" remote get-url origin)" == "$origin" && -z "$(git -C "$d" status --porcelain)" ]] || { echo "Origin or local source changes at $d; not changed" >&2; exit 1; }
-      if [[ "$(git -C "$d" rev-parse --verify HEAD 2>/dev/null || true)" != "$commit" ]]; then
-        git -C "$d" fetch -q --depth 1 origin "$commit"
-        git -C "$d" checkout -q --detach "$commit"
+      [[ "$(grammar_git "$d" remote get-url origin)" == "$origin" && -z "$(grammar_git "$d" status --porcelain)" ]] || { echo "Origin or local source changes at $d; not changed" >&2; exit 1; }
+      if [[ "$(grammar_git "$d" rev-parse --verify HEAD 2>/dev/null || true)" != "$commit" ]]; then
+        grammar_git "$d" fetch -q --depth 1 origin "$commit"
+        grammar_git "$d" checkout -q --detach "$commit"
       fi
       exec {grammar_lock}>&-
-      n=$((n + 1)); printf '  %-32s %s\n' "$name" "$(git -C "$d" rev-parse --short HEAD)"
+      n=$((n + 1)); printf '  %-32s %s\n' "$name" "$(grammar_git "$d" rev-parse --short HEAD)"
     done < <(rows)
     echo "grammars: $n at their locked revisions, $bad not cloned, $(rows | wc -l) declared, under $dir"; [ "$bad" = 0 ] ;;
   status)
     bad=0
     while IFS=$'\t' read -r name origin commit; do
-      d=$dir/$name; have=$(git -C "$d" rev-parse --short HEAD 2>/dev/null || true)
+      d=$dir/$name; have=$(grammar_git "$d" rev-parse --short HEAD 2>/dev/null || true)
       if [ -n "$have" ]; then printf '  %-32s %s\n' "$name" "$have"; else printf '  %-32s missing\n' "$name"; bad=$((bad + 1)); fi
     done < <(rows)
     echo "grammars: $(rows | wc -l) declared, $bad missing, under $dir"; [ "$bad" = 0 ] ;;
   record)
     printf 'name\torigin\tcommit\n'
-    for d in "$dir"/*/; do d=${d%/}; [ -d "$d/.git" ] || continue; printf '%s\t%s\t%s\n' "$(basename "$d")" "$(git -C "$d" remote get-url origin)" "$(git -C "$d" rev-parse HEAD)"; done ;;
+    for d in "$dir"/*/; do d=${d%/}; [ -d "$d/.git" ] || continue; printf '%s\t%s\t%s\n' "$(basename "$d")" "$(grammar_git "$d" remote get-url origin)" "$(grammar_git "$d" rev-parse HEAD)"; done ;;
   *) echo "grammars.sh fetch|status|record [DIR]"; exit 2 ;;
 esac
