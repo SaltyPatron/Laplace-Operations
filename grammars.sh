@@ -26,7 +26,8 @@ rows(){
   done < <(tail -n +2 "$manifest")
 }
 grammar_git(){
-  local source=$1; shift
+  local source
+  source=$(cd "$1" && pwd -P) || return; shift
   git -c "safe.directory=$source" -c core.excludesFile= -C "$source" "$@"
 }
 case $op in
