@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       sources:
-        description: "sources to ingest, by name, in this order; empty for every source in recipes/order (LAPLACE_SOURCES)"
+        description: "Source names or short aliases from the installed recipe catalog; empty for every source"
         default: ""
         required: false
       reseed:
@@ -50,10 +50,31 @@ jobs:
       - name: the database dropped and deployed again, empty
         if: inputs.reseed
         run: ./Laplace-Operations/deploy.sh drop && ./Laplace-Operations/seed-stamp.sh pending
+      - name: Installed ingestion sources, aliases, content and decomposers
+        run: |
+          . Laplace-Operations/laplace.env
+          {
+            echo '## Installed ingestion catalog'
+            echo '```json'
+            laplace ingest --catalog
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: the ingest, its status, and its measurements
         env:
           RESEED: ${{ inputs.reseed }}
-        run: if [ "$RESEED" = true ]; then ./Laplace-Operations/ingest.sh; else ./Laplace-Operations/ingest.sh ${{ inputs.sources }}; fi
+          SOURCES: ${{ inputs.sources }}
+          GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ "$RESEED" = true ]; then
+            ./Laplace-Operations/ingest.sh
+          elif [ "$SOURCES" = workspace-code ]; then
+            ./Laplace-Operations/workspace-code.sh checkout
+            ./Laplace-Operations/workspace-code.sh ingest
+          else
+            read -r -a selected <<< "$SOURCES"
+            ./Laplace-Operations/ingest.sh "${selected[@]}"
+          fi
       - name: the database holds the stamp it was seeded from
         if: inputs.reseed
         run: ./Laplace-Operations/seed-stamp.sh seeded
