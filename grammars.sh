@@ -4,13 +4,27 @@
 # speed, so a new host has 300 grammars in minutes instead of receiving a copy of another machine's directory.
 # build_grammars.sh (Laplace-Engine) compiles what is there.
 #
-#   ./grammars.sh fetch [DIR]    every grammar of the manifest: fetched at the locked commit; local modifications are refused
+#   ./grammars.sh fetch [DIR] [NAME...]    selected grammars (all if omitted); local modifications are refused
 #   ./grammars.sh status [DIR]   each grammar: present at which commit, or missing; exit 1 when one is missing
 #   ./grammars.sh record [DIR]   name, origin and HEAD of what DIR holds now: the record of a machine's grammars
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd); . "$here/laplace.env"
 op=${1:-status}; dir=${2:-$LAPLACE_GRAMMAR_SRC}; manifest=$here/grammars.lock.tsv
-rows(){ tail -n +2 "$manifest"; }
+selected=()
+if (( $# > 2 )); then selected=("${@:3}"); fi
+for name in "${selected[@]}"; do
+  [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] &&
+    awk -F '\t' -v name="$name" 'NR > 1 && $1 == name { found++ } END { exit found != 1 }' "$manifest" ||
+      { echo "No unique locked grammar: $name" >&2; exit 1; }
+done
+rows(){
+  local name origin commit
+  while IFS=$'\t' read -r name origin commit; do
+    if (( ! ${#selected[@]} )) || [[ " ${selected[*]} " == *" $name "* ]]; then
+      printf '%s\t%s\t%s\n' "$name" "$origin" "$commit"
+    fi
+  done < <(tail -n +2 "$manifest")
+}
 case $op in
   fetch)
     mkdir -p "$dir"; n=0; bad=0

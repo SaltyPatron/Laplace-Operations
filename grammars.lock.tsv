@@ -1,5 +1,6 @@
 name	origin	commit
 ebnf	https://github.com/RubixDev/ebnf	8e635b0b723c620774dfb8abf382a7f531894b40
+gmr-postgres	https://github.com/gmr/tree-sitter-postgres	d6ba3d1f1db62922aa5f2b94c04d33afbcdbc6ed
 superhtml	https://github.com/kristoff-it/superhtml	39dc8b3681f14f28fe29ceeadae1fbea54715689
 tree-sitter-ada	https://github.com/briot/tree-sitter-ada	6b58259a08b1a22ba0247a7ce30be384db618da6
 tree-sitter-agda	https://github.com/tree-sitter/tree-sitter-agda	e8d47a6987effe34d5595baf321d82d3519a8527

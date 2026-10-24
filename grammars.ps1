@@ -29,6 +29,16 @@ if ($EngineRoot) {
         $languages += @(Select-String -LiteralPath $file.FullName -Pattern '^\s*grammar\s+([A-Za-z0-9_-]+)\s*(?:#.*)?$' | ForEach-Object { $_.Matches[0].Groups[1].Value })
     }
     foreach ($language in $languages | Sort-Object -Unique) {
+        $derivation = Join-Path $engine "recipes/formats/grammars/$language/derivation.json"
+        if (Test-Path -LiteralPath $derivation) {
+            $specification = Get-Content -LiteralPath $derivation -Raw | ConvertFrom-Json
+            $locked = @($rows | Where-Object name -eq $specification.source)
+            if ($locked.Count -ne 1 -or $locked[0].origin -ne $specification.origin -or $locked[0].commit -ne $specification.commit) {
+                throw "Grammar derivation differs from the dependency lock: $derivation"
+            }
+            $required += $specification.source
+            continue
+        }
         # Text/layout and the current PGN provider are native Engine grammars.
         if ($language -in 'text','layout','pgn' -or (Test-Path -LiteralPath (Join-Path $engine "recipes/formats/grammars/$language/grammar.js"))) { continue }
         $name = if ($grammarAliases.ContainsKey($language)) { $grammarAliases[$language] } else { 'tree-sitter-' + $language }
@@ -60,6 +70,25 @@ $results = @($rows | ForEach-Object -ThrottleLimit $Parallelism -Parallel {
         ($result -join "`n").Trim()
     }
     try {
+        $export = Join-Path $path '.laplace-source.json'
+        if (-not (Test-Path -LiteralPath (Join-Path $path '.git')) -and (Test-Path -LiteralPath $export)) {
+            $receipt = Get-Content -LiteralPath $export -Raw | ConvertFrom-Json
+            if ($receipt.origin -ne $row.origin -or $receipt.commit -ne $row.commit -or -not $receipt.files.Count) {
+                throw "Export differs from the dependency lock: $path"
+            }
+            $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            foreach ($entry in $receipt.files) {
+                $file = [IO.Path]::GetFullPath((Join-Path $path $entry.path))
+                if (-not $file.StartsWith($path + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
+                    -not $seen.Add($file) -or $entry.sha -notmatch '^[a-f0-9]{40}$') { throw "Invalid export file: $file" }
+                $bytes = [IO.File]::ReadAllBytes($file)
+                $header = [Text.Encoding]::ASCII.GetBytes("blob $($bytes.Length)" + [char]0)
+                $actual = [Convert]::ToHexString([Security.Cryptography.SHA1]::HashData([byte[]]($header + $bytes))).ToLowerInvariant()
+                if ($actual -ne $entry.sha) { throw "Export blob differs: $file" }
+            }
+            [pscustomobject]@{name=$row.name; commit=$row.commit; verified=$true; source='verified-export'}
+            return
+        }
         if ($using:Operation -eq 'fetch') {
             $lock = [IO.File]::Open([IO.Path]::Combine($using:root, ".$($row.name).lock"), 'OpenOrCreate', 'ReadWrite', 'None')
             if (-not (Test-Path -LiteralPath $path)) { [void](New-Item -ItemType Directory -Path $path) }
