@@ -43,7 +43,7 @@ concurrency:
 env:
   # Cross-repository deployments coordinate on the actual host, beyond GitHub's
   # repository-local concurrency groups. Wait before touching the shared runtime.
-  LAPLACE_HOST_LOCK_WAIT_SECONDS: ${{ vars.LAPLACE_HOST_LOCK_WAIT_SECONDS || '3600' }}
+  LAPLACE_HOST_LOCK_WAIT_SECONDS: ${{ vars.LAPLACE_HOST_LOCK_WAIT_SECONDS || 'wait' }}
   LAPLACE_SRC: ${{ github.workspace }}
   LAPLACE_CONNINFO: ""   # the database is laplace.env's, never a copy a runner kept from when it was registered
   LAPLACE_RESEED: ${{ vars.LAPLACE_RESEED || 'auto' }}

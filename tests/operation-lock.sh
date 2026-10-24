@@ -45,6 +45,19 @@ wait "$waiter"
 [[ -e "$work/acquired" ]]
 echo 'PASS independent deployment waits for release and then continues'
 
+# CI's queue follows actual lock ownership, without a second elapsed deadline.
+laplace_host_lock exclusive
+LAPLACE_HOST_LOCK_WAIT_SECONDS=wait bash -c '. "$LOCK_HELPER"; laplace_host_lock exclusive && touch "$LOCK_TEST_WORK/queued-acquired"' 8>&- 2>"$work/queued-waiting" &
+queued=$!
+for attempt in {1..50}; do grep -q 'Waiting for' "$work/queued-waiting" && break; sleep .02; done
+grep -q 'Waiting for' "$work/queued-waiting"
+kill -0 "$queued"
+[[ ! -e "$work/queued-acquired" ]]
+flock -u 8
+wait "$queued"
+[[ -e "$work/queued-acquired" ]]
+echo 'PASS queued deployment follows holder release without a numeric lock deadline'
+
 laplace_host_lock exclusive
 rc=0
 LAPLACE_HOST_LOCK_WAIT_SECONDS=1 bash -c '. "$LOCK_HELPER"; laplace_host_lock shared && touch "$LOCK_TEST_WORK/incorrect"' 8>&- >/dev/null 2>&1 || rc=$?
