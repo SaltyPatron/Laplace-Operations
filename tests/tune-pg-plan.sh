@@ -31,6 +31,12 @@ while IFS=$'\t' read -r name profile ram threads cores wal shared rot reserved c
   p=$(plan_of "$name" "$profile" "$ram" "$threads" "$cores" "$wal" "$shared" "$rot" "$reserved" "$cap"); plans[$name]=$p
   v(){ sed -n "s/^$1=//p" <<<"$p"; }
   d=$(plan_of "$name" "$profile" "$ram" "$threads" "$cores" "$wal" "$shared" "$rot" "$reserved" "$cap" declared)
+  for trace in full reduced off; do
+    trace_settings=$(LAPLACE_PG_TRACE=$trace plan_of "$name" "$profile" "$ram" "$threads" "$cores" "$wal" "$shared" "$rot" "$reserved" "$cap" declared)
+    [[ $(awk '$1 == "auto_explain.log_min_duration" {print $2}' <<<"$trace_settings") == -1 ]] || {
+      echo "  FAIL automatic plan dumps enabled for $name/$trace"; fail=1;
+    }
+  done
   if ! awk 'NF && $1 !~ /^#/ { if (seen[$1]++) { print "  FAIL duplicate setting: " $1; bad=1 } } END { exit bad }' <<<"$d"; then fail=1; fi
   declared_locks=$(awk '$1 == "max_locks_per_transaction" {print $2}' <<<"$d")
   [ "$declared_locks" = "$(v locks)" ] || { echo "  FAIL declared locks differ from plan on $name"; fail=1; }
