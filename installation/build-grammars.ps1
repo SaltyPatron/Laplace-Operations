@@ -28,7 +28,9 @@ foreach ($derivation in Get-ChildItem -LiteralPath $sourceRoot -Filter derivatio
     $preparer = Join-Path $owner.FullName 'tools/prepare_grammar.py'
     $prepared = & python $preparer $derivation.FullName $ExternalSource (Join-Path $BuildDirectory 'derived')
     if ($LASTEXITCODE) { throw "Grammar derivation failed: $($derivation.FullName)" }
-    $definitions += Get-Item -LiteralPath (Join-Path $prepared 'grammar.js')
+    $specification = Get-Content -LiteralPath $derivation.FullName -Raw | ConvertFrom-Json
+    $definition = if ('grammar' -in $specification.PSObject.Properties.Name) { $specification.grammar } else { 'grammar.js' }
+    $definitions += Get-Item -LiteralPath (Join-Path $prepared $definition)
 }
 foreach ($definition in $definitions) {
     $package = if ($definition.Name -eq 'grammar.json') { $definition.Directory.Parent } else { $definition.Directory }
