@@ -303,13 +303,13 @@ def host_lock(config):
     turnstile = None
     try:
         # As operation-lock.sh: try once, then wait up to LAPLACE_HOST_LOCK_WAIT_SECONDS (default 0, immediate refusal;
-        # the delivery workflow declares its queue deadline) for another repository's host operation. And as it, through
+        # CI selects 'wait' to follow actual holder release) for another repository's host operation. And as it, through
         # the turnstile (the lock's path with .turnstile), held while this waits for the lock: readers that come after
         # do not get in ahead of this deployment (flock grants a new shared holder past a waiting exclusive one).
         wait = os.environ.get('LAPLACE_HOST_LOCK_WAIT_SECONDS', '0') or '0'
-        if not wait.isdigit():
-            raise ValueError('LAPLACE_HOST_LOCK_WAIT_SECONDS must be a nonnegative integer')
-        deadline = time.monotonic() + int(wait)
+        if wait != 'wait' and not wait.isdigit():
+            raise ValueError('LAPLACE_HOST_LOCK_WAIT_SECONDS must be a nonnegative integer or wait')
+        deadline = None if wait == 'wait' else time.monotonic() + int(wait)
         old = os.umask(0o002)
         try:
             turnstile = os.open(config['lock'] + '.turnstile', os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o660)
@@ -322,12 +322,13 @@ def host_lock(config):
                     fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
                 except BlockingIOError:
-                    if time.monotonic() >= deadline:
+                    if deadline is not None and time.monotonic() >= deadline:
                         raise ValueError('host lock deadline expired: ' + config['lock'] + '; no shared-runtime changes performed')
                     if not waiting:
-                        print('Waiting up to ' + wait + 's for ' + config['lock'] + ' (exclusive)', file=sys.stderr, flush=True)
+                        duration = '' if deadline is None else 'up to ' + wait + 's '
+                        print('Waiting ' + duration + 'for ' + config['lock'] + ' (exclusive)', file=sys.stderr, flush=True)
                         waiting = True
-                    time.sleep(min(0.2, max(0.0, deadline - time.monotonic())))
+                    time.sleep(0.2 if deadline is None else min(0.2, max(0.0, deadline - time.monotonic())))
         os.close(turnstile)
         turnstile = None
         yield

@@ -429,12 +429,14 @@ class Installation(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'nonnegative integer'):
                 with modular.host_lock(config):
                     self.fail('acquired under an invalid deadline')
-        threading.Timer(1.0, lambda: fcntl.flock(held, fcntl.LOCK_UN)).start()
-        started = time.monotonic()
-        with patch.dict(os.environ, {'LAPLACE_HOST_LOCK_WAIT_SECONDS': '20'}):
-            with modular.host_lock(config):
-                waited = time.monotonic() - started
-        self.assertTrue(0.5 < waited < 10, waited)
+        for mode in ('20', 'wait'):
+            fcntl.flock(held, fcntl.LOCK_EX)
+            threading.Timer(1.0, lambda: fcntl.flock(held, fcntl.LOCK_UN)).start()
+            started = time.monotonic()
+            with patch.dict(os.environ, {'LAPLACE_HOST_LOCK_WAIT_SECONDS': mode}):
+                with modular.host_lock(config):
+                    waited = time.monotonic() - started
+            self.assertTrue(0.5 < waited < 10, waited)
 
     def test_host_lock_waiting_deployment_is_not_overtaken_by_a_later_reader(self):
         import fcntl, threading, time
