@@ -17,6 +17,10 @@ on:
         description: "drop the database first and seed it again from empty (sources are then every source of LAPLACE_SOURCES)"
         type: boolean
         default: false
+      repair_projection:
+        description: "Repair canonical coordinates and Hilbert keys before the selected ingest; preserves content IDs and paths, incompatible with reseed"
+        type: boolean
+        default: false
 concurrency:
   group: hart-server-laplace
   cancel-in-progress: false
@@ -31,6 +35,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations, clean: false }
+      - name: Explicitly repair the installed canonical projection
+        if: inputs.repair_projection
+        env:
+          RESEED: ${{ inputs.reseed }}
+        run: |
+          set -euo pipefail
+          if [ "$RESEED" = true ]; then
+            echo 'Select projection repair or reseed, not both.' >&2
+            exit 2
+          fi
+          . Laplace-Operations/laplace.env
+          laplace projection --apply
       - name: the database dropped and deployed again, empty
         if: inputs.reseed
         run: ./Laplace-Operations/deploy.sh drop && ./Laplace-Operations/seed-stamp.sh pending
@@ -47,9 +63,14 @@ jobs:
         env:
           RESEED: ${{ inputs.reseed }}
           SOURCES: ${{ inputs.sources }}
+          GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
+          OWNER: ${{ github.repository_owner }}
         run: |
           if [ "$RESEED" = true ]; then
             ./Laplace-Operations/ingest.sh
+          elif [ "$SOURCES" = workspace-code ]; then
+            ./Laplace-Operations/workspace-code.sh checkout
+            ./Laplace-Operations/workspace-code.sh ingest
           else
             read -r -a selected <<< "$SOURCES"
             ./Laplace-Operations/ingest.sh "${selected[@]}"

@@ -10,7 +10,7 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 deployed=$(cd "$here/.." && pwd)                                   # what the deployment checked out: Laplace-Engine, ...
 tree=${WORKSPACE_CODE:-${GITHUB_WORKSPACE:-$deployed}/workspace-code}
-repos="Laplace Laplace-Native Laplace-postgres Laplace-Engine Laplace-MCP Laplace-UCI Laplace-Operations Laplace-Wiki Laplace-Conventional"
+repos="Laplace Laplace-Native Laplace-postgres Laplace-Engine Laplace-Prototype Laplace-MCP Laplace-UCI Laplace-Operations Laplace-Wiki Laplace-Conventional"
 case ${1:-} in
   checkout)
     # WORKSPACE_CODE_REMOTE: where the repositories are fetched from, REMOTE/NAME.git (tests: local repositories)
