@@ -1,6 +1,6 @@
 #Requires -Version 7
 param([Parameter(Mandatory)][string]$Source, [Parameter(Mandatory)][string]$Output,
-      [string]$BuildDirectory)
+      [string]$BuildDirectory, [string]$ExternalSource)
 $ErrorActionPreference = 'Stop'
 $sourceRoot = [IO.Path]::GetFullPath($Source)
 $destination = [IO.Path]::GetFullPath($Output)
@@ -19,6 +19,17 @@ $definitions = @(Get-ChildItem -LiteralPath $sourceRoot -Filter grammar.js -Recu
 $definitions += @(Get-ChildItem -LiteralPath $sourceRoot -Filter grammar.json -Recurse -File | Where-Object {
     $_.Directory.Name -eq 'src' -and $_.FullName -notmatch '\\node_modules\\' -and -not (Test-Path -LiteralPath (Join-Path $_.Directory.Parent.FullName 'grammar.js'))
 })
+foreach ($derivation in Get-ChildItem -LiteralPath $sourceRoot -Filter derivation.json -Recurse -File) {
+    $owner = [IO.DirectoryInfo]::new($derivation.DirectoryName)
+    while ($owner -and -not (Test-Path -LiteralPath (Join-Path $owner.FullName 'tools/prepare_grammar.py'))) { $owner = $owner.Parent }
+    if (-not $ExternalSource -and $env:LAPLACE_GRAMMAR_SRC) { $ExternalSource = $env:LAPLACE_GRAMMAR_SRC }
+    if (-not $ExternalSource -and $env:LAPLACE_EXTERNAL) { $ExternalSource = Join-Path $env:LAPLACE_EXTERNAL 'tree-sitter-grammars' }
+    if (-not $owner -or -not $ExternalSource) { throw 'Grammar derivations require the Engine preparer and declared external sources.' }
+    $preparer = Join-Path $owner.FullName 'tools/prepare_grammar.py'
+    $prepared = & python $preparer $derivation.FullName $ExternalSource (Join-Path $BuildDirectory 'derived')
+    if ($LASTEXITCODE) { throw "Grammar derivation failed: $($derivation.FullName)" }
+    $definitions += Get-Item -LiteralPath (Join-Path $prepared 'grammar.js')
+}
 foreach ($definition in $definitions) {
     $package = if ($definition.Name -eq 'grammar.json') { $definition.Directory.Parent } else { $definition.Directory }
     if (Test-Path -LiteralPath (Join-Path $package.FullName 'src/parser.c')) { continue }
