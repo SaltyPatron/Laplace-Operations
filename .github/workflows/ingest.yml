@@ -26,6 +26,7 @@ concurrency:
   cancel-in-progress: false
   queue: max
 env:
+  LAPLACE_HOST_LOCK_WAIT_SECONDS: ${{ vars.LAPLACE_HOST_LOCK_WAIT_SECONDS || 'wait' }}
   LAPLACE_SRC: ${{ github.workspace }}
   LAPLACE_CONNINFO: ""   # the database is laplace.env's, never a copy a runner kept from when it was registered
 jobs:
