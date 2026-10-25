@@ -25,7 +25,7 @@ $env:PATH = "$env:LAPLACE_BUILD\Laplace-Engine\icx-release;$env:LAPLACE_PG_DIR\b
 $psql = Join-Path $env:LAPLACE_PG_DIR 'bin\psql.exe'
 # Refuse missing artifacts before changing the database, including an explicit drop.
 $flags = if ($env:LAPLACE_FLAGS) { $env:LAPLACE_FLAGS } else { $env:LAPLACE_TIER0 -replace '\.bin$', '.flags' }
-foreach ($artifact in @($env:LAPLACE_TIER0, $flags, $env:LAPLACE_HIGHWAY, "$env:LAPLACE_HIGHWAY.layout", "$env:LAPLACE_HIGHWAY.keys")) {
+foreach ($artifact in @($env:LAPLACE_TIER0, $flags, "$flags.layout", $env:LAPLACE_HIGHWAY)) {
     if (-not (Test-Path -LiteralPath $artifact -PathType Leaf) -or (Get-Item -LiteralPath $artifact).Length -eq 0) {
         throw "missing deployment artifact: $artifact; prepare or install the perf-caches separately (README.md)"
     }

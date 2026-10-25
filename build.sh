@@ -8,8 +8,9 @@ if [ "${1:-}" = install ]; then
   . "$(dirname "$0")/operation-lock.sh"
   laplace_host_lock exclusive
 fi
+bash "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_SRC/Laplace-Engine/recipes/formats/grammars" "$LAPLACE_GRAMMARS"
 for r in Laplace-postgres Laplace-Engine; do
-  cmake -S "$LAPLACE_SRC/$r" -B "$LAPLACE_BUILD/$r/icx-release" -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=RelWithDebInfo
+  cmake -S "$LAPLACE_SRC/$r" -B "$LAPLACE_BUILD/$r/icx-release" -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLAPLACE_NATIVE="$LAPLACE_SRC/Laplace-Native" -DLAPLACE_OPERATIONS="$LAPLACE_SRC/Laplace-Operations" -DLAPLACE_TIER0="$LAPLACE_TIER0" -DLAPLACE_RECIPES="$LAPLACE_SRC/Laplace-Engine/recipes"
   cmake --build "$LAPLACE_BUILD/$r/icx-release"
 done
 # Installed by rename, never by overwriting in place: a backend that has the old library mapped keeps the old inode.

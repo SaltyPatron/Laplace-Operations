@@ -70,6 +70,13 @@
           "evidence": "Actual named DLL: exact full and partial decompression of a PostgreSQL expression and 10000 deterministic inputs. This does not establish live database or website recovery."
         },
         {
+          "id": "zstd-windows-roundtrip",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/windows-zstd.ps1"],
+          "timeout_seconds": 120,
+          "evidence": "Actual named DLL: 4096 overlapping short-match cases and 12000 deterministic inputs at levels 1/3/9, exact decompression and output bounds."
+        },
+        {
           "id": "release-promotion",
           "platform": "any",
           "argv": null,

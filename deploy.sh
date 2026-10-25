@@ -54,9 +54,13 @@ echo $$ > "$lock.pid"
 ingest=$LAPLACE_LOCKS/ingest-${db:-default}.lock
 if [ -e "$ingest" ] && ! flock -n "$ingest" true 2>/dev/null; then echo "an ingest of $db is running (pid $(cat "$ingest.pid" 2>/dev/null)): this deployment leaves: run it again when the ingest is done"; exit 3; fi
 # Refuse missing artifacts before changing the database, including an explicit drop.
-for artifact in "$LAPLACE_TIER0" "${LAPLACE_FLAGS:-${LAPLACE_TIER0%.bin}.flags}" "$LAPLACE_HIGHWAY" "$LAPLACE_HIGHWAY.layout" "$LAPLACE_HIGHWAY.keys"; do
-  [ -s "$artifact" ] || { echo "missing deployment artifact: $artifact; prepare or install the perf-caches separately (README.md)"; exit 1; }
-done
+if [ -n "${LAPLACE_PREPARED_INPUTS:-}" ]; then
+  GITHUB_ENV=/dev/null python3 "$LAPLACE_SRC/Laplace-Native/scripts/ci-inputs.py" verify "$LAPLACE_PREPARED_INPUTS"
+else
+  for artifact in "$LAPLACE_TIER0" "${LAPLACE_FLAGS:-${LAPLACE_TIER0%.bin}.flags}" "${LAPLACE_FLAGS:-${LAPLACE_TIER0%.bin}.flags}.layout" "$LAPLACE_HIGHWAY"; do
+    [ -s "$artifact" ] || { echo "missing deployment artifact: $artifact; install verified Native caches separately (README.md)"; exit 1; }
+  done
+fi
 # ./deploy.sh drop: the database dropped and made again, empty, before it is deployed: by the role, which may drop
 # databases, never by root (the cluster itself is setup.sh drop's, run by a person)
 if [ "${1:-}" = drop ]; then
@@ -71,6 +75,22 @@ step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
 
 step tune-pg    bash "$here/tune-pg.sh"                          # the server's settings: apply, reload, check. a drift fails the deploy
 step build      "$here/build.sh" install
+
+# Generation is owned by Native verification. Delivery installs that verified closure
+# after building the readers, keeping the declared permanent paths used by services.
+if [ -n "${LAPLACE_PREPARED_INPUTS:-}" ]; then
+  flags=${LAPLACE_FLAGS:-${LAPLACE_TIER0%.bin}.flags}
+  step prepared-tier0 env LAPLACE_TIER0="$LAPLACE_PREPARED_INPUTS/tier0.bin" LAPLACE_FLAGS="$LAPLACE_PREPARED_INPUTS/tier0.flags" LAPLACE_HIGHWAY="$LAPLACE_PREPARED_INPUTS/tier0.highway" laplace text a
+  step prepared-highway env LAPLACE_TIER0="$LAPLACE_PREPARED_INPUTS/tier0.bin" LAPLACE_FLAGS="$LAPLACE_PREPARED_INPUTS/tier0.flags" LAPLACE_HIGHWAY="$LAPLACE_PREPARED_INPUTS/tier0.highway" laplace highway --fingerprint
+  for mapping in "tier0.bin|$LAPLACE_TIER0" "tier0.flags|$flags" "tier0.flags.layout|$flags.layout" "tier0.highway|$LAPLACE_HIGHWAY"; do
+    name=${mapping%%|*}; target=${mapping#*|}
+    mkdir -p "$(dirname "$target")"
+    fresh=$(mktemp "$target.XXXXXX")
+    cp "$LAPLACE_PREPARED_INPUTS/$name" "$fresh"
+    chmod 664 "$fresh"
+    mv -f "$fresh" "$target"
+  done
+fi
 [ -n "$(ls "$LAPLACE_GRAMMARS" 2>/dev/null)" ] || step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"   # compiled grammar dependencies; no resource admission
 step highway-fingerprint laplace highway --fingerprint
 step deploy     laplace deploy

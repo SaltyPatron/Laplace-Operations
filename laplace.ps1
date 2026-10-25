@@ -25,6 +25,7 @@ param(
     [switch]$Yes,
     [switch]$Wait,
     [switch]$Plan,
+    [switch]$Json,
     [Alias('h')][switch]$Help,
     [Parameter(ValueFromRemainingArguments)][string[]]$RemainingArgs = @()
 )
@@ -61,7 +62,7 @@ if ($Help -or $Operation -in @('help','-h','--help','/?') -or ($RemainingArgs | 
         }
     }
 }
-$validOperations = @('help','status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','prepare','build','test','recovery','db','restart-iis','ingest','seed','sources','data')
+$validOperations = @('help','status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','prepare','build','test','recovery','db','restart-iis','repair-postgres','ingest','seed','sources','data')
 if ($Operation -notin $validOperations) {
     throw "Unknown operation '$Operation'. Valid operations: $($validOperations -join ', ')"
 }
@@ -82,6 +83,8 @@ LOCAL DESKTOP IIS & DATABASE MAINTENANCE (https://dev.hartonomous.com)
   laplace-ops deploy desktop          Check tuning, build, publish IIS, migrate, and verify; save one deployment receipt
   laplace-ops deploy desktop -Plan    Show desktop deployment stages without changing the installation
   laplace-ops restart-iis             Cleanly recycle the local IIS site (app_offline.htm) and check /health
+  laplace-ops repair-postgres         Repair the local PostgreSQL runtime and service; verify its original cluster
+  laplace-ops repair-postgres -Plan   Inspect that repair without changing the host
   laplace-ops db                      Check migration status for both local databases (application + substrate)
   laplace-ops db [both|application|substrate] [status|migrate|repair|remigrate|recreate] [-Yes]
     Examples:
@@ -100,7 +103,7 @@ LOCAL DESKTOP ONE-TIME SETUP & MODULAR CLI
   laplace-ops components desktop      Package Laplace-Native + Laplace-Engine and install the 'laplace' CLI
 
 INGESTION AND DATA (Laplace-Engine: the laplace program, recipes/order, the data sets of data.tsv)
-  laplace-ops sources                 Each source, where it is found on this machine, and its recipes (laplace sources)
+  laplace-ops sources [-Json]         Complete installed recipe catalog: source aliases, content, prerequisites and decomposers
   laplace-ops ingest [SOURCE...]      Ingest every source in recipes/order, or the sources named (ingest.ps1)
   laplace-ops ingest staging [SOURCE...] [-Wait]
                                       The same on hart-server: dispatches Laplace-Operations ingest.yml
@@ -121,15 +124,21 @@ REMOTE CI/CD & ENVIRONMENT OPERATIONS (GitHub Actions)
 '@ | Write-Host
     exit 0
 }
-$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','ingest','seed','sources','data')
+$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','repair-postgres','ingest','seed','sources','data')
 if (-not $PSBoundParameters.ContainsKey('Target')) {
     $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
 }
-if ($Plan -and -not ($Operation -eq 'deploy' -and $Target -eq 'desktop')) {
-    throw '-Plan is supported by deploy -Target desktop; no operation was run.'
+if ($Plan -and -not ($Operation -in 'deploy','repair-postgres' -and $Target -eq 'desktop')) {
+    throw '-Plan is supported by deploy and repair-postgres on desktop; no operation was run.'
 }
-if ($Operation -in @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','restart-iis') -and $Target -ne 'desktop') {
+if ($Operation -in @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','restart-iis','repair-postgres') -and $Target -ne 'desktop') {
     throw "$Operation runs on desktop; target '$Target' is not supported. Use deploy to install a deployment target."
+}
+if ($Operation -eq 'repair-postgres') {
+    $repairArgs = @('-NoProfile','-File',"$PSScriptRoot/setup.ps1",'repair-postgres')
+    if ($Plan) { $repairArgs += '-Check' }
+    & pwsh @repairArgs
+    exit $LASTEXITCODE
 }
 if ($Operation -eq 'db') {
     if ($Target -eq 'desktop') {
@@ -206,7 +215,24 @@ if ($Operation -in @('ingest','seed','sources','data')) {
                         & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1"; exit $LASTEXITCODE }
             'sources' { $laplace = Join-Path $env:LAPLACE_BUILD 'Laplace-Engine\icx-release\laplace.exe'
                         if (-not (Test-Path $laplace)) { throw "no laplace program at $laplace`: deploy.ps1 builds it" }
-                        & $laplace sources; exit $LASTEXITCODE }
+                        $raw = & $laplace ingest --catalog
+                        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+                        if ($Json) { $raw; exit 0 }
+                        $catalog = ($raw -join "`n") | ConvertFrom-Json
+                        foreach ($source in $catalog.sources) {
+                            $command = if ($source.aliases.Count) { $source.aliases[0] } else { $source.name }
+                            "${command}: $($source.name)"
+                            if ($source.aliases.Count) { "  aliases: $($source.aliases -join ', ')" }
+                            "  witness: $($source.witness)"
+                            "  content: $(($source.files + $source.roots) -join '; ')"
+                            foreach ($recipe in $source.recipes) { "  $($recipe.name) [$($recipe.grammar)]: $($recipe.match -join ' ')" }
+                            if ($source.reads.Count) { "  formats: $($source.reads -join ', ')" }
+                            if ($source.after.Count) { "  after: $($source.after -join ', ')" }
+                            if ($source.held) { "  held: $($source.held)" }
+                        }
+                        'File decomposers:'
+                        foreach ($format in $catalog.formats) { "  $($format.name) [$($format.grammar)]: $($format.match -join ' ')" }
+                        exit 0 }
             'data'    { $bash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
                         if (-not (Test-Path $bash)) { throw "data.sh needs bash: no Git Bash at $bash" }
                         & $bash -c 'python3 -c 1' 2>$null
