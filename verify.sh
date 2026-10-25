@@ -47,7 +47,7 @@ deployment(){
   [ "$database_t0" = "$t0" ] && good 'Engine and PostgreSQL use the same tier-0 artifact' || bad 'Engine/PostgreSQL tier-0 fingerprints differ or are missing'
   [ "$database_hw" = "$hw" ] && good 'Engine and PostgreSQL use the same highway artifact' || bad 'Engine/PostgreSQL highway fingerprints differ or are missing'
   # Record observed bytes; these hashes do not claim an unrecorded build provenance.
-  sha256sum "$L" "$LAPLACE_TIER0" "$LAPLACE_HIGHWAY" "$LAPLACE_HIGHWAY.layout" "$LAPLACE_HIGHWAY.keys" > "$log/runtime.sha256" || { bad 'could not record runtime artifact bytes'; return; }
+  sha256sum "$L" "$LAPLACE_TIER0" "$LAPLACE_HIGHWAY" "${LAPLACE_FLAGS:-${LAPLACE_TIER0%.bin}.flags}" "${LAPLACE_FLAGS:-${LAPLACE_TIER0%.bin}.flags}.layout" > "$log/runtime.sha256" || { bad 'could not record runtime artifact bytes'; return; }
   block "$log/runtime.sha256"
 }
 

@@ -40,13 +40,20 @@ sql(){ psql -X "$LAPLACE_CONNINFO" -Atq -F '	' -c "$1" 8>&- 9>&-; }             
 # older, so a read starts no earlier than the oldest segment still there (its name is timeline, log, segment).
 wal_oldest="SELECT (substr(n, 9, 8) || '/' || to_hex(('x' || substr(n, 17, 8))::bit(32)::bigint * pg_size_bytes(current_setting('wal_segment_size'))))::pg_lsn
               FROM (SELECT min(name) AS n FROM pg_ls_waldir() WHERE name ~ '^[0-9A-F]{24}\$') w"
-wal_read(){ sql "WITH b AS (SELECT relfilenode, reldatabase, resource_manager, count(*) AS n, count(*) FILTER (WHERE block_fpi_length > 0) AS fpi,
+wal_read(){
+  [ "$1" != "$2" ] || return 0                              # an idle interval has no next record to inspect
+  wal_read_from=$(sql "SELECT start_lsn FROM (SELECT GREATEST('$1'::pg_lsn, ($wal_oldest)) AS start_lsn) bounds
+                      WHERE start_lsn < '$2'::pg_lsn") || {
+    echo "  WAL sample bounds from $1 to $2 failed; see PostgreSQL error above" >&2; return 0;
+  }
+  [ -n "$wal_read_from" ] || return 0                        # the entire interval is older than retained WAL
+  sql "WITH b AS (SELECT relfilenode, reldatabase, resource_manager, count(*) AS n, count(*) FILTER (WHERE block_fpi_length > 0) AS fpi,
                    coalesce(sum(block_fpi_length), 0) AS fb, coalesce(sum(block_data_length), 0) AS db
-                 FROM pg_get_wal_block_info(GREATEST('$1'::pg_lsn, ($wal_oldest)), '$2', false) GROUP BY 1, 2, 3)   -- grouped first: millions of blocks, a few hundred groups
+                 FROM pg_get_wal_block_info('$wal_read_from'::pg_lsn, '$2'::pg_lsn, false) GROUP BY 1, 2, 3)   -- grouped first: millions of blocks, a few hundred groups
                SELECT now()::timestamp(0), coalesce(pg_partition_root(c.oid)::regclass::text, c.relname, 'relfilenode ' || b.relfilenode), b.resource_manager,
                  sum(b.n), sum(b.fpi), sum(b.fb), sum(b.db)
                FROM b LEFT JOIN pg_class c ON c.relfilenode = b.relfilenode AND b.reldatabase IN (0, (SELECT oid FROM pg_database WHERE datname = current_database()))
-               GROUP BY 2, 3" >> "$log/wal.tsv" || echo "  the log from $1 to $2 was not read: recycled before it was" >&2; }
+               GROUP BY 2, 3" >> "$log/wal.tsv" || echo "  WAL sample from $wal_read_from to $2 failed; see PostgreSQL error above" >&2; }
 # The log is written faster than pg_get_wal_block_info reads it back, so each minute only its first 64 MB is read: a
 # sample of where the log's bytes go, by table and index, never a total.
 wal_sampler(){ while sleep 60; do from=$(cat "$log/wal.from"); to=$(sql "SELECT pg_current_wal_lsn()") || continue

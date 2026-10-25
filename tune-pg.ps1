@@ -253,7 +253,9 @@ function TuneDeclared {
         max_locks_per_transaction        = "$($p.locks)"
         shared_preload_libraries         = ($preload -join ',')
         'pg_stat_statements.track'       = $(if ($trace -eq 'full') { 'all' } elseif ($trace -eq 'reduced') { 'top' } else { 'none' })
-        'auto_explain.log_min_duration'  = $(if ($trace -eq 'off') { '-1' } else { '5s' })
+        # Plan predicates expand array constants independently of parameter limits.
+        # Automatic plan dumps stay off; diagnostic sessions can opt in locally.
+        'auto_explain.log_min_duration'  = '-1'
         'auto_explain.log_parameter_max_length' = '0'
         track_io_timing                  = $(if ($trace -eq 'off') { 'off' } else { 'on' })
         track_wal_io_timing              = $(if ($trace -eq 'off') { 'off' } else { 'on' })

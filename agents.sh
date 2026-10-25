@@ -10,8 +10,9 @@
 #                                       in LAPLACE_REPOS at all, is said loudly and the status fails
 #   sudo ./agents.sh remove [REPO]      unregister and remove one, or all
 #
-# Each runner: $LAPLACE_AGENT_HOME/<repo>/{runner,work,build}. Its checkouts are its workflow's workspace under work/;
-# its builds are under build/; the database, the dependencies and the data are the machine's, through the shared
+# Runner programs live in $LAPLACE_AGENT_HOME/<repo>/runner. Bulk work/build trees
+# use $LAPLACE_WORK/agents/<repo> and $LAPLACE_BUILD/agents/<repo> on the declared volumes.
+# The database, dependencies and data are the machine's, through the shared
 # group setup.sh gives them. Registration needs a token from GitHub for each repository: gh, logged in as someone who
 # administers them, fetches it; or LAPLACE_AGENT_TOKEN_<REPO with - as _>. Laplace-postgres, Laplace-Engine and
 # Laplace-Operations check out the repositories they build beside themselves; a workflow's own token reads only its
@@ -23,7 +24,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 . "$here/machine-config.sh"
 machine_config_permissions
 . "$here/laplace.env"
-op=${SUDO_USER:-$(id -un)}; user=$LAPLACE_AGENT_USER; group=$LAPLACE_GROUP; home=$LAPLACE_AGENT_HOME; owner=$LAPLACE_GITHUB
+op=${SUDO_USER:-$(id -un)}; user=$LAPLACE_AGENT_USER; group=$LAPLACE_GROUP; agent_home=$LAPLACE_AGENT_HOME; owner=$LAPLACE_GITHUB
 mkdir -p "$LAPLACE_WORK/logs/root"; log=$LAPLACE_WORK/logs/root/agents-$(date -u +%Y%m%dT%H%M%SZ).log; exec > >(tee "$log") 2>&1
 say(){ printf '  %-46s %s\n' "$1" "$2"; }
 part(){ echo; echo "=== $1   $(date -u +%H:%M:%S)"; }
@@ -34,19 +35,52 @@ gh_op(){ as_op "gh $*"; }
 # the runner's release, once per run
 runner_version(){ [ -n "${RUNNER_VERSION:-}" ] || RUNNER_VERSION=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p'); echo "$RUNNER_VERSION"; }
 
+# Move existing data once; keep old absolute cache paths resolving to the same
+# files. Never merge two populated trees or copy an already migrated tree again.
+agent_move_storage() {
+  local old=$1 target=$2
+  if [[ -L "$old" ]]; then
+    [[ $(readlink -f "$old") == $(readlink -f "$target") ]] || { echo "Unexpected runner storage link: $old" >&2; return 1; }
+  elif [[ -e "$old" ]]; then
+    [[ ! -e "$target" && ! -L "$target" ]] || { echo "Runner storage collision: $old and $target" >&2; return 1; }
+    mkdir -p "$(dirname "$target")"
+    mv -T -- "$old" "$target"
+    ln -s -- "$target" "$old"
+  else
+    mkdir -p "$target"
+  fi
+}
+
 # ---------------------------------------------------------------------------------------------- one repository
 agent(){ repo=$1; part "$repo"
   id "$user" >/dev/null 2>&1 || { echo "no user $user: sudo ./setup.sh packages first"; exit 1; }
   gh_op "api repos/$owner/$repo --jq .name" >/dev/null 2>&1 || { say "$owner/$repo" "NOT ON GITHUB: gh repo create $owner/$repo --private --source $LAPLACE_SRC/$repo --push, then again"; return; }
-  d=$home/$repo; r=$d/runner
+  d=$agent_home/$repo; r=$d/runner
+  agent_work=$LAPLACE_WORK/agents/$repo; agent_build=$LAPLACE_BUILD/agents/$repo
+  # A registered listener must be idle and stopped before its workspace moves.
+  # Keep its registration and credentials; update only the local work directory.
+  if [[ -f "$r/.runner" ]] && { [[ $(jq -r .workFolder "$r/.runner") != "$agent_work" ]] || ! grep -Fxq "LAPLACE_BUILD=$agent_build" "$r/.env"; }; then
+    processes=$(ps -u "$user" -o args=)
+    if awk -v worker="$r/bin/Runner.Worker" '$1 == worker {found=1} END {exit !found}' <<<"$processes"; then
+      echo "Runner $repo has an active job; retry setup after it finishes" >&2; return 1
+    fi
+    unit=$(cat "$r/.service")
+    systemctl stop "$unit"
+    agent_move_storage "$d/work" "$agent_work"
+    agent_move_storage "$d/build" "$agent_build"
+    jq --arg work "$agent_work" '.workFolder=$work' "$r/.runner" > "$r/.runner.new"
+    chmod --reference="$r/.runner" "$r/.runner.new"
+    chown --reference="$r/.runner" "$r/.runner.new"
+    mv -f "$r/.runner.new" "$r/.runner"
+  fi
   # the directories: the agent's, the shared group's, group-writable, so the operator reads its logs and builds
-  install -d -o "$user" -g "$group" -m 2775 "$home" "$d" "$r" "$d/work" "$d/build"
+  install -d -o "$user" -g "$group" -m 2775 "$agent_home" "$d" "$r" "$LAPLACE_WORK/agents" "$LAPLACE_BUILD/agents" "$agent_work" "$agent_build"
   # the environment every job on this runner gets (the runner reads .env at its root): its own builds and work, the
   # machine's dependencies and data; its checkouts are the workspace, which the workflow names as LAPLACE_SRC.
   # Not the database: that is laplace.env's alone, so a job reads the one name every operator reads
   cat > "$r/.env" <<EOF
-LAPLACE_BUILD=$d/build
-LAPLACE_WORK=$d/work
+LAPLACE_BUILD=$agent_build
+LAPLACE_WORK=$agent_work
 LAPLACE_DEPSRC=$LAPLACE_DEPSRC
 LAPLACE_BLAKE3_DIR=$LAPLACE_BLAKE3_DIR
 LAPLACE_COREMATH=$LAPLACE_COREMATH
@@ -77,7 +111,7 @@ EOF
     lv=LAPLACE_AGENT_LABELS_$(echo "$repo" | tr - _); labels=$LAPLACE_AGENT_LABELS,$repo${!lv:+,${!lv}}
     # Cloud is a host target independently of an application's deployment tier.
     [[ $(hostname -s) != hart-cloud ]] || labels="$labels,cloud"
-    as_agent "cd $r && ./config.sh --unattended --url https://github.com/$owner/$repo --token $token --name $name --labels $labels --work $d/work --replace" >/dev/null
+    as_agent "cd $r && ./config.sh --unattended --url https://github.com/$owner/$repo --token $token --name $name --labels $labels --work $agent_work --replace" >/dev/null
     say "registration" "$name on $owner/$repo, labels $labels"
   else say "registration" "$(sed -n 's/.*"agentName": *"\([^"]*\)".*/\1/p' "$r/.runner") on $owner/$repo"; fi
   # its service
@@ -107,7 +141,7 @@ EOF
   esac
 }
 status(){ part status; local missing=0 r repo local_state remote wf
-  for repo in $LAPLACE_REPOS; do r=$home/$repo/runner
+  for repo in $LAPLACE_REPOS; do r=$agent_home/$repo/runner
     local_state=$( [ -f "$r/.runner" ] && (cd "$r" && ./svc.sh status 2>/dev/null | grep -o 'active ([a-z]*)' | head -1) || echo "not registered")
     remote=$(gh_op "api repos/$owner/$repo/actions/runners --jq '.runners[] | select(.name == \"$(hostname)-$repo\") | .status + \", busy \" + (.busy|tostring)'" 2>/dev/null || echo "not seen")
     say "$repo" "here: ${local_state:-stopped}   GitHub: ${remote:-not registered}"
@@ -129,14 +163,14 @@ selfhosted(){ local f c
   for f in $(gh_op "api repos/$owner/$1/contents/.github/workflows --jq '.[].path'" 2>/dev/null); do
     c=$(gh_op "api repos/$owner/$1/contents/$f --jq .content" 2>/dev/null | base64 -d 2>/dev/null) || true
     if grep -q 'runs-on:.*self-hosted' <<<"$c"; then basename "$f"; fi; done; }
-remove(){ repo=$1; part "remove $repo"; r=$home/$repo/runner
+remove(){ repo=$1; part "remove $repo"; r=$agent_home/$repo/runner
   [ -d "$r" ] || { say "$repo" "nothing here"; return; }
   ( cd "$r"; [ -f .service ] && { ./svc.sh stop >/dev/null 2>&1 || true; ./svc.sh uninstall >/dev/null 2>&1 || true; } )
   if [ -f "$r/.runner" ]; then
     token=$(gh_op "api -X POST repos/$owner/$repo/actions/runners/remove-token --jq .token" 2>/dev/null || true)
     [ -n "$token" ] && as_agent "cd $r && ./config.sh remove --token $token" >/dev/null && say "registration" "removed from $owner/$repo" || say "registration" "could not unregister: remove $(hostname)-$repo on GitHub"
   fi
-  rm -rf "${home:?}/${repo:?}"; say "$repo" "removed"
+  rm -rf "${agent_home:?}/${repo:?}" "${LAPLACE_WORK:?}/agents/${repo:?}" "${LAPLACE_BUILD:?}/agents/${repo:?}"; say "$repo" "removed"
 }
 
 case ${1:-all} in
