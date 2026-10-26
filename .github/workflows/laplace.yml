@@ -1,4 +1,4 @@
-# Laplace-Operations on its runner: hart-server, the deployment target every merge to main deploys to — the developer's
+# Laplace-Operations on its runner: hart-server, the deployment target every merge to main deploys to â€” the developer's
 # staging deployment rehearsal. Run on a push to this repository's main, and on a repository_dispatch
 # (main-merged) that Laplace-Native, Laplace-postgres and Laplace-Engine send when their own CI passes on main, so the
 # machine is deployed with every repository at its main. The jobs, on the one runner, one deployment at a time:
@@ -20,6 +20,13 @@ name: Laplace-Operations
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/**'
+      - '**/*.md'
+      - 'tests/**'
+      - 'audit/**'
+      - 'verify-admitted-data.py'
+      - 'sql/verify-admitted-data.sql'
   repository_dispatch:
     types: [main-merged]
   workflow_dispatch:

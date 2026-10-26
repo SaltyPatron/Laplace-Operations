@@ -1,18 +1,12 @@
-# The workspace's code, read again after every deployment (Laplace-Engine#61): once a Laplace-Operations run on main has
-# deployed hart-server, the Laplace repositories at their main are read into the database as the workspace-code source,
+# Explicit workspace indexing (Laplace-Engine#61): the Laplace repositories at their main are read into the database as the workspace-code source,
 # so what Laplace-MCP's code_where and file_outline answer from is the code as it is now. It builds nothing: the
 # program, the recipes and the database are the ones the deployment left (ingest.yml's rule); only the repositories
 # read are checked out, each at its main, under one directory that stays where it is from run to run, so a file's
 # pathname is the same in every reading. workspace-code says `supersede` (a working tree, not an edition): each whole
-# reading replaces the one before it, and a file changed or removed since leaves nothing behind. A deployment still
-# never ingests (laplace.yml); this is the one source read after it, the workspace, and no other.
-# It shares the deployment's concurrency group: it queues behind a deployment or an ingest, never beside one.
+# reading replaces the one before it, and a file changed or removed since leaves nothing behind.
+# It shares the deployment's concurrency group. Ordinary deployments do not start a corpus reading.
 name: Laplace-Workspace-Code
 on:
-  workflow_run:
-    workflows: [Laplace-Operations]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 concurrency:
   group: hart-server-laplace
@@ -25,7 +19,6 @@ permissions:
   contents: read
 jobs:
   workspace-code:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 360
     steps:
