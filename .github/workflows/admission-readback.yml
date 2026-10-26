@@ -1,0 +1,46 @@
+name: Laplace Admission Readback
+on:
+  workflow_run:
+    workflows: [Laplace-Ingest, Laplace-Workspace-Code]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: laplace-admission-readback-hart-server
+  cancel-in-progress: false
+  queue: max
+jobs:
+  readback:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
+    timeout-minutes: 60
+    env:
+      LAPLACE_CONNINFO: ""
+      LAPLACE_HOST_LOCK_WAIT_SECONDS: wait
+      LAPLACE_AUDIT_TRIGGER_RUN: ${{ github.event.workflow_run.id || github.run_id }}
+    steps:
+      - name: Check out the auditor from main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: main
+          persist-credentials: false
+          path: Laplace-Operations
+          clean: false
+      - name: Read the installed caches and the complete admitted DAG
+        run: |
+          set -euo pipefail
+          . Laplace-Operations/laplace.env
+          . Laplace-Operations/operation-lock.sh
+          laplace_host_lock shared
+          LAPLACE_AUDITOR_REVISION=$(git -C Laplace-Operations rev-parse HEAD)
+          export LAPLACE_AUDITOR_REVISION
+          python3 Laplace-Operations/verify-admitted-data.py --output "$RUNNER_TEMP/admitted-data"
+      - name: Retain the exact counts, invariant results and Native cache proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admitted-data-${{ github.run_id }}
+          path: ${{ runner.temp }}/admitted-data/
+          if-no-files-found: warn
