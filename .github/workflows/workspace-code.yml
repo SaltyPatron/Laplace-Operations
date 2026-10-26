@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
   queue: max
 env:
-  LAPLACE_HOST_LOCK_WAIT_SECONDS: ${{ vars.LAPLACE_HOST_LOCK_WAIT_SECONDS || '3600' }}
+  LAPLACE_HOST_LOCK_WAIT_SECONDS: ${{ vars.LAPLACE_HOST_LOCK_WAIT_SECONDS || 'wait' }}
   LAPLACE_CONNINFO: ""   # the database is laplace.env's
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
   workspace-code:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
-    timeout-minutes: 120
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with: { persist-credentials: false, path: Laplace-Operations, clean: false }
