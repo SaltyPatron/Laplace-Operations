@@ -83,8 +83,11 @@ def selected(configuration):
 
 def process_environment(environment):
     # The named client controls selection; do not inherit another implementation's
-    # LAPLACE_* values from a developer shell. libpq uses the human's own credential store.
-    inherited = {k: v for k, v in os.environ.items() if not k.startswith('LAPLACE_')}
+    # LAPLACE_* values from a developer shell. MCP code-search settings are scoped
+    # to that feature and must reach the installed server. libpq uses the human's
+    # own credential store.
+    inherited = {k: v for k, v in os.environ.items()
+                 if not k.startswith('LAPLACE_') or k.startswith('LAPLACE_CODE_')}
     if environment.get('LAPLACE_DATABASE_AUTHENTICATION') == 'sspi':
         inherited = {k: v for k, v in inherited.items() if not k.upper().startswith('PG')}
     # Intel's explicit affinity selection takes precedence; do not also request

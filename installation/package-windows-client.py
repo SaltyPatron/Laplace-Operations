@@ -10,12 +10,13 @@ import shutil
 import socket
 import subprocess
 import tempfile
+import windows_extension
 
 STAGING = []
 
 
-def run(argv):
-    result = subprocess.run(list(map(str, argv)), capture_output=True, text=True)
+def run(argv, environment=None):
+    result = subprocess.run(list(map(str, argv)), capture_output=True, text=True, env=environment)
     if result.returncode:
         raise RuntimeError(f'{Path(argv[0]).name} failed: {result.stderr or result.stdout}')
     return result.stdout.strip()
@@ -27,6 +28,32 @@ def digest(path):
         for block in iter(lambda: stream.read(1024 * 1024), b''):
             value.update(block)
     return value.hexdigest()
+
+
+def prepare_resources(config, destination):
+    """Use this release's Native generators and the declared local inputs."""
+    unicode = Path(config['ucd']) / 'Public/UCD/latest'
+    if not unicode.is_dir():
+        raise ValueError('Declared local Unicode release is missing: ' + str(unicode))
+    destination.mkdir(parents=True)
+    environment = dict(os.environ, LAPLACE_MANIFEST=str(Path(config['native']) / 'manifest'),
+                       LAPLACE_RECIPES=str(Path(config['engine']) / 'recipes'),
+                       LAPLACE_TIER0=str(destination / 'tier0.bin'),
+                       LAPLACE_FLAGS=str(destination / 'tier0.flags'),
+                       LAPLACE_HIGHWAY=str(destination / 'tier0.highway'))
+    engine = Path(config['build']) / 'laplace.exe'
+    fingerprints = {}
+    for operation, filename in [('tier0', 'tier0.bin'), ('flags', 'tier0.flags'), ('highway', 'tier0.highway')]:
+        arguments = [engine, operation, '-o', destination / filename]
+        if operation != 'highway':
+            arguments.extend(['-u', unicode])
+        output = run(arguments, environment)
+        print(output)
+        match = re.search(r'fingerprint[^\n]*\b([a-f0-9]{64})\b', output, re.I)
+        if not match:
+            raise ValueError('Native generator did not identify its artifact: ' + operation)
+        fingerprints[operation] = match.group(1).lower()
+    return fingerprints
 
 
 def closure(root, directories):
@@ -64,11 +91,17 @@ def main():
     operator_sid = config['operator_client'].get('windows_sid', '')
     if not re.fullmatch(r'S-1-[0-9-]+', operator_sid):
         raise ValueError('Declare the Windows operator SID that reads the installed client')
-    for key in ('prefix', 'build', 'engine', 'native', 'prepared', 'grammars', 'ucd', 'installed_config'):
+    for key in ('prefix', 'build', 'engine', 'native', 'grammars', 'ucd', 'installed_config'):
         path = Path(config[key])
         if not path.is_absolute() or '..' in path.parts:
             raise ValueError('Declare an absolute path for ' + key)
     has_mcp = bool(config.get('mcp') and config.get('mcp_build'))
+    local_database = config['socket'].lower() == socket.gethostname().split('.')[0].lower()
+    if local_database:
+        for key in ('postgres', 'postgres_build', 'postgres_prefix'):
+            path = Path(config[key])
+            if not path.is_absolute() or '..' in path.parts:
+                raise ValueError('Declare an absolute path for ' + key)
     if has_mcp:
         for key in ('mcp', 'mcp_build'):
             path = Path(config[key])
@@ -76,6 +109,8 @@ def main():
                 raise ValueError('Declare an absolute path for ' + key)
     revisions = {}
     repo_sources = [('Laplace-Engine', 'engine'), ('Laplace-Native', 'native')]
+    if local_database:
+        repo_sources.append(('Laplace-postgres', 'postgres'))
     if has_mcp:
         repo_sources.append(('Laplace-MCP', 'mcp'))
     for name, key in repo_sources:
@@ -86,6 +121,12 @@ def main():
             revisions[name] = head + '-dirty-' + hashlib.sha256(diff_bytes).hexdigest()[:12]
         else:
             revisions[name] = head
+    operations = Path(__file__).resolve().parent.parent
+    operations_head = run(['git', '-C', operations, 'rev-parse', 'HEAD'])
+    operations_diff = subprocess.run(['git', '-C', str(operations), 'diff', 'HEAD'],
+                                    capture_output=True, check=True).stdout
+    revisions['Laplace-Operations'] = (operations_head + '-dirty-' +
+        hashlib.sha256(operations_diff).hexdigest()[:12]) if operations_diff else operations_head
     cache = (Path(config['build']) / 'CMakeCache.txt').read_text()
     for variable, key in (('CMAKE_HOME_DIRECTORY', 'engine'), ('LAPLACE_NATIVE', 'native')):
         selected = re.search(r'^' + variable + r':[^=]+=(.+)$', cache, re.M)
@@ -125,7 +166,9 @@ def main():
         shutil.copy2(Path(config['mcp_build']) / 'lpm.dll', candidate / 'bin/lpm.dll')
     shutil.copytree(Path(config['engine']) / 'recipes', candidate / 'share/recipes')
     shutil.copytree(Path(config['engine']) / 'firmware', candidate / 'share/firmware')
-    shutil.copytree(config['prepared'], candidate / 'share/prepared')
+    fingerprints = prepare_resources(config, candidate / 'share/prepared')
+    if local_database:
+        windows_extension.prepare(config, candidate, run)
     grammar_source = Path(config['grammars'])
     definitions = Path(config['engine']) / 'recipes/formats/grammars'
     if definitions.is_dir():
@@ -150,6 +193,8 @@ def main():
     files = {str(path.relative_to(candidate)).replace('\\', '/'): digest(path)
              for path in sorted(candidate.rglob('*')) if path.is_file()}
     components = ['Laplace-Engine']
+    if local_database:
+        components.append('Laplace-postgres')
     if has_mcp:
         components.append('Laplace-MCP')
     package = {'schema': 'laplace.modular-package/v1', 'platform': 'windows-x86_64',
@@ -197,9 +242,13 @@ def main():
         executable, environment, _ = client.selected(client_candidate)
         environment = client.process_environment(environment)
         environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')
-        operations = [['text', 'Laplace'], ['status']]
-        if config['socket'].lower() == socket.gethostname().split('.')[0].lower():
-            operations = [['text', 'Laplace'], ['deploy'], ['status']]
+        result = subprocess.run([str(executable), 'text', 'Laplace'], capture_output=True,
+                                text=True, env=environment, timeout=120)
+        if result.returncode:
+            raise ValueError('Packaged Engine text failed: ' + result.stderr)
+        if local_database:
+            windows_extension.install(config, release / 'share/postgres', environment, fingerprints, run)
+        operations = [['status']]
         for operation in operations:
             result = subprocess.run([str(executable), *operation], capture_output=True, text=True, env=environment, timeout=120)
             if result.returncode:
