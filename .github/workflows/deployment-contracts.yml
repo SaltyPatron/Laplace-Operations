@@ -99,6 +99,7 @@ jobs:
           python3 tests/host-repair.py
           python3 tests/runtime-owner.py
           python3 tests/modular-installation.py
+          python3 tests/client-environment.py
           pwsh -NoProfile -File tests/deployment-artifacts.ps1
       - name: Verify acceptance result failure boundaries
         shell: pwsh
