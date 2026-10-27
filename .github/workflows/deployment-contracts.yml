@@ -1,6 +1,9 @@
 name: Deployment failure boundaries
 on:
+  push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -26,6 +29,8 @@ jobs:
       - name: Verify acceptance result failure boundaries
         shell: pwsh
         run: pwsh -NoProfile -File tests/acceptance-runner.ps1
+      - name: Verify installed modular client input and cache selection
+        run: python tests/modular-client.py
       - name: Verify PostgreSQL installer service and recovery boundaries
         shell: pwsh
         run: pwsh -NoProfile -File tests/postgres-service-repair.ps1
