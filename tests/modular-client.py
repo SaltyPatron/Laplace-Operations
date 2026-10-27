@@ -72,6 +72,19 @@ class ClientInputs(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'input root must be absolute'):
                     self.select()
 
+    def test_package_caches_do_not_depend_on_build_sidecars(self):
+        spec = importlib.util.spec_from_file_location('package', ROOT / 'installation/package-windows-client.py')
+        package = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(package)
+        source, destination = self.root / 'prepared', self.root / 'packaged'
+        source.mkdir()
+        for name in ('tier0.bin', 'tier0.flags', 'tier0.highway', 'tier0.highway.nodes'):
+            (source / name).write_bytes(name.encode())
+        package.copy_prepared(source, destination)
+        self.assertEqual({p.name for p in destination.iterdir()}, {'tier0.bin', 'tier0.flags', 'tier0.highway'})
+        for file in destination.iterdir():
+            self.assertEqual(file.read_bytes(), (source / file.name).read_bytes())
+
 
 if __name__ == '__main__':
     unittest.main()

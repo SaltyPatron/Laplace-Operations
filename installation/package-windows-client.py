@@ -14,6 +14,14 @@ import tempfile
 STAGING = []
 
 
+def copy_prepared(source, destination):
+    # Runtime caches are self-contained. Build diagnostics and identifier dumps
+    # beside them are not package dependencies.
+    destination.mkdir(parents=True)
+    for name in ('tier0.bin', 'tier0.flags', 'tier0.highway'):
+        shutil.copy2(source / name, destination / name)
+
+
 def run(argv):
     result = subprocess.run(list(map(str, argv)), capture_output=True, text=True)
     if result.returncode:
@@ -125,7 +133,7 @@ def main():
         shutil.copy2(Path(config['mcp_build']) / 'lpm.dll', candidate / 'bin/lpm.dll')
     shutil.copytree(Path(config['engine']) / 'recipes', candidate / 'share/recipes')
     shutil.copytree(Path(config['engine']) / 'firmware', candidate / 'share/firmware')
-    shutil.copytree(config['prepared'], candidate / 'share/prepared')
+    copy_prepared(Path(config['prepared']), candidate / 'share/prepared')
     grammar_source = Path(config['grammars'])
     definitions = Path(config['engine']) / 'recipes/formats/grammars'
     if definitions.is_dir():
