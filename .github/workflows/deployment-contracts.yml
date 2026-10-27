@@ -56,7 +56,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: SaltyPatron/Laplace
-          ref: 6c79139a78b4aa41f1ea7dfaec014e3e5d526942
+          ref: b52d6438949c71b0beb800cb0a4881b390fa4092
           path: .acceptance/laplace
           persist-credentials: false
       - name: Verify application component dependency and immutable-storage integration
