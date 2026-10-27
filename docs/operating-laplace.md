@@ -54,6 +54,7 @@ laplace-ops deploy desktop -Components web
 laplace-ops deploy desktop -Components api,cli
 laplace-ops deploy desktop -Components modular
 laplace-ops deploy desktop -Components uci -Force
+laplace-ops deploy desktop -Package 'E:\path\to\verified-package'
 ```
 
 The default `all` selects both implementation stacks. API selection includes its generated web
@@ -64,6 +65,9 @@ closure; normal commands reuse matching artifacts. `prepare` remains the explici
 The shared local artifact store deduplicates identical runtime, grammar and cache files; immutable
 package hardlinks have independent lifetimes and never point through another release directory.
 Receipts record the selected components and their individual build/reuse decisions.
+`-Package` activates an already composed, hash-verified application closure without
+requiring a compiler toolchain, rebuilding, installing extensions or running migrations.
+Database migration remains a separate operator action when a package requires it.
 
 Windows grammar generation is a declared external dependency. `./setup.ps1 tree-sitter`
 builds the CLI from the same pinned checkout as the Engine's Tree-sitter runtime;

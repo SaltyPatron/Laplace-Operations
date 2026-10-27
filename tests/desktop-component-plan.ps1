@@ -1,9 +1,10 @@
 $ErrorActionPreference='Stop'
 $env:COMPUTERNAME='HART-DESKTOP'
 $entry=Join-Path $PSScriptRoot '../laplace.ps1'
-function Plan([string]$Components,[switch]$Force){
+function Plan([string]$Components,[switch]$Force,[string]$Package){
     $args=@('-NoProfile','-File',$entry,'deploy','desktop','-Components',$Components,'-Plan')
     if($Force){$args+='-Force'}
+    if($Package){$args+=@('-Package',$Package)}
     $lines=@(& pwsh @args 2>&1)
     if($LASTEXITCODE){throw ($lines -join "`n")}
     $lines -join "`n"
@@ -23,5 +24,9 @@ if($modular -notmatch 'install-windows-client.*-Force' -or $modular -match 'Buil
 $all=Plan all
 if($all -notmatch 'tune-pg' -or $all -notmatch 'install-windows-client' -or $all -notmatch 'Build-IisPackage'){
     throw 'Full delivery lost a component owner.'
+}
+$prepared=Plan all -Package (Join-Path ([IO.Path]::GetTempPath()) 'prepared-package')
+if($prepared -notmatch 'Publish-IisRuntime.ps1' -or $prepared -match 'Build-IisPackage|tune-pg|install-windows-client'){
+    throw 'Prepared package activation selected a build or an unrelated installation.'
 }
 'Desktop component selection: web, API/CLI dependencies, isolated modular force and full delivery passed.'

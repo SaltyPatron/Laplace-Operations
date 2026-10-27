@@ -3,7 +3,7 @@
    workflow converges tuning on the existing installation and records every delivery stage. #>
 [CmdletBinding()]
 param([string]$SourcePath, [string]$ModularInstallation, [switch]$Plan,
-    [string]$Components='all',[switch]$Force)
+    [string]$Components='all',[switch]$Force,[string]$Package)
 $ErrorActionPreference = 'Stop'
 $operations = Split-Path -Parent $PSScriptRoot
 . "$operations/laplace.env.ps1"
@@ -12,6 +12,11 @@ $installation = $env:LAPLACE_IIS_INSTALLATION
 . "$PSScriptRoot/desktop-clients.ps1"
 if (-not $ModularInstallation) { $ModularInstallation=Join-Path $PSScriptRoot ($env:COMPUTERNAME.ToLowerInvariant()+'-modular-client.json') }
 $selected=[Collections.Generic.HashSet[string]]::new([string[]]$Components.Split(','),[StringComparer]::Ordinal)
+if($Package){
+    if($Components -ne 'all' -or $Force){throw 'A prepared package is already composed; do not combine -Package with -Components or -Force.'}
+    $Package=[IO.Path]::GetFullPath($Package)
+    $selected=[Collections.Generic.HashSet[string]]::new([string[]]@('api','cli','uci','web'),[StringComparer]::Ordinal)
+}
 $valid=@('all','modular','native','postgres','api','cli','uci','migrations','web')
 if(@($selected | Where-Object {$_ -notin $valid}).Count){throw "Unknown component selection: $Components"}
 if($selected.Contains('all')){foreach($name in $valid | Where-Object {$_ -ne 'all'}){$null=$selected.Add($name)};$null=$selected.Remove('all')}
@@ -28,9 +33,13 @@ if($selected.Contains('modular')){
     $steps+=@{name='Package modular Native, Engine and MCP; update installed client';script="$PSScriptRoot/install-windows-client.ps1";arguments=$arguments}
 }
 if($mono.Count){
-    $arguments=@('-Publish','-ComponentSelection',($mono -join ','))
-    if($Force){$arguments+='-Force'}
-    $steps+=@{name='Build selected components, compose and activate IIS';script="$source/deploy/windows/Build-IisPackage.ps1";arguments=$arguments;component_receipt=$true}
+    if($Package){
+        $steps+=@{name='Activate verified prepared IIS package';script="$source/deploy/windows/Publish-IisRuntime.ps1";arguments=@('-Package',$Package)}
+    }else{
+        $arguments=@('-Publish','-ComponentSelection',($mono -join ','))
+        if($Force){$arguments+='-Force'}
+        $steps+=@{name='Build selected components, compose and activate IIS';script="$source/deploy/windows/Build-IisPackage.ps1";arguments=$arguments;component_receipt=$true}
+    }
 }
 $steps+=@{name='Verify selected installed components';script="$PSScriptRoot/Verify-DesktopDatabases.ps1";arguments=@('-ModularInstallation',$ModularInstallation,'-Scope',$scope)}
 Write-Host 'Laplace desktop deployment' -ForegroundColor Cyan
@@ -72,10 +81,16 @@ try {
     $revision = & git -c "safe.directory=$source" -C $source rev-parse HEAD
     if ($LASTEXITCODE) { throw 'Cannot identify the application source revision.' }
     $result.source_revision = "$revision".Trim()
+    if($Package){
+        $manifest=Test-IisPackage $Package
+        $result.controller_revision=$result.source_revision
+        $result.source_revision=$manifest.source_revision
+        $result.prepared_package=$Package
+    }
     $dirty = @(& git -c "safe.directory=$source" -C $source status --porcelain --untracked-files=no)
     if ($LASTEXITCODE) { throw 'Cannot inspect application source changes.' }
     $result.modified_source = $dirty
-    if ($dirty.Count) { Write-Host "Including $($dirty.Count) modified tracked files; the published package will have its own content hash." -ForegroundColor Yellow }
+    if ($dirty.Count -and -not $Package) { Write-Host "Including $($dirty.Count) modified tracked files; the published package will have its own content hash." -ForegroundColor Yellow }
     }else{
         $result.installation=$modular.prefix
         $result.operations_revision=(& git -C $operations rev-parse HEAD).Trim()
@@ -83,11 +98,13 @@ try {
 
     # Load the declared toolchain rather than reconstructing a developer PATH.
     $developerShell = if ($env:LAPLACE_DEVSHELL) { $env:LAPLACE_DEVSHELL } else { "$operations/toolchain/windows/devshell.ps1" }
-    . $developerShell
+    if(-not $Package){. $developerShell}
     $tools=@('pwsh','git')
-    if($selected.Contains('modular') -or @($mono | Where-Object {$_ -ne 'web'}).Count){$tools+=@('cmake','ninja','icx')}
-    if(@($mono | Where-Object {$_ -in @('api','cli','uci','migrations')}).Count){$tools+='dotnet'}
-    if($selected.Contains('web')){$tools+=@('node','npm')}
+    if(-not $Package){
+        if($selected.Contains('modular') -or @($mono | Where-Object {$_ -ne 'web'}).Count){$tools+=@('cmake','ninja','icx')}
+        if(@($mono | Where-Object {$_ -in @('api','cli','uci','migrations')}).Count){$tools+='dotnet'}
+        if($selected.Contains('web')){$tools+=@('node','npm')}
+    }
     $missing = @($tools | Select-Object -Unique | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) })
     if ($missing.Count) {
         throw "Developer setup is incomplete: $($missing -join ', '). Use setup.ps1 packages report; laplace-ops prepare owns locked development inputs."

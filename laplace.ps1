@@ -27,6 +27,7 @@ param(
     [switch]$Wait,
     [switch]$Plan,
     [string]$Components='all',
+    [string]$Package,
     [switch]$Force,
     [switch]$Json,
     [ValidateSet('status','verify')][string]$ClientOperation = 'status',
@@ -90,6 +91,7 @@ LOCAL DESKTOP IIS & DATABASE MAINTENANCE (https://dev.hartonomous.com)
   laplace-ops deploy desktop -Components web       Update only the web component
   laplace-ops deploy desktop -Components api,cli   Update API/web and CLI; reuse other components
   laplace-ops deploy desktop -Force                Explicitly rebuild selected components
+  laplace-ops deploy desktop -Package <directory>  Activate a verified prepared IIS package without a build
   laplace-ops restart-iis             Cleanly recycle the local IIS site (app_offline.htm) and check /health
   laplace-ops repair-postgres         Repair the local PostgreSQL runtime and service; verify its original cluster
   laplace-ops repair-postgres -Plan   Inspect that repair without changing the host
@@ -141,6 +143,7 @@ if (-not $PSBoundParameters.ContainsKey('Target')) {
 if(($PSBoundParameters.ContainsKey('Components') -or $Force) -and -not($Target -eq 'desktop' -and $Operation -in @('deploy','build'))){
     throw '-Components and -Force select desktop build/deployment components; no operation was run.'
 }
+if($Package -and -not($Target -eq 'desktop' -and $Operation -eq 'deploy')){throw '-Package selects a prepared desktop deployment; no operation was run.'}
 if ($Plan -and -not ($Operation -in 'deploy','repair-postgres' -and $Target -eq 'desktop')) {
     throw '-Plan is supported by deploy and repair-postgres on desktop; no operation was run.'
 }
@@ -289,7 +292,7 @@ if ($Operation -eq 'restart-iis') {
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'deploy' -and $Target -eq 'desktop') {
-    & pwsh -NoProfile -File "$PSScriptRoot/installation/Deploy-Desktop.ps1" -SourcePath $SourcePath -ModularInstallation $Installation -Plan:$Plan -Components $Components -Force:$Force
+    & pwsh -NoProfile -File "$PSScriptRoot/installation/Deploy-Desktop.ps1" -SourcePath $SourcePath -ModularInstallation $Installation -Plan:$Plan -Components $Components -Force:$Force -Package $Package
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'components' -and $Target -eq 'desktop') {

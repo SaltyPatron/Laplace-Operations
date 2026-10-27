@@ -41,6 +41,12 @@ def run(argv):
     return result.stdout.strip()
 
 
+def build_run(argv):
+    # Build owners stream their own progress. Capturing an entire grammar build
+    # hid minutes of work from the operator and discarded its useful live state.
+    subprocess.run(list(map(str, argv)), check=True)
+
+
 def digest(path):
     value = hashlib.sha256()
     with path.open('rb') as stream:
@@ -170,24 +176,24 @@ def main():
         if not selected or Path(selected.group(1).strip()).resolve() != Path(config[key]).resolve():
             raise ValueError('Configured build does not use the declared source: ' + variable)
     clean = ['--clean-first'] if args.force else []
-    run(['cmake', '--build', config['build'], *clean, '--target', 'laplace_engine'])
+    build_run(['cmake', '--build', config['build'], *clean, '--target', 'laplace_engine'])
     if has_mcp:
         mcp_build = Path(config['mcp_build'])
         cache_file = mcp_build / 'CMakeCache.txt'
         if cache_file.is_file() and 'CMAKE_RUNTIME_OUTPUT_DIRECTORY' in cache_file.read_text():
-            run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-UCMAKE_RUNTIME_OUTPUT_DIRECTORY'])
+            build_run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-UCMAKE_RUNTIME_OUTPUT_DIRECTORY'])
         if not cache_file.is_file():
             toolchain = Path(__file__).resolve().parent.parent / 'toolchain/laplace.cmake'
-            run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-G', 'Ninja',
+            build_run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-G', 'Ninja',
                  f'-DCMAKE_TOOLCHAIN_FILE={toolchain}', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'])
-        run(['cmake', '--build', str(mcp_build), *clean, '--target', 'lpm_program', 'lpm_lib'])
+        build_run(['cmake', '--build', str(mcp_build), *clean, '--target', 'lpm_program', 'lpm_lib'])
     grammar_source = Path(config['grammars'])
     definitions = Path(config['engine']) / 'recipes/formats/grammars'
     if definitions.is_dir():
         builder = Path(__file__).resolve().parent / 'build-grammars.ps1'
-        print(run(['pwsh', '-NoProfile', '-File', str(builder), '-Source', str(definitions),
+        build_run(['pwsh', '-NoProfile', '-File', str(builder), '-Source', str(definitions),
                    '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['build']) / 'grammars'),
-                   *(['-Force'] if args.force else [])]), flush=True)
+                   *(['-Force'] if args.force else [])])
     reusable = reusable_release(config, revisions) if not args.force else None
     if reusable is not None:
         print(json.dumps({'release': str(reusable), 'reused': True, 'copied': 0,
