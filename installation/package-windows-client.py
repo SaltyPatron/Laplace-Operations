@@ -219,7 +219,8 @@ def main():
                 raise ValueError('Installed tier 0 and highway do not agree with the selected database: ' + result.stdout)
         # The candidate MCP must initialize and execute a native tool before
         # changing the installed selection used by future client connections.
-        client.verify_mcp(executable, environment)
+        if has_mcp:
+            client.verify_mcp(executable, environment)
         os.replace(pending, destination)
     finally:
         client_candidate.unlink(missing_ok=True)

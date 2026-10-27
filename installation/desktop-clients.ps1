@@ -65,7 +65,7 @@ function Get-DesktopClientState {
     [ordered]@{schema='laplace.desktop-clients/v1';checked_utc=[DateTime]::UtcNow.ToString('o');host=$Declaration.host;
         status=$status;selected_release=$selected;revisions=$package.revisions;processes=$running;
         stale_count=$stale.Count;unobservable_pids=$unobservable;releases=@($retention);
-        reconnect_policy='Reconnect each reported MCP client to launch the selected release; active stdio sessions remain pinned. Run laplace-ops clients verify afterward. No client application is terminated.'}
+        reconnect_policy='Reconnect each reported MCP client to launch the selected release; active stdio sessions remain pinned. Let older native commands finish. Run laplace-ops clients verify afterward. No client application is terminated.'}
 }
 
 function Write-DesktopClientState($State) {
