@@ -78,10 +78,10 @@ class ClientInputs(unittest.TestCase):
         spec.loader.exec_module(package)
         source, destination = self.root / 'prepared', self.root / 'packaged'
         source.mkdir()
-        for name in ('tier0.bin', 'tier0.flags', 'tier0.highway', 'tier0.highway.nodes'):
+        for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway', 'tier0.highway.nodes'):
             (source / name).write_bytes(name.encode())
         package.copy_prepared(source, destination)
-        self.assertEqual({p.name for p in destination.iterdir()}, {'tier0.bin', 'tier0.flags', 'tier0.highway'})
+        self.assertEqual({p.name for p in destination.iterdir()}, {'tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway'})
         for file in destination.iterdir():
             self.assertEqual(file.read_bytes(), (source / file.name).read_bytes())
 

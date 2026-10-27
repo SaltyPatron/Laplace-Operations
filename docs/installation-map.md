@@ -49,6 +49,9 @@ and `LAPLACE_MODELS` to the Engine and reports them under `inputs` in `--where`.
 commands do not require dot-sourcing a developer shell. A missing model directory is an
 absent source, not an instruction to download models. Use `ingest --plan <source>` before
 loading; a plan that names an absent source still reports failure.
+`installation/install-windows-client.ps1 -Installation <host-declaration> -SkipPackage`
+reinstalls the command against the existing package, validating Native composition and
+both database artifact fingerprints before replacing the launcher.
 
 The modular CLI is not a replacement for all `laplace-mono` capabilities. In particular,
 checkpoint testimony (`laplace model`) does not replace Foundry synthesis/export. The

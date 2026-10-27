@@ -15,10 +15,10 @@ STAGING = []
 
 
 def copy_prepared(source, destination):
-    # Runtime caches are self-contained. Build diagnostics and identifier dumps
-    # beside them are not package dependencies.
+    # Flags need their property layout. Highway identifier dumps and other
+    # build diagnostics beside the caches are not runtime dependencies.
     destination.mkdir(parents=True)
-    for name in ('tier0.bin', 'tier0.flags', 'tier0.highway'):
+    for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway'):
         shutil.copy2(source / name, destination / name)
 
 
@@ -198,6 +198,7 @@ def main():
     profile = {'schema': 'laplace.modular-client/v1', 'installation': str(pending),
                'role': config['operator_client']['role'], 'data': config['operator_client']['data'],
                'work': config['operator_client']['work'], 'connection': config['operator_client']['connection']}
+    profile.update({key: config['operator_client'][key] for key in ('source', 'models') if key in config['operator_client']})
     import client
     client_candidate = pending.with_suffix('.client')
     client_candidate.write_text(json.dumps(profile))
@@ -205,13 +206,15 @@ def main():
         executable, environment, _ = client.selected(client_candidate)
         environment = client.process_environment(environment)
         environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')
-        operations = [['text', 'Laplace'], ['status']]
+        operations = [['text', 'Laplace'], ['status'], ['sources']]
         if config['socket'].lower() == socket.gethostname().split('.')[0].lower():
-            operations = [['text', 'Laplace'], ['deploy'], ['status']]
+            operations = [['text', 'Laplace'], ['deploy'], ['status'], ['sources']]
         for operation in operations:
             result = subprocess.run([str(executable), *operation], capture_output=True, text=True, env=environment, timeout=120)
             if result.returncode:
                 raise ValueError('Packaged Engine ' + operation[0] + ' failed: ' + result.stderr)
+            if operation == ['sources'] and result.stderr.strip():
+                raise ValueError('Packaged recipe resources failed: ' + result.stderr)
             if operation == ['status'] and result.stdout.count("the same as this engine's") != 2:
                 raise ValueError('Installed tier 0 and highway do not agree with the selected database: ' + result.stdout)
         os.replace(pending, destination)

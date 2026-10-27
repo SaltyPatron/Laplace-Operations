@@ -1,5 +1,5 @@
 #Requires -Version 7
-param([Parameter(Mandatory)][string]$Installation)
+param([Parameter(Mandatory)][string]$Installation, [switch]$SkipPackage)
 $ErrorActionPreference = 'Stop'
 $declaration = [IO.Path]::GetFullPath($Installation)
 $config = [IO.File]::ReadAllText($declaration) | ConvertFrom-Json
@@ -7,8 +7,10 @@ if ($config.host -ne $env:COMPUTERNAME) { throw 'The modular client declaration 
 . "$PSScriptRoot/../toolchain/windows/devshell.ps1"
 $python = & python -c 'import sys; print(sys.executable)'
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw 'The configured toolchain must provide an installed Python interpreter.' }
-& $python "$PSScriptRoot/package-windows-client.py" --installation $declaration
-if ($LASTEXITCODE -ne 0) { throw 'Modular client packaging failed; command selection was not changed.' }
+if (-not $SkipPackage) {
+    & $python "$PSScriptRoot/package-windows-client.py" --installation $declaration
+    if ($LASTEXITCODE -ne 0) { throw 'Modular client packaging failed; command selection was not changed.' }
+}
 $client = $config.operator_client
 New-Item -ItemType Directory -Path $client.work -Force | Out-Null
 $connection = Join-Path $client.work ('.connection-' + [guid]::NewGuid().ToString('N') + '.json')
@@ -20,7 +22,10 @@ try {
     $inputArgs = @()
     foreach ($root in @(@{Key='source'; Variable='LAPLACE_SRC'}, @{Key='models'; Variable='LAPLACE_MODELS'})) {
         $value = if ($client.($root.Key)) { $client.($root.Key) } else { [Environment]::GetEnvironmentVariable($root.Variable) }
-        if ($value) { $inputArgs += @('--' + $root.Key, $value) }
+        if ($value) {
+            $inputArgs += ('--' + $root.Key)
+            $inputArgs += [string]$value
+        }
     }
     & $python "$PSScriptRoot/install-client.py" --installation $config.installed_config --role $client.role `
         --work $client.work --data $client.data --configuration $client.configuration --command $command --connection $connection @inputArgs

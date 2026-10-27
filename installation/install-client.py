@@ -47,11 +47,13 @@ def main():
     try:
         executable, environment, _ = client.selected(candidate)
         # Native composition and selected-database readback precede command replacement.
-        for operation in (['text', 'Laplace'], ['status']):
+        for operation in (['text', 'Laplace'], ['status'], ['sources']):
             verification = subprocess.run([str(executable), *operation],
                                           env=client.process_environment(environment), capture_output=True, text=True, timeout=60)
             if verification.returncode:
                 raise ValueError('Installed modular Engine ' + operation[0] + ' failed: ' + verification.stderr.strip())
+            if operation == ['sources'] and verification.stderr.strip():
+                raise ValueError('Installed recipe resources failed: ' + verification.stderr.strip())
             if operation == ['status'] and verification.stdout.count("the same as this engine's") != 2:
                 raise ValueError('Installed modular database must match both Engine artifact fingerprints: ' + verification.stdout.strip())
         if args.configuration.exists() and json.loads(args.configuration.read_text()).get('schema') != profile['schema']:
