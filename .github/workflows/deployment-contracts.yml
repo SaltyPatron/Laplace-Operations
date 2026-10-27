@@ -56,9 +56,13 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: SaltyPatron/Laplace
-          ref: 3943f4fc6edae0c7fa2eb35c24eadc80d675b238
+          ref: 6c79139a78b4aa41f1ea7dfaec014e3e5d526942
           path: .acceptance/laplace
           persist-credentials: false
+      - name: Verify application component dependency and immutable-storage integration
+        env:
+          LAPLACE_OPERATIONS: ${{ github.workspace }}
+        run: python .acceptance/laplace/scripts/test-windows-components.py
       - name: Use the application SDK for configuration evaluation
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
         with:

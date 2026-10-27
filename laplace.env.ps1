@@ -33,11 +33,11 @@ Set-Default LAPLACE_BUILD   "$env:LAPLACE_WORK\build"
 $checkout = if ($env:LAPLACE_ROOT) { $env:LAPLACE_ROOT } else { [IO.Path]::Combine($env:LAPLACE_SRC, 'Laplace') }
 $checkout = [IO.Path]::GetFullPath($checkout).TrimEnd('\').ToLowerInvariant()
 $workspaceId = [IO.Path]::GetFileName($checkout) + '-' + [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($checkout))).Substring(0,12).ToLowerInvariant()
-$canonical=[IO.Path]::GetFullPath((Join-Path $env:LAPLACE_SRC 'Laplace')).TrimEnd('\').ToLowerInvariant()
-$buildDefault=if($checkout -eq $canonical){Join-Path $env:LAPLACE_BUILD 'Laplace'}else{Join-Path $env:LAPLACE_BUILD "worktrees/$workspaceId"}
+$canonical=[IO.Path]::GetFullPath([IO.Path]::Combine($env:LAPLACE_SRC,'Laplace')).TrimEnd('\').ToLowerInvariant()
+$buildDefault=if($checkout -eq $canonical){[IO.Path]::Combine($env:LAPLACE_BUILD,'Laplace')}else{[IO.Path]::Combine($env:LAPLACE_BUILD,'worktrees',$workspaceId)}
 Set-Default LAPLACE_BUILD_ROOT $buildDefault
 Set-Default LAPLACE_ENGINE_BUILD "$env:LAPLACE_BUILD_ROOT\build-win"
-Set-Default LAPLACE_DEPS    "$env:LAPLACE_DATA_ROOT\dependencies"
+Set-Default LAPLACE_DEPS    ([IO.Path]::Combine($env:LAPLACE_BUILD,'dependencies'))
 Set-Default LAPLACE_DEPSRC  "$env:LAPLACE_DEPS\src"
 Set-Default LAPLACE_EXTERNAL $env:LAPLACE_DEPSRC
 Set-Default LAPLACE_DATA    "$env:LAPLACE_DATA_ROOT\data"
