@@ -39,6 +39,8 @@
     "role": "laplace",
     "work": "/repos/work/clients/ahart/laplace",
     "data": "/vault/Data",
+    "source": "/repos/src",
+    "models": "/vault/models",
     "command": "/home/ahart/.local/bin/laplace",
     "configuration": "/home/ahart/.config/laplace/client.json"
   }

@@ -12,7 +12,9 @@ A remote database does not require mounting source or build trees. A server inge
 server paths unless its API explicitly uploads the files.
 
 The installed `laplace-mono` and `laplace` commands resolve from the desktop's normal terminal
-and hart-server's interactive login. They are different implementations, not interchangeable aliases:
+and hart-server's interactive login. They select different databases and product interfaces.
+Monorepo recipe ingestion delegates to the modular Native Engine; that shared ingestion
+implementation does not establish parity for the rest of the product:
 
 | Entry point | Current behavior and location |
 | --- | --- |
@@ -39,6 +41,20 @@ pointing to `E:/Data/Laplace/clients/laplace/client-staging.json`. The backgroun
 uses its separate service identity. Raw Operations
 build/ingest wrappers still have their own environment resolution; do not infer a target from
 the word "Laplace" alone. Read the selected client configuration or `--where`.
+
+The modular client profile declares optional `source` and `models` input roots alongside
+`data`. The installer accepts `--source` and `--models`; desktop setup captures these from
+the host declaration or machine configuration. The launcher exports them as `LAPLACE_SRC`
+and `LAPLACE_MODELS` to the Engine and reports them under `inputs` in `--where`. Normal
+commands do not require dot-sourcing a developer shell. A missing model directory is an
+absent source, not an instruction to download models. Use `ingest --plan <source>` before
+loading; a plan that names an absent source still reports failure.
+
+The modular CLI is not a replacement for all `laplace-mono` capabilities. In particular,
+checkpoint testimony (`laplace model`) does not replace Foundry synthesis/export. The
+monorepo also owns document adapters, persisted ingestion journals, application APIs,
+auth/billing and chess workflows. Their functional SQL schemas and operator contracts
+must survive modularization; a successful Engine or perf-cache proof does not verify them.
 
 ## Repositories and deployments
 

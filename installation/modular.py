@@ -58,7 +58,7 @@ def config_load(path):
         raise ValueError('Connection allocation cannot fit the resident reader and Engine bulk writer')
     client = config.get('operator_client')
     if client:
-        for key in ('work', 'data', 'command', 'configuration'):
+        for key in ('work', 'data', 'command', 'configuration', *[k for k in ('source', 'models') if k in client]):
             path = Path(client[key])
             if not path.is_absolute() or '..' in path.parts or path == Path('/'):
                 raise ValueError('Invalid operator client path: ' + key)
@@ -665,6 +665,8 @@ def main():
                 checked(['runuser', '-u', config['operator'], '--', 'python3',
                          ROOT / 'installation/install-client.py', '--installation', config['installed_config'],
                          *[value for key in ('role', 'work', 'data', 'command', 'configuration')
+                           for value in ('--' + key, client[key])],
+                         *[value for key in ('source', 'models') if key in client
                            for value in ('--' + key, client[key])]])
         atomic(receipt_path / 'acceptance.json', json.dumps({'scope': 'modular MCP installed runtime', 'host': config['host'],
             'release': str(release), 'unit': UNIT, 'runtime_user': config['runtime_user'], 'database_role': config['role'],

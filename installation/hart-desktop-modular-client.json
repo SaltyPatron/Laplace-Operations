@@ -42,6 +42,8 @@
     "windows_sid": "S-1-5-21-1955383224-1799969050-1119319971-1001",
     "role": "ahart",
     "data": "E:/Data/Ingest",
+    "source": "E:/Repositories/Laplace",
+    "models": "E:/Data/Laplace/models",
     "work": "E:/Data/Laplace/work/clients/ahart/laplace",
     "configuration": "E:/Data/Laplace/clients/laplace/client.json",
     "connection": {

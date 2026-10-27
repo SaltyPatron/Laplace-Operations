@@ -8,6 +8,8 @@ import socket
 import subprocess
 import sys
 
+INPUT_ROOTS = {'source': 'LAPLACE_SRC', 'models': 'LAPLACE_MODELS'}
+
 
 def selected(configuration):
     profile = json.loads(configuration.read_text())
@@ -73,12 +75,23 @@ def selected(configuration):
         'LAPLACE_FIRMWARE': str(release / 'share/firmware/program.firmware'),
         'OMP_NUM_THREADS': str(host['threads']), 'MKL_NUM_THREADS': '1', 'LAPLACE_BATCH_MB': str(host['batch_mb']),
     }
+    inputs = {}
+    for key, variable in INPUT_ROOTS.items():
+        if key not in profile:
+            continue
+        path = Path(profile[key])
+        if not path.is_absolute() or '..' in path.parts or any(c in str(path) for c in '\r\n\0'):
+            raise ValueError('Client input root must be absolute: ' + key)
+        # Inputs may be absent on this machine. The recipe estate reports that
+        # source as absent; unrelated sources and commands remain usable.
+        inputs[key] = str(path)
+        environment[variable] = str(path)
     if authentication == 'sspi':
         environment['LAPLACE_DATABASE_AUTHENTICATION'] = 'sspi'
     return executable, environment, {'implementation': 'laplace', 'configuration': str(configuration),
         'installation': str(installation), 'release': str(release), 'executable': str(executable),
         'database_host': host['socket'], 'database': host['database'], 'database_role': role,
-        'work': str(work), 'data': str(data), 'revisions': package['revisions']}
+        'work': str(work), 'data': str(data), 'inputs': inputs, 'revisions': package['revisions']}
 
 
 def process_environment(environment):

@@ -15,8 +15,15 @@ $connection = Join-Path $client.work ('.connection-' + [guid]::NewGuid().ToStrin
 try {
     $client.connection | ConvertTo-Json | Set-Content -LiteralPath $connection
     $command = Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd'
+    # Capture input locations at installation. The normal launcher must not
+    # depend on a developer shell or inherit another client's LAPLACE_* values.
+    $inputArgs = @()
+    foreach ($root in @(@{Key='source'; Variable='LAPLACE_SRC'}, @{Key='models'; Variable='LAPLACE_MODELS'})) {
+        $value = if ($client.($root.Key)) { $client.($root.Key) } else { [Environment]::GetEnvironmentVariable($root.Variable) }
+        if ($value) { $inputArgs += @('--' + $root.Key, $value) }
+    }
     & $python "$PSScriptRoot/install-client.py" --installation $config.installed_config --role $client.role `
-        --work $client.work --data $client.data --configuration $client.configuration --command $command --connection $connection
+        --work $client.work --data $client.data --configuration $client.configuration --command $command --connection $connection @inputArgs
     if ($LASTEXITCODE -ne 0) { throw 'Installed modular command verification failed.' }
     $bin = Split-Path $command
     $opsCmd = Join-Path $bin 'laplace-ops.cmd'

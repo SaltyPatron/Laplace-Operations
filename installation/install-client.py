@@ -16,6 +16,8 @@ def main():
     parser.add_argument('--role', required=True, help='Existing human database identity; never the MCP OS peer role')
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--data', type=Path, required=True)
+    parser.add_argument('--source', type=Path, help='Source checkout estate read by workspace-code recipes')
+    parser.add_argument('--models', type=Path, help='Local model estate read by tokenizer recipes; no download')
     parser.add_argument('--command', type=Path, required=True)
     parser.add_argument('--connection', type=Path, help='JSON with non-secret libpq TLS/address options; credentials remain in the user store')
     parser.add_argument('--configuration', type=Path,
@@ -26,6 +28,10 @@ def main():
             parser.error('Installation, work, command and configuration paths must be absolute')
     profile = {'schema': 'laplace.modular-client/v1', 'installation': str(args.installation),
                'role': args.role, 'work': str(args.work), 'data': str(args.data)}
+    for key in ('source', 'models'):
+        value = getattr(args, key)
+        if value is not None:
+            profile[key] = str(value)
     if args.connection:
         profile['connection'] = json.loads(args.connection.read_text())
     source = Path(__file__).with_name('client.py')
