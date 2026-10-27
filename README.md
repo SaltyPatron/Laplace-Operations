@@ -308,7 +308,9 @@ pwsh -File setup.ps1 all              # explicit elevated host provisioning, whe
 pwsh -File setup.ps1 deps report      # one part, or several
 pwsh -File tune-pg.ps1 -Check         # the server's settings against their declaration; without -Check: apply, restart when allowed, check
 laplace-ops deploy -Target desktop -Plan # show the delivery stages without changing the installation
-laplace-ops deploy -Target desktop    # apply/verify tuning, build/publish IIS, migrate both databases, verify
+laplace-ops deploy -Target desktop    # package modular CLI/MCP, publish IIS, migrate and verify
+laplace-ops clients                   # installed/running modular versions, owning clients and protected releases
+laplace-ops clients verify -Json      # verify running client versions without rebuilding or cold-starting the API
 ```
 
 Desktop deployment uses the enrolled Windows operator and the declared developer shell.
@@ -316,12 +318,32 @@ It runs the maintained tuner in apply mode before building: changed settings are
 written, reloaded and verified. A required service restart follows the tuner's
 existing permission and active-ingestion checks; unresolved changes fail the stage.
 It reports each stage, retains its full output, and writes a combined receipt under
-`$LAPLACE_WORK/operations/desktop-deploy-*/receipt.json`. Success is printed after
+`$LAPLACE_WORK/operations/desktop-deploy-*/receipt.json`. It also builds and packages the
+declared modular Native/Engine/MCP stack using the same installer as `components desktop`
+and `setup.ps1 client`. Before selecting a modular release, acceptance exercises native
+composition, database/cache agreement, recipe discovery, MCP initialization, tool discovery
+and an actual MCP `text` call. Success is printed after these checks,
 both database migrations, publication and desktop verification pass. Migrations use
 the staged package's runtime before IIS selects its new application binary. A failed stage
 returns a nonzero exit code with its log path; compiler/npm warnings remain visible
 and are also listed in the receipt. Initial provisioning remains owned by `setup.ps1`
 and `Install-IisRuntime.ps1`; deployment does not reset databases or silently repair ACLs.
+
+An existing stdio MCP session remains pinned to its executable until its calling application
+reconnects. Setup and deployment inventory those sessions and report their PID, parent client,
+running release and installed release. They never terminate the client application.
+When older sessions remain, the deployment receipt says `installed_pending_reconnect`
+and the command exits **2**: the packages are installed, runtime acceptance is pending,
+and no rollback or rebuild is implied. Reconnect the reported MCP clients, then run
+`laplace-ops clients verify`; it exits 0 when the inventory is current, 2 for older clients,
+or 1 for incomplete process visibility. `status desktop` and `verify desktop` include this
+same inventory; the latter also preserves its application acceptance checks.
+
+The inventory marks selected releases and releases with running processes as protected.
+Missing process visibility protects every release. An unselected release without a process
+still requires a reference audit (including database cache settings and rollback references);
+the command does not authorize deletion. Linux `setup.sh` owns the separate systemd MCP
+service and does not control Windows user stdio connections.
 
 `setup.ps1` is `setup.sh`'s counterpart: the same parts, each a declaration compared with the machine, logged under
 `$LAPLACE_WORK\logs\root`; the parts that touch the service, its rights, its settings and its access need an elevated

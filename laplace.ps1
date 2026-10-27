@@ -22,10 +22,12 @@ param(
     [string]$Revision = 'main',
     [string]$Repository = 'SaltyPatron/Laplace',
     [string]$SourcePath,
+    [string]$Installation,
     [switch]$Yes,
     [switch]$Wait,
     [switch]$Plan,
     [switch]$Json,
+    [ValidateSet('status','verify')][string]$ClientOperation = 'status',
     [Alias('h')][switch]$Help,
     [Parameter(ValueFromRemainingArguments)][string[]]$RemainingArgs = @()
 )
@@ -36,6 +38,7 @@ if ($Help -or $Operation -in @('help','-h','--help','/?') -or ($RemainingArgs | 
     $Names = @(); $DataOperation = 'status'
     $takesNames = $Operation -in @('ingest','data')                          # source or data-set names, given after the operation
     foreach ($token in $RemainingArgs) {
+        if ($Operation -eq 'clients' -and $token -in @('status','verify')) { $ClientOperation=$token; continue }
         if ($Operation -eq 'data' -and $token -in @('status','fetch','record')) { $DataOperation = $token; continue }
         if ($takesNames -and $token -notmatch '^-' -and $token -notin @('desktop','staging','production','cloud','yes','wait')) { $Names += $token; continue }
         switch ($token.ToLowerInvariant()) {
@@ -62,7 +65,7 @@ if ($Help -or $Operation -in @('help','-h','--help','/?') -or ($RemainingArgs | 
         }
     }
 }
-$validOperations = @('help','status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','prepare','build','test','recovery','db','restart-iis','repair-postgres','ingest','seed','sources','data')
+$validOperations = @('help','status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','clients','prepare','build','test','recovery','db','restart-iis','repair-postgres','ingest','seed','sources','data')
 if ($Operation -notin $validOperations) {
     throw "Unknown operation '$Operation'. Valid operations: $($validOperations -join ', ')"
 }
@@ -80,7 +83,7 @@ LOCAL DESKTOP DEVELOPMENT (http://localhost:5187)
   laplace-ops verify desktop          Verify the local desktop server (reuses running instance or cold-starts)
 
 LOCAL DESKTOP IIS & DATABASE MAINTENANCE (https://dev.hartonomous.com)
-  laplace-ops deploy desktop          Check tuning, build, publish IIS, migrate, and verify; save one deployment receipt
+  laplace-ops deploy desktop          Package modular CLI/MCP, publish IIS, migrate, and verify installed and running releases
   laplace-ops deploy desktop -Plan    Show desktop deployment stages without changing the installation
   laplace-ops restart-iis             Cleanly recycle the local IIS site (app_offline.htm) and check /health
   laplace-ops repair-postgres         Repair the local PostgreSQL runtime and service; verify its original cluster
@@ -101,6 +104,8 @@ LOCAL DESKTOP ONE-TIME SETUP & MODULAR CLI
   laplace-ops configure-development   Configure local Windows SSPI database roles and HBA rules
   laplace-ops enroll-development      Enroll Windows DPAPI workload credentials from OpenBao
   laplace-ops components desktop      Package Laplace-Native + Laplace-Engine and install the 'laplace' CLI
+  laplace-ops clients [-Json]          Show installed/running modular releases, client owners and release retention
+  laplace-ops clients verify [-Json]   The same; exit 2 if older clients need reconnecting, 1 if inventory is incomplete
 
 INGESTION AND DATA (Laplace-Engine: the laplace program, recipes/order, the data sets of data.tsv)
   laplace-ops sources [-Json]         Complete installed recipe catalog: source aliases, content, prerequisites and decomposers
@@ -124,7 +129,7 @@ REMOTE CI/CD & ENVIRONMENT OPERATIONS (GitHub Actions)
 '@ | Write-Host
     exit 0
 }
-$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','repair-postgres','ingest','seed','sources','data')
+$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','repair-postgres','clients','ingest','seed','sources','data')
 if (-not $PSBoundParameters.ContainsKey('Target')) {
     $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
 }
@@ -133,6 +138,17 @@ if ($Plan -and -not ($Operation -in 'deploy','repair-postgres' -and $Target -eq 
 }
 if ($Operation -in @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','restart-iis','repair-postgres') -and $Target -ne 'desktop') {
     throw "$Operation runs on desktop; target '$Target' is not supported. Use deploy to install a deployment target."
+}
+if ($Operation -eq 'clients') {
+    if ($Target -ne 'desktop') { throw 'clients inventories the local Windows installation; remote MCP services are verified by their delivery workflows.' }
+    . "$PSScriptRoot/installation/desktop-clients.ps1"
+    $state=Get-DesktopClientState -Declaration (Get-DesktopClientDeclaration $Installation)
+    if ($Json) { $state | ConvertTo-Json -Depth 10 } else { Write-DesktopClientState $state }
+    if ($ClientOperation -eq 'verify') {
+        if ($state.status -eq 'unverifiable') { exit 1 }
+        if ($state.status -eq 'reconnect_required') { exit 2 }
+    }
+    exit 0
 }
 if ($Operation -eq 'repair-postgres') {
     $repairArgs = @('-NoProfile','-File',"$PSScriptRoot/setup.ps1",'repair-postgres')
@@ -265,7 +281,7 @@ if ($Operation -eq 'restart-iis') {
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'deploy' -and $Target -eq 'desktop') {
-    & pwsh -NoProfile -File "$PSScriptRoot/installation/Deploy-Desktop.ps1" -SourcePath $SourcePath -Plan:$Plan
+    & pwsh -NoProfile -File "$PSScriptRoot/installation/Deploy-Desktop.ps1" -SourcePath $SourcePath -ModularInstallation $Installation -Plan:$Plan
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'components' -and $Target -eq 'desktop') {
@@ -288,7 +304,18 @@ if ($Operation -in 'start','stop','logs' -or ($Operation -in 'status','verify' -
     $localArgs=@('-NoProfile','-File',"$PSScriptRoot/development/control.ps1",'-Operation',$Operation)
     if ($SourcePath) { $localArgs+=@('-SourcePath',$SourcePath) }
     & pwsh @localArgs
-    exit $LASTEXITCODE
+    $code=$LASTEXITCODE
+    if ($code -ne 0) { exit $code }
+    if ($Operation -in @('status','verify')) {
+        . "$PSScriptRoot/installation/desktop-clients.ps1"
+        $state=Get-DesktopClientState -Declaration (Get-DesktopClientDeclaration $Installation)
+        Write-DesktopClientState $state
+        if ($Operation -eq 'verify') {
+            if ($state.status -eq 'unverifiable') { exit 1 }
+            if ($state.status -eq 'reconnect_required') { exit 2 }
+        }
+    }
+    exit 0
 }
 if ($Operation -eq 'enroll-development') {
     & pwsh -NoProfile -File "$PSScriptRoot/development/enroll.ps1"

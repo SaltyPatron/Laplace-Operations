@@ -2,18 +2,22 @@
 <# The desktop deployment behind laplace-ops. Setup owns provisioning; this
    workflow converges tuning on the existing installation and records every delivery stage. #>
 [CmdletBinding()]
-param([string]$SourcePath, [switch]$Plan)
+param([string]$SourcePath, [string]$ModularInstallation, [switch]$Plan)
 $ErrorActionPreference = 'Stop'
 $operations = Split-Path -Parent $PSScriptRoot
 . "$operations/laplace.env.ps1"
 $source = if ($SourcePath) { [IO.Path]::GetFullPath($SourcePath) } else { Join-Path $env:LAPLACE_SRC 'Laplace' }
 $installation = $env:LAPLACE_IIS_INSTALLATION
+. "$PSScriptRoot/desktop-clients.ps1"
+if (-not $ModularInstallation) { $ModularInstallation=Join-Path $PSScriptRoot ($env:COMPUTERNAME.ToLowerInvariant()+'-modular-client.json') }
+$modular=Get-DesktopClientDeclaration $ModularInstallation
 $steps = @(
     @{name='Apply and verify PostgreSQL tuning'; script="$operations/tune-pg.ps1"; arguments=@()},
-    @{name='Build all components, migrate both databases, then publish IIS'; script="$source/deploy/windows/Build-IisPackage.ps1"; arguments=@('-Publish')},
+    @{name='Package modular Native, Engine and MCP; update installed client'; script="$PSScriptRoot/install-windows-client.ps1"; arguments=@('-Installation',$ModularInstallation)},
+    @{name='Build monorepo components, migrate both databases, then publish IIS'; script="$source/deploy/windows/Build-IisPackage.ps1"; arguments=@('-Publish')},
     @{name='Verify application database'; script="$source/deploy/windows/Invoke-IisDatabase.ps1"; arguments=@('-Database','application','-Operation','status')},
     @{name='Verify substrate database'; script="$source/deploy/windows/Invoke-IisDatabase.ps1"; arguments=@('-Database','substrate','-Operation','status')},
-    @{name='Verify installed desktop databases and IIS'; script="$PSScriptRoot/Verify-DesktopDatabases.ps1"; arguments=@()}
+    @{name='Verify installed desktop databases and IIS'; script="$PSScriptRoot/Verify-DesktopDatabases.ps1"; arguments=@('-ModularInstallation',$ModularInstallation)}
 )
 Write-Host 'Laplace desktop deployment' -ForegroundColor Cyan
 Write-Host "Source: $source"
@@ -95,7 +99,13 @@ try {
     }
     $active = Get-Content -LiteralPath (Join-Path $config.directory 'web/active.json') -Raw | ConvertFrom-Json
     $result.release = $active.revision
-    $result.status = 'passed'
+    $result.modular_clients=Get-DesktopClientState -Declaration $modular
+    Write-DesktopClientState $result.modular_clients
+    $result.status = switch ($result.modular_clients.status) {
+        'current' {'passed'}
+        'reconnect_required' {'installed_pending_reconnect'}
+        default { throw 'Cannot verify running modular clients; inspect modular_clients in the receipt.' }
+    }
 } catch {
     $result.error = $_.Exception.Message
     if ($record -and $record.status -eq 'running') {
@@ -111,9 +121,13 @@ try {
     $result.finished_utc = [DateTime]::UtcNow.ToString('o')
     $result.warnings = @($warnings | Sort-Object)
     if ($receiptPath) {
-        $result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath
+        $result | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $receiptPath
         Write-Host "Deployment receipt: $receiptPath"
     }
+}
+if ($result.status -eq 'installed_pending_reconnect') {
+    Write-Host "Installation updated: $($result.origin). Runtime acceptance is pending client reconnects; no rebuild is needed."
+    exit 2
 }
 if ($result.status -ne 'passed') { exit 1 }
 Write-Host "`nDesktop deployment complete: $($result.origin)" -ForegroundColor Green

@@ -1,7 +1,8 @@
 #Requires -Version 7
 [CmdletBinding()]
-param([string]$Configuration="$PSScriptRoot/hart-desktop-operator.json")
+param([string]$Configuration="$PSScriptRoot/hart-desktop-operator.json", [string]$ModularInstallation)
 $ErrorActionPreference='Stop'
+. "$PSScriptRoot/desktop-clients.ps1"
 $c=Get-Content -LiteralPath $Configuration -Raw|ConvertFrom-Json
 $target=@($c.targets|Where-Object authentication -EQ sspi)
 if($target.Count -ne 1 -or $target[0].host -ine $env:COMPUTERNAME){throw 'Select exactly this Windows database host.'}
@@ -69,7 +70,9 @@ try{
     $ready=$readyResp.Content|ConvertFrom-Json
     if(-not $ready.substrate_reachable -or -not $ready.perfcache_ready){throw 'Installed desktop IIS substrate or native perfcache is unavailable.'}
     [ordered]@{host=$target.host;checked_utc=[DateTime]::UtcNow.ToString('o');service=$services[0].Name;cluster=$cluster;
-        data=$target.data;wal=$wal.Target;connections=$connections;clients=$clients;iis_ready=$ready.ready;iis_seeded=([bool]$ready.has_entities -and [bool]$ready.has_consensus);passed=$true}|ConvertTo-Json -Depth 6
+        data=$target.data;wal=$wal.Target;connections=$connections;clients=$clients;
+        modular_clients=(Get-DesktopClientState -Declaration (Get-DesktopClientDeclaration $ModularInstallation));
+        iis_ready=$ready.ready;iis_seeded=([bool]$ready.has_entities -and [bool]$ready.has_consensus);passed=$true}|ConvertTo-Json -Depth 10
 }finally{
     foreach($name in $saved.Keys){if($null -eq $saved[$name]){Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue}else{[Environment]::SetEnvironmentVariable($name,$saved[$name])}}
 }

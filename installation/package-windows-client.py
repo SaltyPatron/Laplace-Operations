@@ -217,6 +217,9 @@ def main():
                 raise ValueError('Packaged recipe resources failed: ' + result.stderr)
             if operation == ['status'] and result.stdout.count("the same as this engine's") != 2:
                 raise ValueError('Installed tier 0 and highway do not agree with the selected database: ' + result.stdout)
+        # The candidate MCP must initialize and execute a native tool before
+        # changing the installed selection used by future client connections.
+        client.verify_mcp(executable, environment)
         os.replace(pending, destination)
     finally:
         client_candidate.unlink(missing_ok=True)

@@ -31,6 +31,9 @@ jobs:
         run: pwsh -NoProfile -File tests/acceptance-runner.ps1
       - name: Verify installed modular client input and cache selection
         run: python tests/modular-client.py
+      - name: Verify running client version, ownership and release retention
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/desktop-clients.ps1
       - name: Verify PostgreSQL installer service and recovery boundaries
         shell: pwsh
         run: pwsh -NoProfile -File tests/postgres-service-repair.ps1
@@ -105,6 +108,7 @@ jobs:
           python3 tests/runtime-owner.py
           python3 tests/modular-installation.py
           python3 tests/modular-client.py
+          pwsh -NoProfile -File tests/desktop-clients.ps1
           pwsh -NoProfile -File tests/deployment-artifacts.ps1
       - name: Verify acceptance result failure boundaries
         shell: pwsh

@@ -49,6 +49,7 @@ foreach ($arguments in @(
     @('build','-Target','production'),
     @('prepare','-Target','staging'),
     @('start','-Target','staging'),
+    @('clients','-Target','staging'),
     @('restart-iis','-Target','staging'),
     @('db','-Target','production','-Database','substrate'),
     @('db','-Target','staging','-Database','both'),

@@ -43,3 +43,5 @@ try {
 } finally {
     Remove-Item -LiteralPath $connection -ErrorAction SilentlyContinue
 }
+. "$PSScriptRoot/desktop-clients.ps1"
+Write-DesktopClientState (Get-DesktopClientState -Declaration $config)

@@ -6,6 +6,7 @@ from pathlib import Path
 import socket
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,6 +85,26 @@ class ClientInputs(unittest.TestCase):
         self.assertEqual({p.name for p in destination.iterdir()}, {'tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway'})
         for file in destination.iterdir():
             self.assertEqual(file.read_bytes(), (source / file.name).read_bytes())
+
+    def test_mcp_installation_requires_initialization_discovery_and_successful_tool(self):
+        executable, environment, _ = self.select()
+        executable.with_name('lpm.exe' if os.name == 'nt' else 'lpm').touch()
+        replies = [
+            {'id': 1, 'result': {'serverInfo': {'name': 'laplace'}}},
+            {'id': 2, 'result': {'tools': [{'name': name} for name in ('text', 'ingest_status', 'recipe_plan')]}},
+            {'id': 3, 'result': {'content': [{'type': 'text', 'text': 'real composition'}]}},
+        ]
+        def response(values):
+            return SimpleNamespace(returncode=0, stderr='', stdout='\n'.join(json.dumps(value) for value in values))
+        with patch.object(client.subprocess, 'run', return_value=response(replies)) as invoke:
+            self.assertEqual(client.verify_mcp(executable, environment)['text'], 'passed')
+            request = [json.loads(line) for line in invoke.call_args.kwargs['input'].splitlines()]
+            self.assertEqual(request[-1]['params'], {'name': 'text', 'arguments': {'input': 'Laplace'}})
+        for invalid in (replies[:2], [*replies[:2], {'id': 3, 'result': {'isError': True, 'content': [{'type': 'text', 'text': 'failed'}]}}],
+                        [*replies[:2], {'id': 3, 'result': {'content': [{'type': 'text', 'text': ''}]}}]):
+            with self.subTest(invalid=invalid), patch.object(client.subprocess, 'run', return_value=response(invalid)):
+                with self.assertRaisesRegex(ValueError, 'Installed modular MCP'):
+                    client.verify_mcp(executable, environment)
 
 
 if __name__ == '__main__':
