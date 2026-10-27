@@ -1,6 +1,6 @@
 #Requires -Version 7
 param([Parameter(Mandatory)][string]$Source, [Parameter(Mandatory)][string]$Output,
-      [string]$BuildDirectory, [string]$ExternalSource)
+      [string]$BuildDirectory, [string]$ExternalSource,[switch]$Force)
 $ErrorActionPreference = 'Stop'
 # Receipts bind source contents, toolchain/options and output contents. File
 # timestamps alone cannot establish that a generated parser or DLL is current.
@@ -107,7 +107,7 @@ foreach ($definition in $definitions) {
     $generationReceipt=Join-Path $generated 'generate.receipt.json'
     $generationInputs=Grammar-Files @($package.FullName,(Join-Path $package.Parent.FullName 'common')) @('.js','.mjs','.cjs','.json')
     $generationKey=Grammar-Key $generationInputs ($toolchain+@('generate','--abi=15','--js-runtime=native',$relative))
-    if (-not (Grammar-Current $generationReceipt $generationKey)) {
+    if ($Force -or -not (Grammar-Current $generationReceipt $generationKey)) {
         $previousLibdir = $env:TREE_SITTER_LIBDIR
         try {
             $env:TREE_SITTER_LIBDIR = Join-Path $BuildDirectory 'cache'
@@ -144,7 +144,7 @@ foreach ($entry in $parsers) {
     $compilationInputs=Grammar-Files @($parser.DirectoryName,$entry.ScannerRoot,$entry.CommonRoot) @('.c','.cc','.cpp','.h','.hpp','.inc','.inl')
     $compilationKey=Grammar-Key $compilationInputs ($toolchain+$arguments)
     $compilationReceipt=$binary+'.receipt.json'
-    if (-not (Grammar-Current $compilationReceipt $compilationKey)) {
+    if ($Force -or -not (Grammar-Current $compilationReceipt $compilationKey)) {
         & $compiler @arguments *> $log
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $binary)) { throw "Grammar $name failed; compiler output: $log" }
         Grammar-Receipt $compilationReceipt $compilationKey @(Get-Item -LiteralPath $binary)

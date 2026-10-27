@@ -2,6 +2,7 @@
 """Package the Windows modular Engine with installed resources and native dependencies."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,17 @@ import subprocess
 import tempfile
 
 STAGING = []
+STORE = None
+_spec = importlib.util.spec_from_file_location('artifact_store', Path(__file__).with_name('artifact_store.py'))
+artifacts = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(artifacts)
+
+
+def stage_file(source, target):
+    if STORE is None:
+        return shutil.copy2(source, target)
+    artifacts.materialize_file(source, target, STORE)
+    return str(target)
 
 
 def copy_prepared(source, destination):
@@ -19,7 +31,7 @@ def copy_prepared(source, destination):
     # build diagnostics beside the caches are not runtime dependencies.
     destination.mkdir(parents=True)
     for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway'):
-        shutil.copy2(source / name, destination / name)
+        stage_file(source / name, destination / name)
 
 
 def run(argv):
@@ -109,19 +121,24 @@ def closure(root, directories):
                 if name.lower().startswith(('api-ms-win-', 'ext-ms-win-')) or (system / name).is_file():
                     continue
                 raise ValueError(f'Unresolved native dependency {name} required by {binary.name}')
-            shutil.copy2(source, target)
+            stage_file(source, target)
             queue.append(target)
 
 
 def main():
+    global STORE
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--installation', type=Path, required=True)
+    parser.add_argument('--force', action='store_true', help='Explicitly rebuild the selected native components and grammars')
     args = parser.parse_args()
     if os.name != 'nt':
         raise ValueError('Build this package on its Windows target')
     config = json.loads(args.installation.read_text())
     if config['schema'] != 'laplace.modular-installation/v1' or config['host'].lower() != socket.gethostname().split('.')[0].lower():
         raise ValueError('Installation declaration does not select this Windows host')
+    STORE = Path(config.get('artifacts') or Path(config['prefix']) / 'artifacts')
+    if not STORE.is_absolute() or '..' in STORE.parts:
+        raise ValueError('Declare an absolute artifact store')
     operator_sid = config['operator_client'].get('windows_sid', '')
     if not re.fullmatch(r'S-1-[0-9-]+', operator_sid):
         raise ValueError('Declare the Windows operator SID that reads the installed client')
@@ -152,7 +169,8 @@ def main():
         selected = re.search(r'^' + variable + r':[^=]+=(.+)$', cache, re.M)
         if not selected or Path(selected.group(1).strip()).resolve() != Path(config[key]).resolve():
             raise ValueError('Configured build does not use the declared source: ' + variable)
-    run(['cmake', '--build', config['build'], '--target', 'laplace_engine'])
+    clean = ['--clean-first'] if args.force else []
+    run(['cmake', '--build', config['build'], *clean, '--target', 'laplace_engine'])
     if has_mcp:
         mcp_build = Path(config['mcp_build'])
         cache_file = mcp_build / 'CMakeCache.txt'
@@ -162,14 +180,15 @@ def main():
             toolchain = Path(__file__).resolve().parent.parent / 'toolchain/laplace.cmake'
             run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-G', 'Ninja',
                  f'-DCMAKE_TOOLCHAIN_FILE={toolchain}', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'])
-        run(['cmake', '--build', str(mcp_build), '--target', 'lpm_program', 'lpm_lib'])
+        run(['cmake', '--build', str(mcp_build), *clean, '--target', 'lpm_program', 'lpm_lib'])
     grammar_source = Path(config['grammars'])
     definitions = Path(config['engine']) / 'recipes/formats/grammars'
     if definitions.is_dir():
         builder = Path(__file__).resolve().parent / 'build-grammars.ps1'
         print(run(['pwsh', '-NoProfile', '-File', str(builder), '-Source', str(definitions),
-                   '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['build']) / 'grammars')]), flush=True)
-    reusable = reusable_release(config, revisions)
+                   '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['build']) / 'grammars'),
+                   *(['-Force'] if args.force else [])]), flush=True)
+    reusable = reusable_release(config, revisions) if not args.force else None
     if reusable is not None:
         print(json.dumps({'release': str(reusable), 'reused': True, 'copied': 0,
                           'installation': str(config['installed_config']), 'revisions': revisions}))
@@ -182,19 +201,19 @@ def main():
         raise ValueError('Package staging is outside the declared release directory')
     STAGING.append((candidate, releases))
     (candidate / 'bin').mkdir()
-    shutil.copy2(Path(config['build']) / 'laplace.exe', candidate / 'bin/laplace.exe')
+    stage_file(Path(config['build']) / 'laplace.exe', candidate / 'bin/laplace.exe')
     if has_mcp:
-        shutil.copy2(Path(config['mcp_build']) / 'lpm.exe', candidate / 'bin/lpm.exe')
-        shutil.copy2(Path(config['mcp_build']) / 'lpm.dll', candidate / 'bin/lpm.dll')
-    shutil.copytree(Path(config['engine']) / 'recipes', candidate / 'share/recipes')
-    shutil.copytree(Path(config['engine']) / 'firmware', candidate / 'share/firmware')
+        stage_file(Path(config['mcp_build']) / 'lpm.exe', candidate / 'bin/lpm.exe')
+        stage_file(Path(config['mcp_build']) / 'lpm.dll', candidate / 'bin/lpm.dll')
+    shutil.copytree(Path(config['engine']) / 'recipes', candidate / 'share/recipes', copy_function=stage_file)
+    shutil.copytree(Path(config['engine']) / 'firmware', candidate / 'share/firmware', copy_function=stage_file)
     copy_prepared(Path(config['prepared']), candidate / 'share/prepared')
     grammars = sorted(grammar_source.glob('*.dll'))
     if not grammars:
         raise ValueError('No compiled Windows grammars at the declared path')
     (candidate / 'share/grammars').mkdir()
     for file in grammars:
-        shutil.copy2(file, candidate / 'share/grammars' / file.name)
+        stage_file(file, candidate / 'share/grammars' / file.name)
     directories = [Path(path) for path in config['runtime_directories']]
     # oneMKL selects CPU kernels dynamically; these do not appear in PE imports.
     for pattern in config['mkl_runtime_libraries']:
@@ -202,7 +221,7 @@ def main():
         if not libraries:
             raise ValueError('Missing declared oneMKL runtime library: ' + pattern)
         for file in libraries:
-            shutil.copy2(file, candidate / 'bin' / file.name)
+            stage_file(file, candidate / 'bin' / file.name)
     closure(candidate, directories)
     files = {str(path.relative_to(candidate)).replace('\\', '/'): digest(path)
              for path in sorted(candidate.rglob('*')) if path.is_file()}

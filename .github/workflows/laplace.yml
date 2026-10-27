@@ -27,6 +27,8 @@ on:
       - 'audit/**'
       - 'verify-admitted-data.py'
       - 'sql/verify-admitted-data.sql'
+      - '**/*.ps1'
+      - 'installation/package-windows-client.py'
   repository_dispatch:
     types: [main-merged]
   workflow_dispatch:

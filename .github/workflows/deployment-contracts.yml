@@ -34,6 +34,9 @@ jobs:
       - name: Verify running client version, ownership and release retention
         shell: pwsh
         run: pwsh -NoProfile -File tests/desktop-clients.ps1
+      - name: Verify desktop component ownership and explicit rebuild selection
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/desktop-component-plan.ps1
       - name: Verify PostgreSQL installer service and recovery boundaries
         shell: pwsh
         run: pwsh -NoProfile -File tests/postgres-service-repair.ps1

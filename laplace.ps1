@@ -26,6 +26,8 @@ param(
     [switch]$Yes,
     [switch]$Wait,
     [switch]$Plan,
+    [string]$Components='all',
+    [switch]$Force,
     [switch]$Json,
     [ValidateSet('status','verify')][string]$ClientOperation = 'status',
     [Alias('h')][switch]$Help,
@@ -85,6 +87,9 @@ LOCAL DESKTOP DEVELOPMENT (http://localhost:5187)
 LOCAL DESKTOP IIS & DATABASE MAINTENANCE (https://dev.hartonomous.com)
   laplace-ops deploy desktop          Package modular CLI/MCP, publish IIS, migrate, and verify installed and running releases
   laplace-ops deploy desktop -Plan    Show desktop deployment stages without changing the installation
+  laplace-ops deploy desktop -Components web       Update only the web component
+  laplace-ops deploy desktop -Components api,cli   Update API/web and CLI; reuse other components
+  laplace-ops deploy desktop -Force                Explicitly rebuild selected components
   laplace-ops restart-iis             Cleanly recycle the local IIS site (app_offline.htm) and check /health
   laplace-ops repair-postgres         Repair the local PostgreSQL runtime and service; verify its original cluster
   laplace-ops repair-postgres -Plan   Inspect that repair without changing the host
@@ -132,6 +137,9 @@ REMOTE CI/CD & ENVIRONMENT OPERATIONS (GitHub Actions)
 $desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','repair-postgres','clients','ingest','seed','sources','data')
 if (-not $PSBoundParameters.ContainsKey('Target')) {
     $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
+}
+if(($PSBoundParameters.ContainsKey('Components') -or $Force) -and -not($Target -eq 'desktop' -and $Operation -in @('deploy','build'))){
+    throw '-Components and -Force select desktop build/deployment components; no operation was run.'
 }
 if ($Plan -and -not ($Operation -in 'deploy','repair-postgres' -and $Target -eq 'desktop')) {
     throw '-Plan is supported by deploy and repair-postgres on desktop; no operation was run.'
@@ -281,7 +289,7 @@ if ($Operation -eq 'restart-iis') {
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'deploy' -and $Target -eq 'desktop') {
-    & pwsh -NoProfile -File "$PSScriptRoot/installation/Deploy-Desktop.ps1" -SourcePath $SourcePath -ModularInstallation $Installation -Plan:$Plan
+    & pwsh -NoProfile -File "$PSScriptRoot/installation/Deploy-Desktop.ps1" -SourcePath $SourcePath -ModularInstallation $Installation -Plan:$Plan -Components $Components -Force:$Force
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'components' -and $Target -eq 'desktop') {
@@ -337,6 +345,7 @@ if ($Operation -eq 'run') {
 if ($Operation -in 'prepare','build','test') {
     $localArgs = @('-NoProfile','-File',"$PSScriptRoot/dev.ps1",'-Operation',$Operation)
     if ($SourcePath) { $localArgs += @('-SourcePath',$SourcePath) }
+    if ($Operation -eq 'build') { $localArgs+=@('-Components',$Components); if($Force){$localArgs+='-Force'} }
     & pwsh @localArgs
     exit $LASTEXITCODE
 }

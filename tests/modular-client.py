@@ -192,6 +192,19 @@ class PackageReuse(unittest.TestCase):
         self.config['database'] = 'another'
         self.assertIsNone(self.package.reusable_release(self.config, self.revisions))
 
+    def test_packaging_shares_identical_bytes_without_linking_mutable_build_outputs(self):
+        source = self.root / 'build-output.dll'
+        source.write_bytes(b'first build')
+        self.package.STORE = self.root / 'artifacts'
+        one, two = self.root / 'first/runtime.dll', self.root / 'second/runtime.dll'
+        self.package.stage_file(source, one)
+        self.package.stage_file(source, two)
+        self.assertTrue(os.path.samefile(one, two))
+        self.assertFalse(os.path.samefile(source, one))
+        source.write_bytes(b'next build')
+        self.assertEqual(one.read_bytes(), b'first build')
+        self.assertEqual(two.read_bytes(), b'first build')
+
 
 if __name__ == '__main__':
     unittest.main()

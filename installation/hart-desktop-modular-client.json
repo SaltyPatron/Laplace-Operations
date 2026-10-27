@@ -2,6 +2,7 @@
   "schema": "laplace.modular-installation/v1",
   "host": "hart-desktop",
   "prefix": "E:/Data/Laplace/services/laplace",
+  "artifacts": "E:/Data/Laplace/work/artifacts/windows-components",
   "state": "E:/Data/Laplace/runtime/laplace",
   "installed_config": "E:/Data/Laplace/clients/laplace/installation.json",
   "build": "D:/Libraries/build/Laplace/Laplace-Engine/windows-client",

@@ -1,5 +1,5 @@
 #Requires -Version 7
-param([Parameter(Mandatory)][string]$Installation, [switch]$SkipPackage)
+param([Parameter(Mandatory)][string]$Installation, [switch]$SkipPackage,[switch]$Force)
 $ErrorActionPreference = 'Stop'
 $declaration = [IO.Path]::GetFullPath($Installation)
 $config = [IO.File]::ReadAllText($declaration) | ConvertFrom-Json
@@ -8,7 +8,8 @@ if ($config.host -ne $env:COMPUTERNAME) { throw 'The modular client declaration 
 $python = & python -c 'import sys; print(sys.executable)'
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw 'The configured toolchain must provide an installed Python interpreter.' }
 if (-not $SkipPackage) {
-    & $python "$PSScriptRoot/package-windows-client.py" --installation $declaration
+    $options=if($Force){@('--force')}else{@()}
+    & $python "$PSScriptRoot/package-windows-client.py" --installation $declaration @options
     if ($LASTEXITCODE -ne 0) { throw 'Modular client packaging failed; command selection was not changed.' }
 }
 $client = $config.operator_client

@@ -2,7 +2,8 @@
 <# The desktop deployment behind laplace-ops. Setup owns provisioning; this
    workflow converges tuning on the existing installation and records every delivery stage. #>
 [CmdletBinding()]
-param([string]$SourcePath, [string]$ModularInstallation, [switch]$Plan)
+param([string]$SourcePath, [string]$ModularInstallation, [switch]$Plan,
+    [string]$Components='all',[switch]$Force)
 $ErrorActionPreference = 'Stop'
 $operations = Split-Path -Parent $PSScriptRoot
 . "$operations/laplace.env.ps1"
@@ -10,18 +11,32 @@ $source = if ($SourcePath) { [IO.Path]::GetFullPath($SourcePath) } else { Join-P
 $installation = $env:LAPLACE_IIS_INSTALLATION
 . "$PSScriptRoot/desktop-clients.ps1"
 if (-not $ModularInstallation) { $ModularInstallation=Join-Path $PSScriptRoot ($env:COMPUTERNAME.ToLowerInvariant()+'-modular-client.json') }
-$modular=Get-DesktopClientDeclaration $ModularInstallation
-$steps = @(
-    @{name='Apply and verify PostgreSQL tuning'; script="$operations/tune-pg.ps1"; arguments=@()},
-    @{name='Package modular Native, Engine and MCP; update installed client'; script="$PSScriptRoot/install-windows-client.ps1"; arguments=@('-Installation',$ModularInstallation)},
-    @{name='Build monorepo components, migrate both databases, then publish IIS'; script="$source/deploy/windows/Build-IisPackage.ps1"; arguments=@('-Publish')},
-    @{name='Verify application database'; script="$source/deploy/windows/Invoke-IisDatabase.ps1"; arguments=@('-Database','application','-Operation','status')},
-    @{name='Verify substrate database'; script="$source/deploy/windows/Invoke-IisDatabase.ps1"; arguments=@('-Database','substrate','-Operation','status')},
-    @{name='Verify installed desktop databases and IIS'; script="$PSScriptRoot/Verify-DesktopDatabases.ps1"; arguments=@('-ModularInstallation',$ModularInstallation)}
-)
+$selected=[Collections.Generic.HashSet[string]]::new([string[]]$Components.Split(','),[StringComparer]::Ordinal)
+$valid=@('all','modular','native','postgres','api','cli','uci','migrations','web')
+if(@($selected | Where-Object {$_ -notin $valid}).Count){throw "Unknown component selection: $Components"}
+if($selected.Contains('all')){foreach($name in $valid | Where-Object {$_ -ne 'all'}){$null=$selected.Add($name)};$null=$selected.Remove('all')}
+if($selected.Contains('native')){foreach($name in $valid | Where-Object {$_ -ne 'all'}){$null=$selected.Add($name)}}
+if($selected.Contains('postgres')){foreach($name in 'native','api','cli','uci','migrations','web'){$null=$selected.Add($name)}}
+if($selected.Contains('api')){$null=$selected.Add('web')}
+$mono=@($selected | Where-Object {$_ -ne 'modular'} | Sort-Object)
+$modular=if($selected.Contains('modular')){Get-DesktopClientDeclaration $ModularInstallation}else{$null}
+$scope=if($selected.Contains('modular')){if($mono.Count){'all'}else{'modular'}}else{'monorepo'}
+$steps=@()
+if($selected.Contains('postgres')){$steps+=@{name='Apply and verify PostgreSQL tuning';script="$operations/tune-pg.ps1";arguments=@()}}
+if($selected.Contains('modular')){
+    $arguments=@('-Installation',$ModularInstallation);if($Force){$arguments+='-Force'}
+    $steps+=@{name='Package modular Native, Engine and MCP; update installed client';script="$PSScriptRoot/install-windows-client.ps1";arguments=$arguments}
+}
+if($mono.Count){
+    $arguments=@('-Publish','-ComponentSelection',($mono -join ','))
+    if($Force){$arguments+='-Force'}
+    $steps+=@{name='Build selected components, compose and activate IIS';script="$source/deploy/windows/Build-IisPackage.ps1";arguments=$arguments;component_receipt=$true}
+}
+$steps+=@{name='Verify selected installed components';script="$PSScriptRoot/Verify-DesktopDatabases.ps1";arguments=@('-ModularInstallation',$ModularInstallation,'-Scope',$scope)}
 Write-Host 'Laplace desktop deployment' -ForegroundColor Cyan
 Write-Host "Source: $source"
 Write-Host "Installation: $installation"
+Write-Host ('Components: '+(@($selected | Sort-Object) -join ', '))
 if ($Plan) {
     for ($i=0; $i -lt $steps.Count; $i++) {
         Write-Host "[$($i+1)/$($steps.Count)] $($steps[$i].name)"
@@ -36,16 +51,18 @@ $result = [ordered]@{
     operation='deploy'; target='desktop'; source=$source
     identity=[Security.Principal.WindowsIdentity]::GetCurrent().Name
     started_utc=[DateTime]::UtcNow.ToString('o'); status='failed'; steps=@()
+    selected_components=@($selected | Sort-Object)
 }
 $warnings = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $record = $null
 try {
-    if (-not (Test-Path -LiteralPath "$source/deploy/windows/Build-IisPackage.ps1" -PathType Leaf)) {
+    if ($mono.Count -and -not (Test-Path -LiteralPath "$source/deploy/windows/Build-IisPackage.ps1" -PathType Leaf)) {
         throw "SourcePath does not name the Laplace application checkout: $source"
     }
-    if (-not $installation) {
+    if ($mono.Count -and -not $installation) {
         throw 'No IIS installation is declared. Run host setup first; setup.ps1 prepares development inputs and Install-IisRuntime.ps1 installs IIS.'
     }
+    if($mono.Count){
     . "$source/deploy/windows/iis-runtime.ps1"
     try { $config = Read-IisInstallation $installation }
     catch [UnauthorizedAccessException] {
@@ -59,11 +76,19 @@ try {
     if ($LASTEXITCODE) { throw 'Cannot inspect application source changes.' }
     $result.modified_source = $dirty
     if ($dirty.Count) { Write-Host "Including $($dirty.Count) modified tracked files; the published package will have its own content hash." -ForegroundColor Yellow }
+    }else{
+        $result.installation=$modular.prefix
+        $result.operations_revision=(& git -C $operations rev-parse HEAD).Trim()
+    }
 
     # Load the declared toolchain rather than reconstructing a developer PATH.
     $developerShell = if ($env:LAPLACE_DEVSHELL) { $env:LAPLACE_DEVSHELL } else { "$operations/toolchain/windows/devshell.ps1" }
     . $developerShell
-    $missing = @('pwsh','git','dotnet','npm','cmake','ninja','icx' | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) })
+    $tools=@('pwsh','git')
+    if($selected.Contains('modular') -or @($mono | Where-Object {$_ -ne 'web'}).Count){$tools+=@('cmake','ninja','icx')}
+    if(@($mono | Where-Object {$_ -in @('api','cli','uci','migrations')}).Count){$tools+='dotnet'}
+    if($selected.Contains('web')){$tools+=@('node','npm')}
+    $missing = @($tools | Select-Object -Unique | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) })
     if ($missing.Count) {
         throw "Developer setup is incomplete: $($missing -join ', '). Use setup.ps1 packages report; laplace-ops prepare owns locked development inputs."
     }
@@ -79,6 +104,7 @@ try {
         $clock = [Diagnostics.Stopwatch]::StartNew()
         $script = $step.script
         $stepArguments = $step.arguments
+        if($step.component_receipt){$stepArguments+=@('-Receipt',(Join-Path $run 'components.json'))}
         & pwsh -NoProfile -File $script @stepArguments 2>&1 |
             ForEach-Object {
                 $line = "$_"
@@ -97,15 +123,24 @@ try {
         $record.status = 'passed'
         Write-Host "Completed in $($record.seconds)s." -ForegroundColor Green
     }
-    $active = Get-Content -LiteralPath (Join-Path $config.directory 'web/active.json') -Raw | ConvertFrom-Json
-    $result.release = $active.revision
+    if($mono.Count){
+        $active = Get-Content -LiteralPath (Join-Path $config.directory 'web/active.json') -Raw | ConvertFrom-Json
+        $result.release = $active.revision
+    }
+    $componentReceipt=Join-Path $run 'components.json'
+    if(Test-Path -LiteralPath $componentReceipt){$result.components=Get-Content -LiteralPath $componentReceipt -Raw | ConvertFrom-Json}
+    if($modular){
     $result.modular_clients=Get-DesktopClientState -Declaration $modular
     Write-DesktopClientState $result.modular_clients
     $result.status = switch ($result.modular_clients.status) {
         'current' {'passed'}
-        'reconnect_required' {'installed_pending_reconnect'}
+        # Candidate initialization and a real native tool call already qualified
+        # the selected MCP. Existing stdio conversations retain their own release
+        # for their lifetime; they do not require another build or failed deploy.
+        'reconnect_required' {'passed'}
         default { throw 'Cannot verify running modular clients; inspect modular_clients in the receipt.' }
     }
+    }else{$result.status='passed'}
 } catch {
     $result.error = $_.Exception.Message
     if ($record -and $record.status -eq 'running') {
@@ -125,13 +160,11 @@ try {
         Write-Host "Deployment receipt: $receiptPath"
     }
 }
-if ($result.status -eq 'installed_pending_reconnect') {
-    Write-Host "Installation updated: $($result.origin). Runtime acceptance is pending client reconnects; no rebuild is needed."
-    exit 2
-}
 if ($result.status -ne 'passed') { exit 1 }
-Write-Host "`nDesktop deployment complete: $($result.origin)" -ForegroundColor Green
-Write-Host "Release: $($result.release)"
-Write-Host "Source: $($result.source_revision)"
+if($mono.Count){
+    Write-Host "`nDesktop deployment complete: $($result.origin)" -ForegroundColor Green
+    Write-Host "Release: $($result.release)"
+    Write-Host "Source: $($result.source_revision)"
+}else{Write-Host "`nModular desktop deployment complete: $($result.installation)" -ForegroundColor Green}
 Write-Host "$($warnings.Count) distinct warning lines recorded; full output is retained in the stage logs."
 exit 0

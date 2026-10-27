@@ -40,12 +40,30 @@ Normal main delivery does not start hart-cloud or change the selected substrate 
 released afterward so the existing idle-stop mechanism can stop the VM. `prepare`, `build` and `test` select desktop by
 default and reject remote targets. HART-DESKTOP remains the development and optional GPU machine.
 
-Desktop `build` uses the selected source checkout before resolving its output directories. It builds
-native code and calls that monorepo's `scripts/win/publish-cli.ps1` to produce `LAPLACE_CLI_EXE`,
-including its runtime dependencies, before building the managed solution and web assets. CLI help
-and native decomposition must work outside the developer shell. The resulting development build
-does not replace the installed IIS release. `start` runs the built API, and repeated `start`/`verify`
-reuse its owned process. Receipts record the executable paths and hashes under `$LAPLACE_WORK/operations`.
+Desktop `build` and `deploy` use the same application component builder and immutable artifacts.
+API, CLI, UCI, migrations and web have independent input/output receipts; the managed components
+derive their source dependencies from the actual `ProjectReference` graph. CMake checks the native
+graph once, and unchanged managed components skip `dotnet publish`. Unchanged compositions reuse
+the complete verified package without copying its files. `build` selects that package for development;
+`deploy` activates it in IIS and verifies authenticated SQL/native behavior. `start` consumes the
+development package, and repeated `start`/`verify` reuse its owned process.
+
+```powershell
+laplace-ops deploy desktop -Components web -Plan
+laplace-ops deploy desktop -Components web
+laplace-ops deploy desktop -Components api,cli
+laplace-ops deploy desktop -Components modular
+laplace-ops deploy desktop -Components uci -Force
+```
+
+The default `all` selects both implementation stacks. API selection includes its generated web
+contract; native/PostgreSQL selection includes the application consumers that must match its ABI.
+Web-only delivery does not build or install PostgreSQL extensions, run migrations, or package MCP.
+Modular-only delivery does not require or publish IIS. `-Force` explicitly rebuilds the selected
+closure; normal commands reuse matching artifacts. `prepare` remains the explicit acquisition step.
+The shared local artifact store deduplicates identical runtime, grammar and cache files; immutable
+package hardlinks have independent lifetimes and never point through another release directory.
+Receipts record the selected components and their individual build/reuse decisions.
 
 Windows grammar generation is a declared external dependency. `./setup.ps1 tree-sitter`
 builds the CLI from the same pinned checkout as the Engine's Tree-sitter runtime;
@@ -276,8 +294,9 @@ PostgreSQL server. Every build/test writes a result under `LAPLACE_WORK/operatio
 Windows machine settings live in `%ProgramData%/Laplace/machine.env`. `LAPLACE_SRC` contains checkouts;
 `LAPLACE_DEPSRC` contains dependency source; `LAPLACE_DEPS` contains versioned installed dependencies;
 `LAPLACE_BUILD` contains generated build trees; `LAPLACE_WORK` contains operation receipts and logs.
-The application build directory defaults to `LAPLACE_BUILD/worktrees/<checkout-name>-<path-hash>` so checkouts
-have independent native caches and managed intermediates. `LAPLACE_BUILD_ROOT` remains an explicit override.
+The normal `LAPLACE_SRC/Laplace` checkout defaults to `LAPLACE_BUILD/Laplace`, consistently in
+Operations, PowerShell and MSBuild. An explicitly selected alternate checkout retains an isolated
+`LAPLACE_BUILD/worktrees/<checkout-name>-<path-hash>` directory. `LAPLACE_BUILD_ROOT` remains an explicit override.
 The installed dependency manifest is copied by preparation and supplies the versioned prefixes used by CMake.
 Neither a Windows service account nor a guessed password is used as a database login.
 

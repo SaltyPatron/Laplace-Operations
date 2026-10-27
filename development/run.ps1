@@ -23,14 +23,27 @@ if ($apiPort -lt 1 -or $apiPort -gt 65535) { throw 'Invalid development API port
 $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,$apiPort)
 try { $listener.Start() } catch { throw "Port $apiPort is already in use. Stop its current process or select another LAPLACE_API_PORT." } finally { $listener.Stop() }
 $project = Join-Path $SourcePath 'app/Laplace.Endpoints.OpenAICompat/Laplace.Endpoints.OpenAICompat.csproj'
-$api = (Invoke-Program dotnet @('msbuild',$project,'-getProperty:TargetPath','-p:Configuration=Release','-p:Platform=AnyCPU')).Trim()
+$artifactReceipt=Join-Path $env:LAPLACE_BUILD_ROOT 'desktop-artifacts.json'
+$packaged=$false
+if(Test-Path -LiteralPath $artifactReceipt){
+    $artifacts=Get-Content -LiteralPath $artifactReceipt -Raw | ConvertFrom-Json
+    . (Join-Path $SourcePath 'deploy/windows/iis-runtime.ps1')
+    $null=Test-IisPackage $artifacts.package
+    $api=Join-Path $artifacts.package 'Laplace.Endpoints.OpenAICompat.dll'
+    $env:LAPLACE_CLI_EXE=Join-Path $artifacts.package 'cli/Laplace.Cli.exe'
+    $packaged=$true
+}else{
+    $api = (Invoke-Program dotnet @('msbuild',$project,'-getProperty:TargetPath','-p:Configuration=Release','-p:Platform=AnyCPU')).Trim()
+}
 if (-not (Test-Path -LiteralPath $api)) { throw 'Build this checkout first: ./laplace.ps1 build' }
 $web = Join-Path $SourcePath 'web/dist'
 if (-not (Test-Path -LiteralPath "$web/index.html")) { throw 'Build this checkout first: the web distribution is missing.' }
 if (-not (Test-Path -LiteralPath $env:LAPLACE_PERFCACHE_BIN)) { throw 'The configured native Tier-0 artifact is missing; run ./laplace.ps1 build.' }
 $app = Split-Path $api
-[void](New-Item -ItemType Directory -Path "$app/wwwroot" -Force)
-Get-ChildItem -LiteralPath $web | Copy-Item -Destination "$app/wwwroot" -Recurse -Force
+if(-not $packaged){
+    [void](New-Item -ItemType Directory -Path "$app/wwwroot" -Force)
+    Get-ChildItem -LiteralPath $web | Copy-Item -Destination "$app/wwwroot" -Recurse -Force
+}
 $stamp = if ($RunId) { $RunId } else { [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,8) }
 $work = Join-Path $env:LAPLACE_WORK "operations/desktop-run-$stamp"
 [void](New-Item -ItemType Directory -Path $work -Force)
