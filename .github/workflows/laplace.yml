@@ -29,6 +29,8 @@ on:
       - 'sql/verify-admitted-data.sql'
       - '**/*.ps1'
       - 'installation/package-windows-client.py'
+      - 'installation/artifact_store.py'
+      - 'installation/hart-desktop-*.json'
   repository_dispatch:
     types: [main-merged]
   workflow_dispatch:
