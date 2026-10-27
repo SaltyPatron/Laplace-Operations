@@ -345,6 +345,16 @@ still requires a reference audit (including database cache settings and rollback
 the command does not authorize deletion. Linux `setup.sh` owns the separate systemd MCP
 service and does not control Windows user stdio connections.
 
+Windows modular builds preserve Ninja's outputs. Grammar generation and compilation
+reuse receipts that bind source/import/header contents, toolchain/options and output
+checksums; unchanged timestamps alone do not invalidate them. Missing or corrupted
+outputs rebuild. Packaging reuses an intact selected release when its current binaries,
+recipes, firmware, caches, grammar DLLs and runtime dependencies still match, without
+copying another package. Packaging does not deploy a database schema.
+Run `pwsh -File tests/grammar-incrementality.ps1 -Output <receipt.json>` on the configured
+Windows toolchain for the real generation/compilation acceptance, including changed
+imports, scanner headers and damaged/missing outputs.
+
 `setup.ps1` is `setup.sh`'s counterpart: the same parts, each a declaration compared with the machine, logged under
 `$LAPLACE_WORK\logs\root`; the parts that touch the service, its rights, its settings and its access need an elevated
 PowerShell and refuse otherwise, so the rest runs as the developer. `laplace.env.ps1` is `laplace.env`'s: every name of

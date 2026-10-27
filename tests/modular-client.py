@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import hashlib
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -105,6 +106,77 @@ class ClientInputs(unittest.TestCase):
             with self.subTest(invalid=invalid), patch.object(client.subprocess, 'run', return_value=response(invalid)):
                 with self.assertRaisesRegex(ValueError, 'Installed modular MCP'):
                     client.verify_mcp(executable, environment)
+
+
+class PackageReuse(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        spec = importlib.util.spec_from_file_location('package', ROOT / 'installation/package-windows-client.py')
+        self.package = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.package)
+        self.config = {key: str(self.root / key) for key in
+                       ('prefix', 'state', 'ucd', 'build', 'engine', 'prepared', 'grammars', 'mkl_runtime')}
+        self.config.update(schema='laplace.modular-installation/v1', host='test', socket='test', port=5432,
+                           database='test', threads=2, batch_mb=64, installed_config=str(self.root / 'installed.json'),
+                           runtime_directories=[str(self.root / 'runtime')], mkl_runtime_libraries=['mkl_*.dll'])
+        self.sources = {
+            'bin/laplace.exe': self.root / 'build/laplace.exe',
+            'bin/mkl_test.dll': self.root / 'mkl_runtime/mkl_test.dll',
+            'bin/dependency.dll': self.root / 'runtime/dependency.dll',
+            'share/recipes/order': self.root / 'engine/recipes/order',
+            'share/firmware/program.firmware': self.root / 'engine/firmware/program.firmware',
+            'share/grammars/test.dll': self.root / 'grammars/test.dll',
+            **{'share/prepared/' + name: self.root / 'prepared' / name
+               for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway')},
+        }
+        for key, source in self.sources.items():
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(key.encode())
+        package = {'schema': 'laplace.modular-package/v1', 'revisions': {'Laplace-Engine': 'revision'},
+                   'files': {key: self.package.digest(source) for key, source in self.sources.items()}}
+        identity = hashlib.sha256(json.dumps(package, sort_keys=True).encode()).hexdigest()
+        self.release = self.root / 'prefix/releases' / identity
+        for key, source in self.sources.items():
+            target = self.release / key
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+        (self.release / 'package.json').write_text(json.dumps(package))
+        Path(self.config['installed_config']).write_text(json.dumps({**self.config, 'release': str(self.release)}))
+        self.revisions = package['revisions']
+
+    def test_unchanged_release_is_reused_without_writing_it(self):
+        timestamps = {path: path.stat().st_mtime_ns for path in self.release.rglob('*') if path.is_file()}
+        for _ in range(2):
+            self.assertEqual(self.package.reusable_release(self.config, self.revisions), self.release)
+        self.assertEqual({path: path.stat().st_mtime_ns for path in timestamps}, timestamps)
+
+    def test_changed_inputs_and_corrupted_outputs_are_not_reused(self):
+        for relative, source in self.sources.items():
+            with self.subTest(input=relative):
+                data = source.read_bytes()
+                source.write_bytes(data + b'changed')
+                self.assertIsNone(self.package.reusable_release(self.config, self.revisions))
+                source.write_bytes(data)
+            with self.subTest(output=relative):
+                target = self.release / relative
+                target.write_bytes(data + b'corrupted')
+                self.assertIsNone(self.package.reusable_release(self.config, self.revisions))
+                target.write_bytes(data)
+
+    def test_new_and_removed_resources_invalidate_the_release(self):
+        new = self.root / 'engine/recipes/new.recipe'
+        new.write_text('new')
+        self.assertIsNone(self.package.reusable_release(self.config, self.revisions))
+        new.unlink()
+        (self.root / 'grammars/test.dll').unlink()
+        self.assertIsNone(self.package.reusable_release(self.config, self.revisions))
+
+    def test_revision_and_installation_changes_invalidate_the_release(self):
+        self.assertIsNone(self.package.reusable_release(self.config, {'Laplace-Engine': 'new'}))
+        self.config['database'] = 'another'
+        self.assertIsNone(self.package.reusable_release(self.config, self.revisions))
 
 
 if __name__ == '__main__':

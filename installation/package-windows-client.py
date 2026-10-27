@@ -37,6 +37,59 @@ def digest(path):
     return value.hexdigest()
 
 
+def reusable_release(config, revisions):
+    """Reuse only an intact release whose current build/resource inputs match.
+
+    Revision strings alone do not cover generated binaries, caches, grammars or
+    runtime dependencies. Check those bytes before avoiding another package copy.
+    """
+    try:
+        installed = json.loads(Path(config['installed_config']).read_text())
+        for key in ('schema', 'host', 'prefix', 'state', 'socket', 'port', 'database', 'threads', 'batch_mb', 'ucd'):
+            if installed.get(key) != config[key]:
+                return None
+        release = Path(installed['release']).resolve(strict=True)
+        if release.parent != (Path(config['prefix']) / 'releases').resolve():
+            return None
+        package = json.loads((release / 'package.json').read_text())
+        if (package.get('schema') != 'laplace.modular-package/v1' or package.get('revisions') != revisions
+                or hashlib.sha256(json.dumps(package, sort_keys=True).encode()).hexdigest() != release.name):
+            return None
+        inputs = {'bin/laplace.exe': Path(config['build']) / 'laplace.exe'}
+        if config.get('mcp'):
+            inputs.update({f'bin/{name}': Path(config['mcp_build']) / name for name in ('lpm.exe', 'lpm.dll')})
+        for root, target in ((Path(config['engine']) / 'recipes', 'share/recipes'),
+                             (Path(config['engine']) / 'firmware', 'share/firmware')):
+            inputs.update({target + '/' + file.relative_to(root).as_posix(): file for file in root.rglob('*') if file.is_file()})
+        inputs.update({'share/prepared/' + name: Path(config['prepared']) / name
+                       for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway')})
+        grammars = sorted(Path(config['grammars']).glob('*.dll'))
+        if not grammars:
+            return None
+        inputs.update({'share/grammars/' + file.name: file for file in grammars})
+        for pattern in config['mkl_runtime_libraries']:
+            files = list(Path(config['mkl_runtime']).glob(pattern))
+            if not files:
+                return None
+            inputs.update({'bin/' + file.name: file for file in files})
+        files = package['files']
+        if inputs.keys() - files.keys():
+            return None
+        directories = [Path(path) for path in config['runtime_directories']]
+        for relative, expected in files.items():
+            if '..' in Path(relative).parts or Path(relative).is_absolute():
+                return None
+            source = inputs.get(relative)
+            if source is None and relative.startswith('bin/') and Path(relative).suffix.lower() == '.dll':
+                source = next((directory / Path(relative).name for directory in directories
+                               if (directory / Path(relative).name).is_file()), None)
+            if source is None or digest(source) != expected or digest(release / relative) != expected:
+                return None
+        return release
+    except (OSError, ValueError, KeyError):
+        return None
+
+
 def closure(root, directories):
     system = Path(os.environ['SystemRoot']) / 'System32'
     queue = list((root / 'bin').glob('*.exe')) + list((root / 'bin').glob('*.dll')) + list((root / 'share/grammars').glob('*.dll'))
@@ -109,16 +162,18 @@ def main():
             toolchain = Path(__file__).resolve().parent.parent / 'toolchain/laplace.cmake'
             run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-G', 'Ninja',
                  f'-DCMAKE_TOOLCHAIN_FILE={toolchain}', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'])
-        for target_bin in ('lpm.exe', 'lpm.dll'):
-            bin_path = mcp_build / target_bin
-            if bin_path.is_file():
-                try:
-                    bin_path.unlink()
-                except PermissionError:
-                    stale = mcp_build / f'{target_bin}.stale-{os.getpid()}'
-                    stale.unlink(missing_ok=True)
-                    bin_path.rename(stale)
         run(['cmake', '--build', str(mcp_build), '--target', 'lpm_program', 'lpm_lib'])
+    grammar_source = Path(config['grammars'])
+    definitions = Path(config['engine']) / 'recipes/formats/grammars'
+    if definitions.is_dir():
+        builder = Path(__file__).resolve().parent / 'build-grammars.ps1'
+        print(run(['pwsh', '-NoProfile', '-File', str(builder), '-Source', str(definitions),
+                   '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['build']) / 'grammars')]), flush=True)
+    reusable = reusable_release(config, revisions)
+    if reusable is not None:
+        print(json.dumps({'release': str(reusable), 'reused': True, 'copied': 0,
+                          'installation': str(config['installed_config']), 'revisions': revisions}))
+        return
     prefix = Path(config['prefix']).resolve()
     releases = prefix / 'releases'
     releases.mkdir(parents=True, exist_ok=True)
@@ -134,12 +189,6 @@ def main():
     shutil.copytree(Path(config['engine']) / 'recipes', candidate / 'share/recipes')
     shutil.copytree(Path(config['engine']) / 'firmware', candidate / 'share/firmware')
     copy_prepared(Path(config['prepared']), candidate / 'share/prepared')
-    grammar_source = Path(config['grammars'])
-    definitions = Path(config['engine']) / 'recipes/formats/grammars'
-    if definitions.is_dir():
-        builder = Path(__file__).resolve().parent / 'build-grammars.ps1'
-        run(['pwsh', '-NoProfile', '-File', str(builder), '-Source', str(definitions),
-             '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['build']) / 'grammars')])
     grammars = sorted(grammar_source.glob('*.dll'))
     if not grammars:
         raise ValueError('No compiled Windows grammars at the declared path')
@@ -207,8 +256,6 @@ def main():
         environment = client.process_environment(environment)
         environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')
         operations = [['text', 'Laplace'], ['status'], ['sources']]
-        if config['socket'].lower() == socket.gethostname().split('.')[0].lower():
-            operations = [['text', 'Laplace'], ['deploy'], ['status'], ['sources']]
         for operation in operations:
             result = subprocess.run([str(executable), *operation], capture_output=True, text=True, env=environment, timeout=120)
             if result.returncode:
