@@ -128,7 +128,10 @@ def verify_mcp(executable, environment):
 def process_environment(environment):
     # The named client controls selection; do not inherit another implementation's
     # LAPLACE_* values from a developer shell. libpq uses the human's own credential store.
-    inherited = {k: v for k, v in os.environ.items() if not k.startswith('LAPLACE_')}
+    # Code-search settings configure retrieval and its saved index, not the
+    # selected Engine or database. Keep the MCP host's explicit search settings.
+    inherited = {k: v for k, v in os.environ.items()
+                 if not k.startswith('LAPLACE_') or k.startswith('LAPLACE_CODE_')}
     if environment.get('LAPLACE_DATABASE_AUTHENTICATION') == 'sspi':
         inherited = {k: v for k, v in inherited.items() if not k.upper().startswith('PG')}
     # Intel's explicit affinity selection takes precedence; do not also request

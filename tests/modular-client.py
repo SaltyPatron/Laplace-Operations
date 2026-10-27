@@ -67,6 +67,20 @@ class ClientInputs(unittest.TestCase):
         self.assertNotIn('LAPLACE_SRC', child)
         self.assertNotIn('LAPLACE_MODELS', child)
 
+    def test_code_search_configuration_survives_client_isolation(self):
+        search = {'LAPLACE_CODE_ROOTS': str(self.root / 'documentation'),
+                  'LAPLACE_CODE_RECORDS': str(self.root / 'saved-index.lpm'),
+                  'LAPLACE_CODE_SEMANTIC': '1',
+                  'LAPLACE_CODE_TEXT_COLLECTIONS': 'prose',
+                  'LAPLACE_CODE_TEXT_EMBED_URL': 'http://localhost:8713/v1/embeddings'}
+        with patch.dict(os.environ, {**search, 'LAPLACE_CONNINFO': 'wrong database',
+                                     'LAPLACE_ENGINE': 'wrong engine'}):
+            executable, environment, _ = self.select()
+            child = client.process_environment(environment)
+        self.assertEqual({key: child.get(key) for key in search}, search)
+        self.assertIn("dbname='selected'", child['LAPLACE_CONNINFO'])
+        self.assertEqual(child['LAPLACE_ENGINE'], str(executable))
+
     def test_relative_and_ambiguous_input_roots_are_rejected(self):
         for value in ('relative/path', str(self.root / '..' / 'escape'), str(self.root) + '\nextra'):
             with self.subTest(value=value):
