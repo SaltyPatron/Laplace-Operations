@@ -149,7 +149,7 @@ class PackageReuse(unittest.TestCase):
     def test_unchanged_release_is_reused_without_writing_it(self):
         timestamps = {path: path.stat().st_mtime_ns for path in self.release.rglob('*') if path.is_file()}
         for _ in range(2):
-            self.assertEqual(self.package.reusable_release(self.config, self.revisions), self.release)
+            self.assertEqual(self.package.reusable_release(self.config, self.revisions), self.release.resolve())
         self.assertEqual({path: path.stat().st_mtime_ns for path in timestamps}, timestamps)
 
     def test_changed_inputs_and_corrupted_outputs_are_not_reused(self):
