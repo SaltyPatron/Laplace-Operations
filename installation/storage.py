@@ -199,12 +199,33 @@ def plan(work, build, source, site, modular=None, references=None, unknown=False
     source_roots = {source}
     if modular and modular.get('source'):
         source_roots.add(absolute(modular['source']))
-    repositories = {repository for root in source_roots if root.is_dir() for repository in root.iterdir()}
+    build_visibility = True
+    repositories = set()
+    for root in source_roots:
+        try:
+            if root.is_dir():
+                repositories.update(root.iterdir())
+            if (root / '.git').exists():
+                repositories.add(root)
+        except OSError:
+            build_visibility = False
+            notes.append('Builds retained: source registry is not readable at ' + str(root))
     for repository in repositories:
-        if not (repository / '.git').exists():
+        if repository.name != 'Laplace' and not repository.name.startswith('Laplace-'):
             continue
-        result = subprocess.run(['git', '-C', str(repository), 'worktree', 'list', '--porcelain'],
-                                capture_output=True, text=True, check=True)
+        try:
+            if not (repository / '.git').exists():
+                continue
+        except OSError:
+            build_visibility = False
+            notes.append('Builds retained: repository is not readable at ' + str(repository))
+            continue
+        result = subprocess.run(['git', '-c', 'safe.directory=' + str(repository), '-C', str(repository), 'worktree', 'list', '--porcelain'],
+                                capture_output=True, text=True)
+        if result.returncode:
+            build_visibility = False
+            notes.append('Builds retained: worktree registry unavailable for ' + str(repository))
+            continue
         for line in result.stdout.splitlines():
             if line.startswith('worktree '):
                 checkout = Path(line[9:])
@@ -217,6 +238,8 @@ def plan(work, build, source, site, modular=None, references=None, unknown=False
     for path in old_builds.iterdir() if old_builds.is_dir() else ():
         if path.is_dir() and re.fullmatch(r'(?:wt-[\w.-]+|laplace-[a-f0-9]{12})', path.name):
             reasons = ['registered_build'] if any(contains(path, item) for item in protected) else []
+            if not build_visibility:
+                reasons.append('worktree_registry_incomplete')
             if any((Path(directory) / '.git').exists() for directory, _, _ in os.walk(path, followlinks=False)):
                 reasons.append('source_checkout')
             add(path, old_builds, 'abandoned_build', reasons)

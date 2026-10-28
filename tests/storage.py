@@ -118,6 +118,19 @@ class Storage(unittest.TestCase):
                 storage.begin_delivery(self.site, self.source)
         self.assertEqual(owner.read_text(), original)
 
+    def test_unrelated_repositories_do_not_gate_laplace_cleanup(self):
+        (self.source / 'Hart.NBA/.git').mkdir(parents=True)
+        self.assertEqual(storage.collect(self.plan())['removed'], [str(self.old)])
+
+    def test_unobservable_registry_protects_builds_without_blocking_other_owners(self):
+        (self.source / 'Laplace-Archive/.git').mkdir(parents=True)
+        build = self.build / 'worktrees/wt-repair-0123456789ab'
+        build.mkdir(parents=True)
+        state = self.plan()
+        self.assertFalse(next(entry for entry in state['entries'] if entry['kind'] == 'abandoned_build')['retire'])
+        self.assertEqual(storage.collect(state)['removed'], [str(self.old)])
+        self.assertTrue(build.exists())
+
 
 if __name__ == '__main__':
     unittest.main()
