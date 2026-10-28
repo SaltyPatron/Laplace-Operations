@@ -91,12 +91,13 @@ def validate_tree(path, root):
             raise ValueError('Cleanup may not cross a mounted filesystem: ' + directory)
 
 
-def process_references(prefix):
+def process_references(prefix, opaque=None):
     """Use process identity, never a substring search of shell source text."""
     references, unknown = set(), False
     for process in Path('/proc').iterdir():
         if not process.name.isdigit():
             continue
+        name = 'unreadable'
         try:
             name = (process / 'comm').read_text().strip()
             try:
@@ -112,10 +113,14 @@ def process_references(prefix):
             if name in ('lpm', 'laplace') and (executable is None or not contains(prefix, executable)):
                 # An opaque native process could still map an older closure.
                 unknown = unknown or executable is None
+                if executable is None and opaque is not None:
+                    opaque.append(dict(pid=int(process.name), name=name, reason='executable_not_readable'))
         except FileNotFoundError:
             continue  # process exited during the snapshot
         except PermissionError:
             unknown = True
+            if opaque is not None:
+                opaque.append(dict(pid=int(process.name), name=name, reason='command_not_readable'))
     return references, unknown
 
 
@@ -317,7 +322,8 @@ def cleanup_native(config, receipt):
     """Called by modular.py while its existing installation lock is still held."""
     work = Path(os.environ.get('LAPLACE_WORK', str(Path(config['receipts']).parents[1])))
     build = Path(os.environ.get('LAPLACE_BUILD', str(Path(config['build']).parent)))
-    references, unknown = process_references(absolute(config['prefix']))
+    opaque = []
+    references, unknown = process_references(absolute(config['prefix']), opaque)
     notes = []
     try:
         references.update(database_references(config))
@@ -325,6 +331,7 @@ def cleanup_native(config, receipt):
         unknown = True
         notes.append(str(error))
     state = plan(work, build, Path(config['source']), work / 'mono-site', config, references, unknown)
+    state['opaque_processes'] = opaque
     state['notes'].extend(notes)
     try:
         collect(state)
@@ -380,9 +387,9 @@ def main():
             print('Claimed delivery work: ' + str(site))
             return
         references, _ = process_references(site)
-        unknown, notes = False, []
+        unknown, notes, opaque = False, [], []
         if config:
-            native_references, unknown = process_references(absolute(config['prefix']))
+            native_references, unknown = process_references(absolute(config['prefix']), opaque)
             references.update(native_references)
             try:
                 references.update(database_references(config))
@@ -390,6 +397,7 @@ def main():
                 unknown = True
                 notes.append(str(error))
         state = plan(work, build, source, site, config, references, unknown, args.finish_job)
+        state['opaque_processes'] = opaque
         state['notes'].extend(notes)
         try:
             if args.operation == 'clean':
