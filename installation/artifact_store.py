@@ -6,6 +6,24 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
+import subprocess
+import sys
+
+
+def cleanup(store, installation=None):
+    """Standalone publishers share the operator's collector, after releasing locks.
+
+    A containing PowerShell operation collects in its outer finally block.
+    This is a bounded local build cache, not a historical package repository.
+    """
+    if os.name != 'nt' or os.environ.get('LAPLACE_STORAGE_OWNER_PID'):
+        return
+    environment = os.environ.copy()
+    environment['LAPLACE_WORK'] = str(Path(store).resolve().parents[1])
+    arguments = ['pwsh', '-NoProfile', '-File', str(Path(__file__).resolve().parents[1] / 'laplace.ps1'), 'clean']
+    if installation is not None:
+        arguments += ['-Installation', str(installation)]
+    subprocess.run(arguments, check=True, env=environment, stdout=sys.stderr)
 
 
 def digest(path):

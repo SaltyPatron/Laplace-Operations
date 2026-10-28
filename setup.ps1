@@ -57,6 +57,7 @@ USAGE
                                           volumes | packages | rights | deps | postgres | cluster | settings | access | report
                                           network | shares | services | firewall | backup | status
   pwsh -File setup.ps1 client           Package Laplace-Native + Laplace-Engine and install the modular 'laplace' CLI
+  pwsh -File setup.ps1 clean            Clean unused local releases, packages and abandoned generated output
   pwsh -File setup.ps1 tree-sitter      Build and verify the pinned grammar generator and its isolated Rust SDK
   pwsh -File setup.ps1 repair-postgres  Repair codec DLLs and service startup; verify the original cluster (no database reset)
   pwsh -File setup.ps1 repair-postgres -Check  Inspect the selected service and required repair without changing it
@@ -64,6 +65,11 @@ USAGE
 
 Once setup.ps1 has been run once, use 'laplace-ops' from any directory for daily builds, database maintenance, IIS, and deployments.
 '@ | Write-Host
+    return
+}
+if ($Parts.Count -eq 1 -and $Parts[0] -in @('clean','cleanup')) {
+    $cleanupOperation=if($Check){'storage'}else{'clean'}
+    & "$PSScriptRoot/laplace.ps1" $cleanupOperation -Installation $Installation
     return
 }
 if ($Parts.Count -eq 1 -and $Parts[0] -eq 'secrets-agents') {
@@ -93,8 +99,14 @@ if ($Check -and -not ($Parts.Count -eq 1 -and $Parts[0] -eq 'repair-postgres')) 
 if ($Parts -contains 'development') {
     if ($Parts.Count -ne 1) { throw 'Run the development profile separately from explicit database/service installation steps.' }
     Install-LaplaceOpsCommand
-    & pwsh -NoProfile -File "$PSScriptRoot/dev.ps1" -Operation prepare
-    exit $LASTEXITCODE
+    . "$PSScriptRoot/laplace.env.ps1"
+    . "$PSScriptRoot/installation/storage.ps1"
+    $storageOperation=Enter-DesktopStorageOperation
+    try {
+        & pwsh -NoProfile -File "$PSScriptRoot/dev.ps1" -Operation prepare
+        $developmentExitCode=$LASTEXITCODE
+    }finally{Exit-DesktopStorageOperation $storageOperation}
+    exit $developmentExitCode
 }
 $ReadOnlyPgRepair = [bool]$Check
 . "$PSScriptRoot\laplace.env.ps1"
@@ -1117,8 +1129,11 @@ if ($Status) {
     if ($other.Count) { "setup.ps1 status reports shares, services, firewall and backup; $($other -join ', ') has none (report)"; Stop-Transcript | Out-Null; exit 2 }
 }
 function postgres { & "$PSScriptRoot/installation/postgres-installation.ps1" }
+. "$PSScriptRoot/installation/storage.ps1"
+$storageOperation=if(-not $Status -and -not $ReadOnlyPgRepair -and @($Parts | Where-Object {$_ -ne 'report'}).Count){Enter-DesktopStorageOperation}else{$null}
 try { foreach ($p in $Parts) { if ($p -eq 'all') { Install-LaplaceOpsCommand; volumes; packages; rights; deps; postgres; cluster; settings; access; report } else { & $p } } }
 catch { "=== $($_.InvocationInfo.ScriptName):$($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"; $failed.Add("setup.ps1 stopped: $($_.Exception.Message)") }
+finally { try{Exit-DesktopStorageOperation $storageOperation}catch{$failed.Add("cleanup: $($_.Exception.Message)")} }
 ''
 if ($failed.Count) { '=== failed'; $failed | ForEach-Object { "  $_" } }
 if ($ReadOnlyPgRepair) { if ($failed.Count) { exit 1 }; return }

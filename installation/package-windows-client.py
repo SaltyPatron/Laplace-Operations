@@ -14,6 +14,7 @@ import tempfile
 
 STAGING = []
 STORE = None
+DECLARATION = None
 _spec = importlib.util.spec_from_file_location('artifact_store', Path(__file__).with_name('artifact_store.py'))
 artifacts = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(artifacts)
@@ -132,11 +133,12 @@ def closure(root, directories):
 
 
 def main():
-    global STORE
+    global STORE, DECLARATION
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--installation', type=Path, required=True)
     parser.add_argument('--force', action='store_true', help='Explicitly rebuild the selected native components and grammars')
     args = parser.parse_args()
+    DECLARATION = args.installation.resolve()
     if os.name != 'nt':
         raise ValueError('Build this package on its Windows target')
     config = json.loads(args.installation.read_text())
@@ -158,146 +160,147 @@ def main():
             path = Path(config[key])
             if not path.is_absolute() or '..' in path.parts:
                 raise ValueError('Declare an absolute path for ' + key)
-    revisions = {}
-    repo_sources = [('Laplace-Engine', 'engine'), ('Laplace-Native', 'native')]
-    if has_mcp:
-        repo_sources.append(('Laplace-MCP', 'mcp'))
-    for name, key in repo_sources:
-        dirty = run(['git', '-C', config[key], 'status', '--porcelain', '--untracked-files=no'])
-        head = run(['git', '-C', config[key], 'rev-parse', 'HEAD'])
-        if dirty:
-            diff_bytes = subprocess.run(['git', '-C', config[key], 'diff', 'HEAD'], capture_output=True, check=True).stdout
-            revisions[name] = head + '-dirty-' + hashlib.sha256(diff_bytes).hexdigest()[:12]
-        else:
-            revisions[name] = head
-    cache = (Path(config['build']) / 'CMakeCache.txt').read_text()
-    for variable, key in (('CMAKE_HOME_DIRECTORY', 'engine'), ('LAPLACE_NATIVE', 'native')):
-        selected = re.search(r'^' + variable + r':[^=]+=(.+)$', cache, re.M)
-        if not selected or Path(selected.group(1).strip()).resolve() != Path(config[key]).resolve():
-            raise ValueError('Configured build does not use the declared source: ' + variable)
-    clean = ['--clean-first'] if args.force else []
-    build_run(['cmake', '--build', config['build'], *clean, '--target', 'laplace_engine'])
-    if has_mcp:
-        mcp_build = Path(config['mcp_build'])
-        cache_file = mcp_build / 'CMakeCache.txt'
-        if cache_file.is_file() and 'CMAKE_RUNTIME_OUTPUT_DIRECTORY' in cache_file.read_text():
-            build_run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-UCMAKE_RUNTIME_OUTPUT_DIRECTORY'])
-        if not cache_file.is_file():
-            toolchain = Path(__file__).resolve().parent.parent / 'toolchain/laplace.cmake'
-            build_run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-G', 'Ninja',
-                 f'-DCMAKE_TOOLCHAIN_FILE={toolchain}', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'])
-        build_run(['cmake', '--build', str(mcp_build), *clean, '--target', 'lpm_program', 'lpm_lib'])
-    grammar_source = Path(config['grammars'])
-    definitions = Path(config['engine']) / 'recipes/formats/grammars'
-    if definitions.is_dir():
-        builder = Path(__file__).resolve().parent / 'build-grammars.ps1'
-        build_run(['pwsh', '-NoProfile', '-File', str(builder), '-Source', str(definitions),
-                   '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['build']) / 'grammars'),
-                   *(['-Force'] if args.force else [])])
-    reusable = reusable_release(config, revisions) if not args.force else None
-    if reusable is not None:
-        print(json.dumps({'release': str(reusable), 'reused': True, 'copied': 0,
-                          'installation': str(config['installed_config']), 'revisions': revisions}))
-        return
-    prefix = Path(config['prefix']).resolve()
-    releases = prefix / 'releases'
-    releases.mkdir(parents=True, exist_ok=True)
-    candidate = Path(tempfile.mkdtemp(prefix='.package-', dir=releases)).resolve()
-    if not candidate.is_relative_to(releases):
-        raise ValueError('Package staging is outside the declared release directory')
-    STAGING.append((candidate, releases))
-    (candidate / 'bin').mkdir()
-    stage_file(Path(config['build']) / 'laplace.exe', candidate / 'bin/laplace.exe')
-    if has_mcp:
-        stage_file(Path(config['mcp_build']) / 'lpm.exe', candidate / 'bin/lpm.exe')
-        stage_file(Path(config['mcp_build']) / 'lpm.dll', candidate / 'bin/lpm.dll')
-    shutil.copytree(Path(config['engine']) / 'recipes', candidate / 'share/recipes', copy_function=stage_file)
-    shutil.copytree(Path(config['engine']) / 'firmware', candidate / 'share/firmware', copy_function=stage_file)
-    copy_prepared(Path(config['prepared']), candidate / 'share/prepared')
-    grammars = sorted(grammar_source.glob('*.dll'))
-    if not grammars:
-        raise ValueError('No compiled Windows grammars at the declared path')
-    (candidate / 'share/grammars').mkdir()
-    for file in grammars:
-        stage_file(file, candidate / 'share/grammars' / file.name)
-    directories = [Path(path) for path in config['runtime_directories']]
-    # oneMKL selects CPU kernels dynamically; these do not appear in PE imports.
-    for pattern in config['mkl_runtime_libraries']:
-        libraries = list(Path(config['mkl_runtime']).glob(pattern))
-        if not libraries:
-            raise ValueError('Missing declared oneMKL runtime library: ' + pattern)
-        for file in libraries:
-            stage_file(file, candidate / 'bin' / file.name)
-    closure(candidate, directories)
-    files = {str(path.relative_to(candidate)).replace('\\', '/'): digest(path)
-             for path in sorted(candidate.rglob('*')) if path.is_file()}
-    components = ['Laplace-Engine']
-    if has_mcp:
-        components.append('Laplace-MCP')
-    package = {'schema': 'laplace.modular-package/v1', 'platform': 'windows-x86_64',
-               'components': components, 'revisions': revisions, 'files': files,
-               'grammars': [path.stem.removeprefix('libtree-sitter-') for path in grammars]}
-    identity = hashlib.sha256(json.dumps(package, sort_keys=True).encode()).hexdigest()
-    release = releases / identity
-    (candidate / 'package.json').write_text(json.dumps(package, indent=2) + '\n')
-    if release.exists():
-        if json.loads((release / 'package.json').read_text()) != package or any(digest(release / path) != value for path, value in files.items()):
-            raise ValueError('Existing release bytes differ from its identity')
-        shutil.rmtree(candidate)  # checked above: only this operation's private staging directory
-    else:
-        candidate.rename(release)
-    # A private tempfile created while elevated can admit only the elevated
-    # token. The operator's ordinary token must also read the published release.
-    run(['icacls.exe', release, '/grant', '*' + operator_sid + ':(OI)(CI)(RX)'])
-    if config.get('database_artifact_reader'):
-        if config['socket'].lower() != socket.gethostname().lower() or not re.fullmatch(r'S-1-[0-9-]+', config['database_artifact_reader']):
-            raise ValueError('A database artifact reader must select a Windows SID on the local database host')
-        run(['icacls.exe', release / 'share/prepared', '/grant', '*' + config['database_artifact_reader'] + ':(OI)(CI)(RX)'])
-    installed = {key: config[key] for key in ('schema', 'host', 'prefix', 'state', 'socket', 'port', 'database', 'threads', 'batch_mb', 'ucd')}
-    installed.update(release=str(release), tier0=str(release / 'share/prepared/tier0.bin'),
-                     flags=str(release / 'share/prepared/tier0.flags'), highway=str(release / 'share/prepared/tier0.highway'),
-                     grammars=str(release / 'share/grammars'))
-    destination = Path(config['installed_config'])
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        previous = json.loads(destination.read_text())
-        if previous.get('schema') != config['schema'] or previous.get('host') != config['host']:
-            raise ValueError('Installed configuration belongs to another application or host')
-    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=destination.parent,
-                                     prefix='.installation-', delete=False) as stream:
-        pending = Path(stream.name)
-        stream.write(json.dumps(installed, indent=2) + '\n')
-    # Verify from the candidate installation without exposing the build PATH or
-    # changing the selected command/configuration until native + SQL checks pass.
-    profile = {'schema': 'laplace.modular-client/v1', 'installation': str(pending),
-               'role': config['operator_client']['role'], 'data': config['operator_client']['data'],
-               'work': config['operator_client']['work'], 'connection': config['operator_client']['connection']}
-    profile.update({key: config['operator_client'][key] for key in ('source', 'models') if key in config['operator_client']})
-    import client
-    client_candidate = pending.with_suffix('.client')
-    client_candidate.write_text(json.dumps(profile))
-    try:
-        executable, environment, _ = client.selected(client_candidate)
-        environment = client.process_environment(environment)
-        environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')
-        operations = [['text', 'Laplace'], ['status'], ['sources']]
-        for operation in operations:
-            result = subprocess.run([str(executable), *operation], capture_output=True, text=True, env=environment, timeout=120)
-            if result.returncode:
-                raise ValueError('Packaged Engine ' + operation[0] + ' failed: ' + result.stderr)
-            if operation == ['sources'] and result.stderr.strip():
-                raise ValueError('Packaged recipe resources failed: ' + result.stderr)
-            if operation == ['status'] and result.stdout.count("the same as this engine's") != 2:
-                raise ValueError('Installed tier 0 and highway do not agree with the selected database: ' + result.stdout)
-        # The candidate MCP must initialize and execute a native tool before
-        # changing the installed selection used by future client connections.
+    with artifacts.store_lock(STORE):
+        revisions = {}
+        repo_sources = [('Laplace-Engine', 'engine'), ('Laplace-Native', 'native')]
         if has_mcp:
-            client.verify_mcp(executable, environment)
-        os.replace(pending, destination)
-    finally:
-        client_candidate.unlink(missing_ok=True)
-        pending.unlink(missing_ok=True)
-    print(json.dumps({'release': str(release), 'installation': str(destination), 'files': len(files), 'grammars': len(grammars)}))
+            repo_sources.append(('Laplace-MCP', 'mcp'))
+        for name, key in repo_sources:
+            dirty = run(['git', '-C', config[key], 'status', '--porcelain', '--untracked-files=no'])
+            head = run(['git', '-C', config[key], 'rev-parse', 'HEAD'])
+            if dirty:
+                diff_bytes = subprocess.run(['git', '-C', config[key], 'diff', 'HEAD'], capture_output=True, check=True).stdout
+                revisions[name] = head + '-dirty-' + hashlib.sha256(diff_bytes).hexdigest()[:12]
+            else:
+                revisions[name] = head
+        cache = (Path(config['build']) / 'CMakeCache.txt').read_text()
+        for variable, key in (('CMAKE_HOME_DIRECTORY', 'engine'), ('LAPLACE_NATIVE', 'native')):
+            selected = re.search(r'^' + variable + r':[^=]+=(.+)$', cache, re.M)
+            if not selected or Path(selected.group(1).strip()).resolve() != Path(config[key]).resolve():
+                raise ValueError('Configured build does not use the declared source: ' + variable)
+        clean = ['--clean-first'] if args.force else []
+        build_run(['cmake', '--build', config['build'], *clean, '--target', 'laplace_engine'])
+        if has_mcp:
+            mcp_build = Path(config['mcp_build'])
+            cache_file = mcp_build / 'CMakeCache.txt'
+            if cache_file.is_file() and 'CMAKE_RUNTIME_OUTPUT_DIRECTORY' in cache_file.read_text():
+                build_run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-UCMAKE_RUNTIME_OUTPUT_DIRECTORY'])
+            if not cache_file.is_file():
+                toolchain = Path(__file__).resolve().parent.parent / 'toolchain/laplace.cmake'
+                build_run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-G', 'Ninja',
+                     f'-DCMAKE_TOOLCHAIN_FILE={toolchain}', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'])
+            build_run(['cmake', '--build', str(mcp_build), *clean, '--target', 'lpm_program', 'lpm_lib'])
+        grammar_source = Path(config['grammars'])
+        definitions = Path(config['engine']) / 'recipes/formats/grammars'
+        if definitions.is_dir():
+            builder = Path(__file__).resolve().parent / 'build-grammars.ps1'
+            build_run(['pwsh', '-NoProfile', '-File', str(builder), '-Source', str(definitions),
+                       '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['build']) / 'grammars'),
+                       *(['-Force'] if args.force else [])])
+        reusable = reusable_release(config, revisions) if not args.force else None
+        if reusable is not None:
+            print(json.dumps({'release': str(reusable), 'reused': True, 'copied': 0,
+                              'installation': str(config['installed_config']), 'revisions': revisions}))
+            return
+        prefix = Path(config['prefix']).resolve()
+        releases = prefix / 'releases'
+        releases.mkdir(parents=True, exist_ok=True)
+        candidate = Path(tempfile.mkdtemp(prefix='.package-', dir=releases)).resolve()
+        if not candidate.is_relative_to(releases):
+            raise ValueError('Package staging is outside the declared release directory')
+        STAGING.append((candidate, releases))
+        (candidate / 'bin').mkdir()
+        stage_file(Path(config['build']) / 'laplace.exe', candidate / 'bin/laplace.exe')
+        if has_mcp:
+            stage_file(Path(config['mcp_build']) / 'lpm.exe', candidate / 'bin/lpm.exe')
+            stage_file(Path(config['mcp_build']) / 'lpm.dll', candidate / 'bin/lpm.dll')
+        shutil.copytree(Path(config['engine']) / 'recipes', candidate / 'share/recipes', copy_function=stage_file)
+        shutil.copytree(Path(config['engine']) / 'firmware', candidate / 'share/firmware', copy_function=stage_file)
+        copy_prepared(Path(config['prepared']), candidate / 'share/prepared')
+        grammars = sorted(grammar_source.glob('*.dll'))
+        if not grammars:
+            raise ValueError('No compiled Windows grammars at the declared path')
+        (candidate / 'share/grammars').mkdir()
+        for file in grammars:
+            stage_file(file, candidate / 'share/grammars' / file.name)
+        directories = [Path(path) for path in config['runtime_directories']]
+        # oneMKL selects CPU kernels dynamically; these do not appear in PE imports.
+        for pattern in config['mkl_runtime_libraries']:
+            libraries = list(Path(config['mkl_runtime']).glob(pattern))
+            if not libraries:
+                raise ValueError('Missing declared oneMKL runtime library: ' + pattern)
+            for file in libraries:
+                stage_file(file, candidate / 'bin' / file.name)
+        closure(candidate, directories)
+        files = {str(path.relative_to(candidate)).replace('\\', '/'): digest(path)
+                 for path in sorted(candidate.rglob('*')) if path.is_file()}
+        components = ['Laplace-Engine']
+        if has_mcp:
+            components.append('Laplace-MCP')
+        package = {'schema': 'laplace.modular-package/v1', 'platform': 'windows-x86_64',
+                   'components': components, 'revisions': revisions, 'files': files,
+                   'grammars': [path.stem.removeprefix('libtree-sitter-') for path in grammars]}
+        identity = hashlib.sha256(json.dumps(package, sort_keys=True).encode()).hexdigest()
+        release = releases / identity
+        (candidate / 'package.json').write_text(json.dumps(package, indent=2) + '\n')
+        if release.exists():
+            if json.loads((release / 'package.json').read_text()) != package or any(digest(release / path) != value for path, value in files.items()):
+                raise ValueError('Existing release bytes differ from its identity')
+            shutil.rmtree(candidate)  # checked above: only this operation's private staging directory
+        else:
+            candidate.rename(release)
+        # A private tempfile created while elevated can admit only the elevated
+        # token. The operator's ordinary token must also read the published release.
+        run(['icacls.exe', release, '/grant', '*' + operator_sid + ':(OI)(CI)(RX)'])
+        if config.get('database_artifact_reader'):
+            if config['socket'].lower() != socket.gethostname().lower() or not re.fullmatch(r'S-1-[0-9-]+', config['database_artifact_reader']):
+                raise ValueError('A database artifact reader must select a Windows SID on the local database host')
+            run(['icacls.exe', release / 'share/prepared', '/grant', '*' + config['database_artifact_reader'] + ':(OI)(CI)(RX)'])
+        installed = {key: config[key] for key in ('schema', 'host', 'prefix', 'state', 'socket', 'port', 'database', 'threads', 'batch_mb', 'ucd')}
+        installed.update(release=str(release), tier0=str(release / 'share/prepared/tier0.bin'),
+                         flags=str(release / 'share/prepared/tier0.flags'), highway=str(release / 'share/prepared/tier0.highway'),
+                         grammars=str(release / 'share/grammars'))
+        destination = Path(config['installed_config'])
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            previous = json.loads(destination.read_text())
+            if previous.get('schema') != config['schema'] or previous.get('host') != config['host']:
+                raise ValueError('Installed configuration belongs to another application or host')
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=destination.parent,
+                                         prefix='.installation-', delete=False) as stream:
+            pending = Path(stream.name)
+            stream.write(json.dumps(installed, indent=2) + '\n')
+        # Verify from the candidate installation without exposing the build PATH or
+        # changing the selected command/configuration until native + SQL checks pass.
+        profile = {'schema': 'laplace.modular-client/v1', 'installation': str(pending),
+                   'role': config['operator_client']['role'], 'data': config['operator_client']['data'],
+                   'work': config['operator_client']['work'], 'connection': config['operator_client']['connection']}
+        profile.update({key: config['operator_client'][key] for key in ('source', 'models') if key in config['operator_client']})
+        import client
+        client_candidate = pending.with_suffix('.client')
+        client_candidate.write_text(json.dumps(profile))
+        try:
+            executable, environment, _ = client.selected(client_candidate)
+            environment = client.process_environment(environment)
+            environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')
+            operations = [['text', 'Laplace'], ['status'], ['sources']]
+            for operation in operations:
+                result = subprocess.run([str(executable), *operation], capture_output=True, text=True, env=environment, timeout=120)
+                if result.returncode:
+                    raise ValueError('Packaged Engine ' + operation[0] + ' failed: ' + result.stderr)
+                if operation == ['sources'] and result.stderr.strip():
+                    raise ValueError('Packaged recipe resources failed: ' + result.stderr)
+                if operation == ['status'] and result.stdout.count("the same as this engine's") != 2:
+                    raise ValueError('Installed tier 0 and highway do not agree with the selected database: ' + result.stdout)
+            # The candidate MCP must initialize and execute a native tool before
+            # changing the installed selection used by future client connections.
+            if has_mcp:
+                client.verify_mcp(executable, environment)
+            os.replace(pending, destination)
+        finally:
+            client_candidate.unlink(missing_ok=True)
+            pending.unlink(missing_ok=True)
+        print(json.dumps({'release': str(release), 'installation': str(destination), 'files': len(files), 'grammars': len(grammars)}))
 
 
 if __name__ == '__main__':
@@ -307,3 +310,5 @@ if __name__ == '__main__':
         for path, parent in STAGING:
             if path.exists() and path.resolve().parent == parent.resolve() and path.name.startswith('.package-'):
                 shutil.rmtree(path)
+        if STORE is not None:
+            artifacts.cleanup(STORE, DECLARATION)

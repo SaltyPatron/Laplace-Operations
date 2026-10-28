@@ -64,6 +64,8 @@ $result = [ordered]@{
 }
 $warnings = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $record = $null
+. "$PSScriptRoot/storage.ps1"
+$storageOperation=Enter-DesktopStorageOperation
 try {
     if ($mono.Count -and -not (Test-Path -LiteralPath "$source/deploy/windows/Build-IisPackage.ps1" -PathType Leaf)) {
         throw "SourcePath does not name the Laplace application checkout: $source"
@@ -170,6 +172,15 @@ try {
     if ($receiptPath) { Write-Host 'Deployment has not passed all stages. See the receipt for completed and failed work.' }
     else { Write-Host 'Preflight failed; no build, publication or migration stages ran.' }
 } finally {
+    try {
+        $cleanup=Exit-DesktopStorageOperation -Operation $storageOperation -Modular (Get-DesktopClientDeclaration $ModularInstallation) -Iis $config -PassThru
+        if($cleanup){$result.cleanup=@{status=$cleanup.status;receipt=$cleanup.receipt;removed=$cleanup.removed.Count}}
+    }
+    catch {
+        $result.cleanup_error=$_.Exception.Message
+        $result.status='failed'
+        Write-Host "Desktop cleanup failed: $($result.cleanup_error). Run laplace-ops clean; do not rebuild installed components." -ForegroundColor Red
+    }
     $result.finished_utc = [DateTime]::UtcNow.ToString('o')
     $result.warnings = @($warnings | Sort-Object)
     if ($receiptPath) {

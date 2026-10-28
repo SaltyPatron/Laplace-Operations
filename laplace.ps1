@@ -31,10 +31,12 @@ param(
     [switch]$Force,
     [switch]$Json,
     [ValidateSet('status','verify')][string]$ClientOperation = 'status',
+    [ValidateSet('status','clean')][string]$StorageOperation = 'status',
     [Alias('h')][switch]$Help,
     [Parameter(ValueFromRemainingArguments)][string[]]$RemainingArgs = @()
 )
 $ErrorActionPreference = 'Stop'
+if ($Operation -in @('clean','cleanup')) { $Operation='storage';$StorageOperation='clean' }
 if ($Help -or $Operation -in @('help','-h','--help','/?') -or ($RemainingArgs | Where-Object { $_ -in @('help','-h','--help','/?') })) {
     $Operation = 'help'
 } else {
@@ -42,6 +44,7 @@ if ($Help -or $Operation -in @('help','-h','--help','/?') -or ($RemainingArgs | 
     $takesNames = $Operation -in @('ingest','data')                          # source or data-set names, given after the operation
     foreach ($token in $RemainingArgs) {
         if ($Operation -eq 'clients' -and $token -in @('status','verify')) { $ClientOperation=$token; continue }
+        if ($Operation -eq 'storage' -and $token -in @('status','clean')) { $StorageOperation=$token; continue }
         if ($Operation -eq 'data' -and $token -in @('status','fetch','record')) { $DataOperation = $token; continue }
         if ($takesNames -and $token -notmatch '^-' -and $token -notin @('desktop','staging','production','cloud','yes','wait')) { $Names += $token; continue }
         switch ($token.ToLowerInvariant()) {
@@ -68,7 +71,7 @@ if ($Help -or $Operation -in @('help','-h','--help','/?') -or ($RemainingArgs | 
         }
     }
 }
-$validOperations = @('help','status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','clients','prepare','build','test','recovery','db','restart-iis','repair-postgres','ingest','seed','sources','data')
+$validOperations = @('help','status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','clients','storage','prepare','build','test','recovery','db','restart-iis','repair-postgres','ingest','seed','sources','data')
 if ($Operation -notin $validOperations) {
     throw "Unknown operation '$Operation'. Valid operations: $($validOperations -join ', ')"
 }
@@ -113,6 +116,9 @@ LOCAL DESKTOP ONE-TIME SETUP & MODULAR CLI
   laplace-ops components desktop      Package Laplace-Native + Laplace-Engine and install the 'laplace' CLI
   laplace-ops clients [-Json]          Show installed/running modular releases, client owners and release retention
   laplace-ops clients verify [-Json]   The same; exit 2 if older clients need reconnecting, 1 if inventory is incomplete
+  laplace-ops storage [-Json]          Audit installed releases and reusable package/component retention
+  laplace-ops storage clean [-Json]    Retire unreferenced packaged outputs; preserve live selections and rollback
+  laplace-ops clean [-Json]            Clean unused releases, packages, blobs and abandoned build/scratch output
 
 INGESTION AND DATA (Laplace-Engine: the laplace program, recipes/order, the data sets of data.tsv)
   laplace-ops sources [-Json]         Complete installed recipe catalog: source aliases, content, prerequisites and decomposers
@@ -136,7 +142,7 @@ REMOTE CI/CD & ENVIRONMENT OPERATIONS (GitHub Actions)
 '@ | Write-Host
     exit 0
 }
-$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','repair-postgres','clients','ingest','seed','sources','data')
+$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','repair-postgres','clients','storage','ingest','seed','sources','data')
 if (-not $PSBoundParameters.ContainsKey('Target')) {
     $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
 }
@@ -149,6 +155,26 @@ if ($Plan -and -not ($Operation -in 'deploy','repair-postgres' -and $Target -eq 
 }
 if ($Operation -in @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','restart-iis','repair-postgres') -and $Target -ne 'desktop') {
     throw "$Operation runs on desktop; target '$Target' is not supported. Use deploy to install a deployment target."
+}
+if ($Operation -eq 'storage') {
+    if ($Target -ne 'desktop') { throw 'storage operates on this desktop installation.' }
+    . "$PSScriptRoot/laplace.env.ps1"
+    . "$PSScriptRoot/installation/desktop-clients.ps1"
+    . "$PSScriptRoot/installation/storage.ps1"
+    $modular=Get-DesktopClientDeclaration $Installation
+    $iis=Read-StorageJson $env:LAPLACE_IIS_INSTALLATION
+    $arguments=@{WorkRoot=$env:LAPLACE_WORK;BuildRoot=$env:LAPLACE_BUILD;Modular=$modular;Iis=$iis}
+    $state=if ($StorageOperation -eq 'clean') { Invoke-DesktopStorageCleanup @arguments } else { Get-DesktopStoragePlan @arguments }
+    if ($Json) { $state | ConvertTo-Json -Depth 10 }
+    else {
+        if ($StorageOperation -eq 'clean') {
+            $delta=($state.drives | ForEach-Object {$_.free_bytes_after-$_.free_bytes_before} | Measure-Object -Sum).Sum
+            Write-Host "Cleanup: $($state.removed.Count) unused outputs removed; $([math]::Round($delta/1GB,2)) GiB free-space increase across declared drives."
+        }
+        else { $state.entries | Select-Object kind,retire,path,@{n='reason';e={$_.reasons -join ','}} | Format-Table -AutoSize }
+        if ($state.receipt) { Write-Host "Storage receipt: $($state.receipt)" }
+    }
+    exit 0
 }
 if ($Operation -eq 'clients') {
     if ($Target -ne 'desktop') { throw 'clients inventories the local Windows installation; remote MCP services are verified by their delivery workflows.' }

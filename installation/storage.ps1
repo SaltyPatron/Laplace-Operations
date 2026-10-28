@@ -1,0 +1,444 @@
+# Desktop artifact retention. Sources, databases, corpora and live build profiles
+# are not garbage-collection targets. Publication and component-store locks are
+# shared with their existing owners; deletion stays in this PowerShell process.
+function Read-StorageJson([string]$Path) {
+    if (-not $Path) { return $null }
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
+        return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    }
+    return $null
+}
+
+function Get-StorageAncestorIds {
+    $parents=[Collections.Generic.HashSet[int]]::new()
+    $current=$PID
+    while ($current -and $parents.Add([int]$current)) {
+        $current=(Get-CimInstance Win32_Process -Filter "ProcessId=$current" -ErrorAction Stop).ParentProcessId
+    }
+    return ,$parents
+}
+
+function Get-StorageBuildReferences([string]$BuildRoot,[string]$SourceRoot=$env:LAPLACE_SRC) {
+    $references=@((Join-Path $BuildRoot 'Laplace'))
+    foreach($name in 'LAPLACE_BUILD_ROOT','LAPLACE_ENGINE_BUILD','LAPLACE_ENGINE_BUILD_ASAN') {
+        $value=[Environment]::GetEnvironmentVariable($name)
+        if($value){$references+=$value}
+    }
+    foreach($repository in Get-ChildItem -LiteralPath $SourceRoot -Directory) {
+        if(-not (Test-Path -LiteralPath (Join-Path $repository.FullName '.git'))){continue}
+        $worktrees=@(& git -C $repository.FullName worktree list --porcelain)
+        if($LASTEXITCODE){throw "Cannot audit build ownership for $($repository.FullName)"}
+        foreach($line in $worktrees) {
+            if($line -notmatch '^worktree (.+)$'){continue}
+            $checkout=[IO.Path]::GetFullPath($Matches[1]).TrimEnd('\').ToLowerInvariant()
+            if($checkout -eq [IO.Path]::GetFullPath((Join-Path $SourceRoot 'Laplace')).ToLowerInvariant()){continue}
+            $identity=[IO.Path]::GetFileName($checkout)+'-'+[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($checkout))).Substring(0,12).ToLowerInvariant()
+            $references+=Join-Path $BuildRoot ('worktrees/'+$identity)
+        }
+    }
+    return $references
+}
+
+function Get-StorageScratch([string]$Root,[string]$Pattern,[string]$Kind,[string[]]$References,[object[]]$Processes) {
+    if(-not (Test-Path -LiteralPath $Root -PathType Container)){return @()}
+    foreach($directory in Get-ChildItem -LiteralPath $Root -Directory -Force) {
+        if($directory.Name -notmatch $Pattern){continue}
+        $reasons=@()
+        if(Test-StorageReference $directory.FullName $References $Processes){$reasons+='live_reference'}
+        if($directory.Attributes -band [IO.FileAttributes]::ReparsePoint){$reasons+='reparse_point'}
+        if($Kind -eq 'abandoned_build' -and @(Get-ChildItem -LiteralPath $directory.FullName -Filter .git -Recurse -Force).Count){$reasons+='source_checkout'}
+        [pscustomobject]@{path=$directory.FullName;root=[IO.Path]::GetFullPath($Root);kind=$Kind;marker=$null;
+            revision=$null;modified_utc=$directory.LastWriteTimeUtc.ToString('o');reasons=$reasons;retire=($reasons.Count -eq 0)}
+    }
+}
+
+function Enter-DesktopStorageOperation([string]$WorkRoot=$env:LAPLACE_WORK) {
+    $previous=$env:LAPLACE_STORAGE_OWNER_PID
+    $previousRoot=$env:LAPLACE_STORAGE_WORK_ROOT
+    $fullRoot=[IO.Path]::GetFullPath($WorkRoot)
+    if ($previous -match '^\d+$' -and (-not $previousRoot -or $previousRoot -ieq $fullRoot) -and (Get-StorageAncestorIds).Contains([int]$previous)) { return $null }
+    $directory=Join-Path $WorkRoot 'operations'
+    $null=New-Item -ItemType Directory -Path $directory -Force
+    try { $lock=[IO.File]::Open((Join-Path $directory '.storage-operation.lock'),'OpenOrCreate','ReadWrite','None') }
+    catch [IO.IOException] { throw 'Another Laplace build/install/publication owns storage. Run laplace-ops clean after it finishes; no rebuild is needed.' }
+    $env:LAPLACE_STORAGE_OWNER_PID=[string]$PID
+    $env:LAPLACE_STORAGE_WORK_ROOT=$fullRoot
+    return @{lock=$lock;previous=$previous;previous_root=$previousRoot}
+}
+
+function Close-DesktopStorageOperation($Operation) {
+    if ($Operation) {
+        $env:LAPLACE_STORAGE_OWNER_PID=$Operation.previous
+        $env:LAPLACE_STORAGE_WORK_ROOT=$Operation.previous_root
+        $Operation.lock.Dispose()
+    }
+}
+
+function Exit-DesktopStorageOperation {
+    param($Operation,[string]$WorkRoot=$env:LAPLACE_WORK,[string]$BuildRoot=$env:LAPLACE_BUILD,$Modular,$Iis,
+          [string[]]$DatabaseReferences,[string[]]$BuildReferences,[object[]]$Processes,[switch]$PassThru)
+    if (-not $Operation) { return }
+    try {
+        . "$PSScriptRoot/desktop-clients.ps1"
+        if(-not $Modular){$Modular=Get-DesktopClientDeclaration}
+        if(-not $Iis){$Iis=Read-StorageJson $env:LAPLACE_IIS_INSTALLATION}
+        # First-time setup can precede either installation. Its own private
+        # scratch still belongs to its creator's finally block.
+        if (-not $iis -or -not (Test-Path -LiteralPath $modular.installed_config) -or
+            -not (Test-Path -LiteralPath (Join-Path $iis.directory 'web/active.json'))) { return }
+        $arguments=@{WorkRoot=$WorkRoot;BuildRoot=$BuildRoot;Modular=$Modular;Iis=$Iis}
+        foreach($name in 'DatabaseReferences','BuildReferences','Processes'){if($PSBoundParameters.ContainsKey($name)){$arguments[$name]=$PSBoundParameters[$name]}}
+        $result=Invoke-DesktopStorageCleanup @arguments
+        Write-Host "Cleanup: $($result.removed.Count) unused outputs removed. Receipt: $($result.receipt)"
+        if($PassThru){return $result}
+    } finally { Close-DesktopStorageOperation $Operation }
+}
+
+function Get-StorageDatabaseReferences([string]$Configuration="$PSScriptRoot/hart-desktop-operator.json") {
+    $config = Read-StorageJson $Configuration
+    $target = @($config.targets | Where-Object authentication -EQ sspi)
+    if ($target.Count -ne 1 -or $target[0].host -ine $env:COMPUTERNAME) { throw 'Storage retirement requires the declared local database host.' }
+    $target = $target[0]
+    $start = [Diagnostics.ProcessStartInfo]::new((Join-Path $target.prefix 'bin/psql.exe'))
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    foreach ($name in @($start.Environment.Keys | Where-Object { $_ -like 'PG*' })) { $null=$start.Environment.Remove($name) }
+    $start.Environment['PGSSLMODE']='verify-full'
+    $start.Environment['PGSSLROOTCERT']=Join-Path $config.state 'hart-desktop-postgresql.crt'
+    $start.Environment['PGREQUIREAUTH']='sspi'
+    $start.Environment['PGCONNECT_TIMEOUT']='10'
+    $start.Environment['PGPASSFILE']=Join-Path $config.state 'unused-no-password-file'
+    $sql=@'
+SELECT DISTINCT path FROM (
+ SELECT pg_catalog.substr(setting,pg_catalog.strpos(setting,'=')+1) AS path
+ FROM pg_catalog.pg_db_role_setting r CROSS JOIN LATERAL pg_catalog.unnest(r.setconfig) setting
+ WHERE pg_catalog.split_part(setting,'=',1) IN ('laplace.tier0','laplace.flags','laplace.highway')
+ UNION ALL
+ SELECT setting FROM pg_catalog.pg_file_settings
+ WHERE name IN ('laplace.tier0','laplace.flags','laplace.highway') AND error IS NULL
+) config_paths WHERE path <> '';
+'@
+    foreach ($argument in @('-X','-w','-h',[string]$target.host,'-p',[string]$target.port,'-U',[string]$config.role,
+                             '-d','postgres','-Atq','-v','ON_ERROR_STOP=1','-c',$sql)) { $start.ArgumentList.Add($argument) }
+    $process=[Diagnostics.Process]::Start($start)
+    try {
+        $output=$process.StandardOutput.ReadToEndAsync()
+        $errorOutput=$process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(15000)) { $process.Kill($true);throw 'Database reference audit timed out; storage was not changed.' }
+        if ($process.ExitCode) { throw ('Database reference audit failed: '+$errorOutput.GetAwaiter().GetResult()) }
+        return @($output.GetAwaiter().GetResult().Split("`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    } finally { $process.Dispose() }
+}
+
+function Get-StorageProcesses {
+    $result = @()
+    foreach ($process in Get-CimInstance Win32_Process -ErrorAction Stop) {
+        $modules = @()
+        $moduleError = $false
+        if ($process.Name -in @('w3wp.exe','dotnet.exe')) {
+            try { $modules = @((Get-Process -Id $process.ProcessId -ErrorAction Stop).Modules | ForEach-Object FileName) }
+            catch { $moduleError = $true }
+        }
+        $result += [pscustomobject]@{pid=$process.ProcessId;name=$process.Name;executable=$process.ExecutablePath;
+            command=$process.CommandLine;modules=$modules;module_error=$moduleError}
+    }
+    return $result
+}
+
+function Test-StorageReference([string]$Path, [string[]]$References, [object[]]$Processes) {
+    $prefix = [IO.Path]::GetFullPath($Path).TrimEnd('\','/')
+    foreach ($reference in $References) {
+        if (-not $reference) { continue }
+        $full = [IO.Path]::GetFullPath($reference).TrimEnd('\','/')
+        if ($full -ieq $prefix -or $full.StartsWith($prefix+'\',[StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    foreach ($process in $Processes) {
+        foreach ($reference in @($process.executable)+@($process.modules)) {
+            if ($reference -and ($reference -ieq $prefix -or $reference.StartsWith($prefix+'\',[StringComparison]::OrdinalIgnoreCase))) { return $true }
+        }
+        $command = [string]$process.command
+        if ($command.IndexOf($prefix,[StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+            $command.IndexOf($prefix.Replace('\','/'),[StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    }
+    return $false
+}
+
+function Get-StorageGroup([string]$Root, [string]$Marker, [string]$Kind, [int]$Keep,
+                          [string[]]$References, [object[]]$Processes, [string[]]$Revisions=@(), [bool]$Unobservable=$false) {
+    if (-not (Test-Path -LiteralPath $Root -PathType Container)) { return @() }
+    $entries = @()
+    foreach ($directory in Get-ChildItem -LiteralPath $Root -Directory -Force) {
+        if ($directory.Name -notmatch '^[a-f0-9]{40,64}$') { continue }
+        $manifest = Read-StorageJson (Join-Path $directory.FullName $Marker)
+        if (-not $manifest -or -not $manifest.files) { continue }
+        $reasons = @()
+        if ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) { $reasons += 'reparse_point' }
+        if (Test-StorageReference $directory.FullName $References $Processes) { $reasons += 'live_reference' }
+        if ($manifest.revision -and $manifest.revision -in $Revisions) { $reasons += 'retained_release' }
+        if ($Unobservable) { $reasons += 'process_visibility_incomplete' }
+        $entries += [pscustomobject]@{path=$directory.FullName;root=[IO.Path]::GetFullPath($Root);kind=$Kind;
+            marker=$Marker;revision=$manifest.revision;modified_utc=$directory.LastWriteTimeUtc.ToString('o');reasons=$reasons;retire=$false}
+    }
+    $retained = 0
+    foreach ($entry in @($entries | Sort-Object modified_utc -Descending)) {
+        if ($entry.reasons.Count) { continue }
+        if ($retained -lt $Keep) { $entry.reasons += 'rollback_or_reuse'; $retained++ }
+        else { $entry.retire = $true }
+    }
+    return $entries
+}
+
+function Get-DesktopStoragePlan {
+    param([Parameter(Mandatory)][string]$WorkRoot, [Parameter(Mandatory)][string]$BuildRoot,
+          [Parameter(Mandatory)]$Modular, [Parameter(Mandatory)]$Iis,
+          [object[]]$Processes, [ValidateRange(0,10)][int]$Rollback=1, [string[]]$DatabaseReferences, [string[]]$BuildReferences)
+    if (-not $PSBoundParameters.ContainsKey('Processes')) { $Processes = @(Get-StorageProcesses) }
+    if (-not $PSBoundParameters.ContainsKey('DatabaseReferences')) { $DatabaseReferences = @(Get-StorageDatabaseReferences) }
+    if (-not $PSBoundParameters.ContainsKey('BuildReferences')) { $BuildReferences = @(Get-StorageBuildReferences $BuildRoot) }
+    if ([IO.Path]::GetFullPath($Modular.artifacts).TrimEnd('\','/') -ine
+        [IO.Path]::GetFullPath((Join-Path $WorkRoot 'artifacts/windows-components')).TrimEnd('\','/')) {
+        throw 'The component store must use the declared work root.'
+    }
+    $installed = Read-StorageJson $Modular.installed_config
+    $web = Join-Path $Iis.directory 'web'
+    $active = Read-StorageJson (Join-Path $web 'active.json')
+    if (-not $installed.release -or -not $active.revision) { throw 'Installed modular and IIS selections are required for storage retirement.' }
+    if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($installed.release)) -ine
+        [IO.Path]::GetFullPath((Join-Path $Modular.prefix 'releases')) -or $active.revision -notmatch '^[a-f0-9]{40,64}$' -or
+        -not (Read-StorageJson (Join-Path $installed.release 'package.json')) -or
+        -not (Read-StorageJson (Join-Path $web ('releases/'+$active.revision+'/iis-package.json')))) {
+        throw 'Installed selections must identify existing packages in their declared release roots.'
+    }
+    $references = @([string]$installed.release, (Join-Path $web ('releases/'+$active.revision))) + $DatabaseReferences
+    $webConfig = Join-Path $web 'web.config'
+    if (Test-Path -LiteralPath $webConfig) {
+        $xml = [xml](Get-Content -LiteralPath $webConfig -Raw)
+        $processPath = [string]$xml.configuration.'system.webServer'.aspNetCore.processPath
+        if ($processPath) { $references += [IO.Path]::GetFullPath((Join-Path $web $processPath)) }
+    }
+    $unknown = @($Processes | Where-Object {-not $_.executable -and $_.name -in @('lpm.exe','laplace.exe')}).Count -gt 0
+    $unknownIis = @($Processes | Where-Object {
+        (-not $_.executable -and ($_.name -in @('w3wp.exe','dotnet.exe') -or $_.name -like 'Laplace.*.exe')) -or $_.module_error
+    }).Count -gt 0
+    $entries = @(Get-StorageGroup (Join-Path $Modular.prefix 'releases') 'package.json' 'modular_release' $Rollback $references $Processes @() $unknown)
+    $entries += @(Get-StorageGroup (Join-Path $web 'releases') 'iis-package.json' 'iis_release' $Rollback $references $Processes @() $unknownIis)
+    $revisions = @($entries | Where-Object {-not $_.retire -and $_.revision} | ForEach-Object revision)
+    $packages = Join-Path $WorkRoot 'artifacts/iis-packages'
+    $entries += @(Get-StorageGroup $packages 'iis-package.json' 'iis_package' 2 $references $Processes $revisions $unknownIis)
+    $keptPackages = @($entries | Where-Object {$_.kind -eq 'iis_package' -and -not $_.retire} | ForEach-Object path)
+    $componentReferences = @($references)
+    $compositions = Join-Path $WorkRoot 'artifacts/iis-compositions'
+    if (Test-Path -LiteralPath $compositions) {
+        foreach ($file in Get-ChildItem -LiteralPath $compositions -Filter '*.json' -File) {
+            $composition = Read-StorageJson $file.FullName
+            if ($composition.package -in $keptPackages) {
+                foreach ($component in $composition.inputs.components) {
+                    if ($component.component -in @('api','cli','uci','migrations')) {
+                        $componentReferences += Join-Path $Modular.artifacts ($component.component+'/'+$component.identity)
+                    }
+                }
+            }
+        }
+    }
+    foreach ($component in 'api','cli','uci','migrations') {
+        $entries += @(Get-StorageGroup (Join-Path $Modular.artifacts $component) 'artifact.json' 'component' 2 $componentReferences $Processes @() ($unknown -or $unknownIis))
+    }
+    # Earlier packaging kept two complete trees per run. Keep its logs and
+    # receipts, but retire those payloads once their release is no longer kept.
+    $legacy = Join-Path $WorkRoot 'iis-packages'
+    if (Test-Path -LiteralPath $legacy) {
+        foreach ($bundle in Get-ChildItem -LiteralPath $legacy -Directory) {
+            if ($bundle.Name -notmatch '^[a-f0-9]{40}(?:-[a-f0-9]{32})?$') { continue }
+            $manifest = Read-StorageJson (Join-Path $bundle.FullName 'package/iis-package.json')
+            foreach ($leaf in 'published','package') {
+                $path = Join-Path $bundle.FullName $leaf
+                if (-not (Test-Path -LiteralPath $path -PathType Container)) { continue }
+                $reasons = @()
+                if ($manifest.revision -in $revisions) { $reasons += 'retained_release' }
+                if ($unknownIis) { $reasons += 'process_visibility_incomplete' }
+                if (Test-StorageReference $bundle.FullName $references $Processes) { $reasons += 'live_reference' }
+                $entries += [pscustomobject]@{path=$path;root=$bundle.FullName;kind='legacy_iis_payload';
+                    marker=$null;revision=$manifest.revision;modified_utc=$bundle.LastWriteTimeUtc.ToString('o');reasons=$reasons;retire=($reasons.Count -eq 0)}
+            }
+        }
+    }
+    $protected=@($references)+$BuildReferences+@([string]$Modular.build,[string]$Modular.mcp_build)
+    $entries+=@(Get-StorageScratch (Join-Path $BuildRoot 'worktrees') '^[a-z0-9_-]+-[a-f0-9]{12}$' 'abandoned_build' $protected $Processes)
+    $entries+=@(Get-StorageScratch (Join-Path $Modular.prefix 'releases') '^(?:\.package-[\w-]+|\.stale-[\w.-]+|[a-f0-9]{64}-\d+)$' 'abandoned_scratch' $protected $Processes)
+    foreach($component in 'api','cli','uci','migrations') {
+        $entries+=@(Get-StorageScratch (Join-Path $Modular.artifacts $component) '^(?:\.publish-[\w-]+|[a-f0-9]{64}\.replaced)$' 'abandoned_scratch' $protected $Processes)
+    }
+    $operations=Join-Path $WorkRoot 'operations'
+    if(Test-Path -LiteralPath $operations) {
+        foreach($run in Get-ChildItem -LiteralPath $operations -Directory | Where-Object Name -Match '^components-\d{8}T\d{6,13}Z$') {
+            $entries+=@(Get-StorageScratch $run.FullName '^published$' 'abandoned_scratch' $protected $Processes)
+        }
+    }
+    [ordered]@{schema='laplace.desktop-storage/v1';checked_utc=[DateTime]::UtcNow.ToString('o');
+        build_root=[IO.Path]::GetFullPath($BuildRoot);work_root=[IO.Path]::GetFullPath($WorkRoot);
+        policy=@{rollback_releases=$Rollback;reusable_components=2;reusable_packages=2};entries=$entries;database_references=$DatabaseReferences;
+        source_and_build_policy='Keep source checkouts, registered worktree builds and declared incremental build profiles. Retire abandoned generated worktree builds and publisher scratch.'}
+}
+
+function Initialize-StorageNative {
+    if (-not ('Laplace.StorageFile' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+namespace Laplace {
+ public static class StorageFile {
+  [StructLayout(LayoutKind.Sequential)] struct Information {
+   public uint attributes;
+   public System.Runtime.InteropServices.ComTypes.FILETIME created,accessed,written;
+   public uint volume,sizeHigh,sizeLow,links,indexHigh,indexLow;
+  }
+  [DllImport("kernel32.dll",SetLastError=true)]
+  static extern bool GetFileInformationByHandle(SafeFileHandle handle,out Information information);
+  [DllImport("shell32.dll",CharSet=CharSet.Unicode,SetLastError=true)]
+  static extern IntPtr CommandLineToArgvW(string command,out int count);
+  [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr pointer);
+  public static string[] Arguments(string command) {
+   int count;var pointer=CommandLineToArgvW(command,out count);
+   if(pointer==IntPtr.Zero)throw new Win32Exception(Marshal.GetLastWin32Error());
+   try {
+    var result=new string[count];
+    for(int i=0;i<count;i++)result[i]=Marshal.PtrToStringUni(Marshal.ReadIntPtr(pointer,i*IntPtr.Size));
+    return result;
+   } finally {LocalFree(pointer);}
+  }
+  public static uint Links(string path) {
+   using(var handle=File.OpenHandle(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete)) {
+    Information info;
+    if(!GetFileInformationByHandle(handle,out info))throw new Win32Exception(Marshal.GetLastWin32Error());
+    return info.links;
+   }
+  }
+ }
+}
+'@
+    }
+}
+
+function Get-StorageLinkCount([string]$Path) {
+    Initialize-StorageNative
+    return [Laplace.StorageFile]::Links($Path)
+}
+
+function Test-StoragePublisher($Process) {
+    if(-not $Process.command){return $false}
+    Initialize-StorageNative
+    $arguments=[Laplace.StorageFile]::Arguments($Process.command)
+    $scripts=@('package-windows-client.py','windows-components.py','Build-IisPackage.ps1','Publish-IisRuntime.ps1','Deploy-Desktop.ps1','install-windows-client.ps1')
+    if($Process.name -in @('pwsh.exe','powershell.exe')) {
+        for($i=1;$i -lt $arguments.Length;$i++) {
+            if($arguments[$i] -in @('-Command','-c','-EncodedCommand','-ec','-e')){return $false}
+            if($arguments[$i] -in @('-File','-f') -and $i+1 -lt $arguments.Length) {
+                return [IO.Path]::GetFileName($arguments[$i+1]) -in $scripts
+            }
+            if($arguments[$i] -like '*.ps1'){return [IO.Path]::GetFileName($arguments[$i]) -in $scripts}
+        }
+    } elseif($Process.name -match '^(?:python[\d.]*|py)\.exe$') {
+        for($i=1;$i -lt $arguments.Length;$i++) {
+            if($arguments[$i] -in @('-c','-m')){return $false}
+            if($arguments[$i] -like '*.py'){return [IO.Path]::GetFileName($arguments[$i]) -in $scripts}
+        }
+    }
+    return $false
+}
+
+function Assert-StorageTree([string]$Path, [string]$Root) {
+    $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd('\','/')
+    $target = [IO.Path]::GetFullPath($Path).TrimEnd('\','/')
+    if ([IO.Path]::GetDirectoryName($target) -ine $rootPath) { throw "Retirement escaped its owning directory: $target" }
+    $ancestors = @((Get-Item -LiteralPath $target))
+    for ($ancestor = Get-Item -LiteralPath $rootPath; $null -ne $ancestor; $ancestor = $ancestor.Parent) { $ancestors += $ancestor }
+    foreach ($item in $ancestors) {
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Retirement may not traverse a reparse point: $($item.FullName)" }
+    }
+    foreach ($item in Get-ChildItem -LiteralPath $target -Recurse -Force) {
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Retirement contains a reparse point: $($item.FullName)" }
+    }
+}
+
+function Invoke-DesktopStorageCleanup {
+    param([Parameter(Mandatory)][string]$WorkRoot,[Parameter(Mandatory)][string]$BuildRoot,
+          [Parameter(Mandatory)]$Modular,[Parameter(Mandatory)]$Iis,
+          [ValidateRange(0,10)][int]$Rollback=1,[object[]]$Processes,[string[]]$DatabaseReferences,[string[]]$BuildReferences)
+    $locks = @()
+    $operation=Enter-DesktopStorageOperation $WorkRoot
+    $plan = $null
+    $removed = @()
+    $drive = [IO.DriveInfo]::new([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($WorkRoot)))
+    $freeBefore = $drive.AvailableFreeSpace
+    $drives=@(@($WorkRoot,$BuildRoot,$Modular.prefix,$Modular.artifacts,$Iis.directory) |
+        ForEach-Object { [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($_)) } | Select-Object -Unique |
+        ForEach-Object { @{drive=$_;free_bytes_before=([IO.DriveInfo]::new($_)).AvailableFreeSpace} })
+    try {
+        # The existing publication/component locks prevent a candidate from
+        # becoming installed while its retirement plan is being applied.
+        foreach ($path in @((Join-Path $Iis.directory 'web/.publication.lock'),(Join-Path $Modular.artifacts '.build.lock'))) {
+            $locks += [IO.File]::Open($path,'OpenOrCreate','ReadWrite','None')
+        }
+        $processes = if ($PSBoundParameters.ContainsKey('Processes')) { $Processes } else { @(Get-StorageProcesses) }
+        $ancestors=Get-StorageAncestorIds
+        if (@($processes | Where-Object {-not $ancestors.Contains([int]$_.pid) -and (Test-StoragePublisher $_)}).Count) {
+            throw 'A desktop publisher is active; storage was not changed.'
+        }
+        $references = if ($PSBoundParameters.ContainsKey('DatabaseReferences')) { $DatabaseReferences } else { @(Get-StorageDatabaseReferences) }
+        $buildReferences = if ($PSBoundParameters.ContainsKey('BuildReferences')) { $BuildReferences } else { @(Get-StorageBuildReferences $BuildRoot) }
+        $plan = Get-DesktopStoragePlan -WorkRoot $WorkRoot -BuildRoot $BuildRoot -Modular $Modular -Iis $Iis -Processes $processes -Rollback $Rollback -DatabaseReferences $references -BuildReferences $buildReferences
+        foreach ($entry in $plan.entries | Where-Object retire) {
+            Assert-StorageTree $entry.path $entry.root
+            if ($entry.marker -and -not (Read-StorageJson (Join-Path $entry.path $entry.marker))) { throw "Retirement marker changed: $($entry.path)" }
+            Remove-Item -LiteralPath $entry.path -Recurse -Force -ErrorAction Stop
+            $removed += $entry.path
+        }
+        # Shared files survive while any retained release or component links
+        # them. Only blobs with no other directory entry are collected.
+        $blobs = Join-Path $Modular.artifacts 'blobs'
+        if (Test-Path -LiteralPath $blobs) {
+            for ($ancestor=Get-Item -LiteralPath $blobs; $null -ne $ancestor; $ancestor=$ancestor.Parent) {
+                if ($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Blob collection may not traverse a reparse point: $($ancestor.FullName)" }
+            }
+            foreach ($bucket in Get-ChildItem -LiteralPath $blobs -Directory) {
+                if ($bucket.Name -notmatch '^[a-f0-9]{2}$' -or $bucket.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+                foreach ($blob in Get-ChildItem -LiteralPath $bucket.FullName -File) {
+                    if ($blob.Name -notmatch '^[a-f0-9]{64}$' -or $blob.Name.Substring(0,2) -ne $bucket.Name -or
+                        $blob.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+                    if ((Get-StorageLinkCount $blob.FullName) -eq 1 -and -not (Test-StorageReference $blob.FullName $references $processes)) {
+                        Remove-Item -LiteralPath $blob.FullName -Force -ErrorAction Stop
+                        $removed += $blob.FullName
+                    }
+                }
+            }
+        }
+        $plan.status = 'passed'
+        return $plan
+    } catch {
+        if ($plan) { $plan.status='failed'; $plan.error=$_.Exception.Message }
+        throw
+    } finally {
+        try {
+        if ($plan) {
+            $plan.removed = $removed
+            $plan.free_bytes_before = $freeBefore
+            $plan.free_bytes_after = $drive.AvailableFreeSpace
+            foreach($volume in $drives){$volume.free_bytes_after=([IO.DriveInfo]::new($volume.drive)).AvailableFreeSpace}
+            $plan.drives=$drives
+            $plan.finished_utc = [DateTime]::UtcNow.ToString('o')
+            $receipt = Join-Path $WorkRoot ('operations/storage-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')+'.json')
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $receipt) -Force
+            $plan.receipt = $receipt
+            $plan | ConvertTo-Json -Depth 9 | Set-Content -LiteralPath $receipt
+        }
+        } finally {
+            foreach ($lock in $locks) { $lock.Dispose() }
+            Close-DesktopStorageOperation $operation
+        }
+    }
+}

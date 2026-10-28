@@ -311,6 +311,9 @@ laplace-ops deploy -Target desktop -Plan # show the delivery stages without chan
 laplace-ops deploy -Target desktop    # package modular CLI/MCP, publish IIS, migrate and verify
 laplace-ops clients                   # installed/running modular versions, owning clients and protected releases
 laplace-ops clients verify -Json      # verify running client versions without rebuilding or cold-starting the API
+laplace-ops storage -Json             # audit local output ownership and retention without deleting
+laplace-ops clean                     # collect unused local releases, packages, blobs and abandoned generated output
+pwsh -File setup.ps1 clean            # the same collector through setup; cleanup is also an alias for clean
 ```
 
 Desktop deployment uses the enrolled Windows operator and the declared developer shell.
@@ -342,8 +345,27 @@ same inventory; the latter also preserves its application acceptance checks.
 The inventory marks selected releases and releases with running processes as protected.
 Missing process visibility protects every release. An unselected release without a process
 still requires a reference audit (including database cache settings and rollback references);
-the command does not authorize deletion. Linux `setup.sh` owns the separate systemd MCP
+`laplace-ops clean` performs that audit and collection. Linux `setup.sh` owns the separate systemd MCP
 service and does not control Windows user stdio connections.
+
+Desktop builds, modular installation (`setup.ps1 client` included), IIS publication and
+deployment share one operation lock and collect in their outer `finally` block. Each
+publisher also removes its own private assembly directory after success or failure.
+Standalone Python publishers call the same collector after releasing the component lock.
+Cleanup does not start a build, select a release, recycle IIS, or terminate an MCP client.
+It retains installed selections, paths referenced by PostgreSQL cache settings, live
+processes, one additional rollback release, and two reusable component/package outputs.
+Unreferenced blobs are removed only when their Windows hardlink count is one. This is a
+bounded local cache; version hashes identify immutable bytes needed by running processes.
+They do not define a historical package repository.
+
+`clean` also removes obsolete generated worktree builds and abandoned publisher scratch.
+Declared incremental profiles and builds belonging to registered Git worktrees are kept;
+source checkouts, database storage, corpora, perf-caches, indexes and diagnostic receipts
+are outside its deletion policy. Paths with junctions are rejected. Incomplete process
+visibility keeps affected releases. Concurrent publishers prevent collection. Receipts
+under `$LAPLACE_WORK/operations/storage-*.json` list removed paths and drive free space
+before and after; logical hardlink lengths are never reported as reclaimed disk space.
 
 Windows modular builds preserve Ninja's outputs. Grammar generation and compilation
 reuse receipts that bind source/import/header contents, toolchain/options and output

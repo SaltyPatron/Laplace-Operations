@@ -1,7 +1,7 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-    Repairs all Windows ACLs across HART-DESKTOP's Laplace directories and cleans up stale agent worktree/temp sprawl.
+    Repairs Windows ACLs and uses the shared collector for unused generated output.
 .DESCRIPTION
     Run once in an Administrator PowerShell prompt:
         pwsh -File E:\Repositories\Laplace\Laplace-Operations\installation\Repair-DesktopPermissions.ps1
@@ -16,9 +16,8 @@
     1. Grants your Windows user SID (HART-DESKTOP\ahart, S-1-5-21-1955383224-1799969050-1119319971-1001) explicit
        inheritable FullControl across all Laplace trees on E:, D:, and C: while keeping service accounts intact
        (NetworkService S-1-5-20 for PostgreSQL, IIS APPPOOL\laplace-mono for IIS).
-    2. Removes the locked duplicate modular release directory so `install-windows-client.ps1` works cleanly without elevation.
-    3. Cleans up stale agent worktree build directories (`D:\Libraries\build\Laplace\worktrees\*`) and one-off agent
-       scratch files/tarballs/bundles in `E:\Data\Laplace\work`.
+    2. Runs the same reference-aware collector as laplace-ops clean, unless SkipScratchCleanup is selected.
+       It never selects an arbitrary release, deploys the database or rebuilds the client.
 #>
 [CmdletBinding()]
 param(
@@ -100,71 +99,16 @@ if (Test-Path -LiteralPath $iisRoot) {
     }
 }
 
-Write-Host "=== 2. Cleaning up duplicate modular release folders ===" -ForegroundColor Cyan
-$releasesDir = 'E:\Data\Laplace\services\laplace\releases'
-if (Test-Path -LiteralPath $releasesDir) {
-    Get-ChildItem -LiteralPath $releasesDir -Directory | Where-Object { $_.Name -match '-\d+$' -or $_.Name -like '.package-*' -or $_.Name -like '.stale-*' } | ForEach-Object {
-        Write-Host "  Removing temporary/duplicate release folder: $($_.FullName)"
-        Remove-Item -LiteralPath $_.FullName -Recurse -Force
-    }
-}
-
 if (-not $SkipScratchCleanup) {
-    Write-Host "=== 3. Cleaning up stale agent worktree builds & scratch sprawl ===" -ForegroundColor Cyan
-    $staleBuildPaths = @(
-        'D:\Libraries\build\Laplace\worktrees',
-        'D:\Libraries\build\Laplace\ingestion-maintenance-probe',
-        'D:\Libraries\build\Laplace\ingestion-package-20261012',
-        'D:\Libraries\build\Laplace\ingestion-repair-20261012',
-        'D:\Libraries\build\Laplace\mono-uci-desktop',
-        'D:\Libraries\build\Laplace\product-quality'
-    )
-    foreach ($p in $staleBuildPaths) {
-        if (Test-Path -LiteralPath $p) {
-            Write-Host "  Removing stale build directory: $p"
-            Remove-Item -LiteralPath $p -Recurse -Force
-        }
-    }
-
-    $workDir = 'E:\Data\Laplace\work'
-    if (Test-Path -LiteralPath $workDir) {
-        # Remove loose agent scratch files (.txt, .bundle, .tar, .patch, .log, .json, .py) at the root of E:\Data\Laplace\work
-        Get-ChildItem -LiteralPath $workDir -File -Force | ForEach-Object {
-            Write-Host "  Removing loose scratch file: $($_.FullName)"
-            Remove-Item -LiteralPath $_.FullName -Force
-        }
-        # Remove dated one-off agent directories in E:\Data\Laplace\work
-        $keepWorkDirs = @('acceptance', 'audit', 'build', 'chess', 'clients', 'development', 'iis-packages', 'laplace-mono', 'locks', 'logs', 'modular-client', 'operations', 'verification')
-        Get-ChildItem -LiteralPath $workDir -Directory -Force | Where-Object { $_.Name -notin $keepWorkDirs } | ForEach-Object {
-            Write-Host "  Removing one-off agent work folder: $($_.FullName)"
-            Remove-Item -LiteralPath $_.FullName -Recurse -Force
-        }
-    }
-
-    $staleBackupEnv = 'C:\ProgramData\Laplace\machine.env.before-config-contract-20261010'
-    if (Test-Path -LiteralPath $staleBackupEnv) {
-        Remove-Item -LiteralPath $staleBackupEnv -Force
-    }
+    Write-Host '=== 2. Collecting unused generated output ===' -ForegroundColor Cyan
+    . "$PSScriptRoot/../laplace.env.ps1"
+    . "$PSScriptRoot/desktop-clients.ps1"
+    . "$PSScriptRoot/storage.ps1"
+    $cleanup=Invoke-DesktopStorageCleanup -WorkRoot $env:LAPLACE_WORK -BuildRoot $env:LAPLACE_BUILD `
+        -Modular (Get-DesktopClientDeclaration) -Iis (Read-StorageJson $env:LAPLACE_IIS_INSTALLATION)
+    Write-Host "Cleanup receipt: $($cleanup.receipt)"
 }
-
-Write-Host "=== 4. Re-packaging and verifying non-elevated modular CLI ===" -ForegroundColor Cyan
-$canonicalRelease = Get-ChildItem -LiteralPath $releasesDir -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($canonicalRelease -and (Test-Path -LiteralPath "$($canonicalRelease.FullName)\bin\laplace.exe")) {
-    $rel = $canonicalRelease.FullName
-    $env:PGSSLMODE = 'verify-full'
-    $env:PGSSLROOTCERT = 'E:/Data/Laplace/clients/laplace/postgresql-desktop-ca.pem'
-    $env:PGREQUIREAUTH = 'sspi'
-    $env:LAPLACE_CONNINFO = 'host=HART-DESKTOP hostaddr=127.0.0.1 port=5432 user=ahart dbname=laplace sslmode=verify-full sslrootcert=E:/Data/Laplace/clients/laplace/postgresql-desktop-ca.pem require_auth=sspi connect_timeout=10'
-    $env:LAPLACE_TIER0 = "$rel\share\prepared\tier0.bin"
-    $env:LAPLACE_FLAGS = "$rel\share\prepared\tier0.flags"
-    $env:LAPLACE_HIGHWAY = "$rel\share\prepared\tier0.highway"
-    $env:LAPLACE_GRAMMARS = "$rel\share\grammars"
-    $env:LAPLACE_UCD = 'D:/Data/UCD'
-    & "$rel\bin\laplace.exe" deploy
-}
-& "$PSScriptRoot/install-windows-client.ps1" -Installation "$PSScriptRoot/hart-desktop-modular-client.json"
-
-Write-Host "=== 5. Verifying zero Access Denied errors across all Laplace roots ===" -ForegroundColor Cyan
+Write-Host "=== 3. Verifying directory access ===" -ForegroundColor Cyan
 $denied = [System.Collections.Generic.List[string]]::new()
 foreach ($r in $roots) {
     if (Test-Path -LiteralPath $r) {

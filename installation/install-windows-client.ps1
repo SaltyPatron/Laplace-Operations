@@ -7,6 +7,9 @@ if ($config.host -ne $env:COMPUTERNAME) { throw 'The modular client declaration 
 . "$PSScriptRoot/../toolchain/windows/devshell.ps1"
 $python = & python -c 'import sys; print(sys.executable)'
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw 'The configured toolchain must provide an installed Python interpreter.' }
+. "$PSScriptRoot/storage.ps1"
+$storageOperation=Enter-DesktopStorageOperation
+try {
 if (-not $SkipPackage) {
     $options=if($Force){@('--force')}else{@()}
     & $python "$PSScriptRoot/package-windows-client.py" --installation $declaration @options
@@ -46,3 +49,4 @@ try {
 }
 . "$PSScriptRoot/desktop-clients.ps1"
 Write-DesktopClientState (Get-DesktopClientState -Declaration $config)
+} finally { Exit-DesktopStorageOperation -Operation $storageOperation -Modular $config }

@@ -34,6 +34,9 @@ jobs:
       - name: Verify running client version, ownership and release retention
         shell: pwsh
         run: pwsh -NoProfile -File tests/desktop-clients.ps1
+      - name: Verify local cleanup ownership, hardlinks, references and idempotence
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/storage.ps1
       - name: Verify desktop component ownership and explicit rebuild selection
         shell: pwsh
         run: pwsh -NoProfile -File tests/desktop-component-plan.ps1
