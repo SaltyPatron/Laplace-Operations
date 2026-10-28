@@ -655,23 +655,29 @@ def main():
             operator = pwd.getpwnam(config['operator'])
             os.chown(receipt_path, operator.pw_uid, grp.getgrnam(config['deployment_group']).gr_gid)
         receipt_path.chmod(0o2775)
-        release = package(config, receipt_path, repair=installing)
-        activate(config, release, receipt_path, installing)
-        if installing:
-            restart_units(config)
-            install_credential_helper(config)
-            client = config.get('operator_client')
-            if client:
-                checked(['runuser', '-u', config['operator'], '--', 'python3',
-                         ROOT / 'installation/install-client.py', '--installation', config['installed_config'],
-                         *[value for key in ('role', 'work', 'data', 'command', 'configuration')
-                           for value in ('--' + key, client[key])],
-                         *[value for key in ('source', 'models') if key in client
-                           for value in ('--' + key, client[key])]])
-        atomic(receipt_path / 'acceptance.json', json.dumps({'scope': 'modular MCP installed runtime', 'host': config['host'],
-            'release': str(release), 'unit': UNIT, 'runtime_user': config['runtime_user'], 'database_role': config['role'],
-            'result': 'passed', 'runtime_evidence': str(receipt_path / 'runtime.json')}, indent=2) + '\n')
-        print('Modular runtime verified: ' + str(receipt_path / 'acceptance.json'))
+        try:
+            release = package(config, receipt_path, repair=installing)
+            activate(config, release, receipt_path, installing)
+            if installing:
+                restart_units(config)
+                install_credential_helper(config)
+                client = config.get('operator_client')
+                if client:
+                    checked(['runuser', '-u', config['operator'], '--', 'python3',
+                             ROOT / 'installation/install-client.py', '--installation', config['installed_config'],
+                             *[value for key in ('role', 'work', 'data', 'command', 'configuration')
+                               for value in ('--' + key, client[key])],
+                             *[value for key in ('source', 'models') if key in client
+                               for value in ('--' + key, client[key])]])
+            atomic(receipt_path / 'acceptance.json', json.dumps({'scope': 'modular MCP installed runtime', 'host': config['host'],
+                'release': str(release), 'unit': UNIT, 'runtime_user': config['runtime_user'], 'database_role': config['role'],
+                'result': 'passed', 'runtime_evidence': str(receipt_path / 'runtime.json')}, indent=2) + '\n')
+            print('Modular runtime verified: ' + str(receipt_path / 'acceptance.json'))
+        finally:
+            spec = importlib.util.spec_from_file_location('storage', ROOT / 'installation/storage.py')
+            storage = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(storage)
+            storage.cleanup_native(config, receipt_path / 'cleanup.json')
 
 
 if __name__ == '__main__':

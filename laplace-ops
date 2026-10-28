@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Linux operator entry point. Hosted targets use reviewed GitHub Actions.
+set -euo pipefail
+here=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
+operation=${1:-help}; shift || true
+target=local; wait=0; arguments=()
+while (($#)); do
+  case "$1" in
+    --target|-Target) target=$2; shift 2 ;;
+    --wait|-Wait) wait=1; shift ;;
+    *) arguments+=("$1"); shift ;;
+  esac
+done
+if [[ "$target" != local ]]; then
+  case "$target" in staging|production|cloud) ;; *) echo 'target must be staging, production or cloud' >&2; exit 2 ;; esac
+  case "$operation" in clean|cleanup) mode=clean ;; storage) mode=storage ;; *) exit 2 ;; esac
+  output=$(gh workflow run product-operator.yml --repo "${LAPLACE_GITHUB:-SaltyPatron}/Laplace" --ref main -f "target=$target" -f "operation=$mode")
+  printf '%s\n' "$output"
+  if [[ "$wait" == 1 ]]; then
+    run=$(printf '%s\n' "$output" | sed -n 's|.*/actions/runs/\([0-9][0-9]*\).*|\1|p')
+    [[ -n "$run" ]] || { echo 'GitHub returned no run ID; inspect laplace-ops runs' >&2; exit 1; }
+    gh run watch "$run" --repo "${LAPLACE_GITHUB:-SaltyPatron}/Laplace" --exit-status --interval 10
+  fi
+  exit 0
+fi
+case "$operation" in
+  clean|cleanup) exec bash "$here/storage.sh" clean --finish-job "${arguments[@]}" ;;
+  storage) exec bash "$here/storage.sh" status --finish-job "${arguments[@]}" ;;
+  *) echo 'laplace-ops clean|cleanup|storage [--receipt PATH]'; exit 2 ;;
+esac

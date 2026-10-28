@@ -3,6 +3,8 @@
 #   ./build.sh            build both
 #   ./build.sh install    also install the extension into PostgreSQL's directories
 set -e
+stage=
+trap '[ -z "$stage" ] || rm -rf -- "$stage"' EXIT
 . "$(dirname "$0")/laplace.env"
 if [ "${1:-}" = install ]; then
   . "$(dirname "$0")/operation-lock.sh"

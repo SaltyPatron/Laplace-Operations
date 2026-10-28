@@ -1,0 +1,29 @@
+name: Clean owned Laplace delivery outputs
+description: End-of-job cleanup on an already running Linux host, under its existing host lock.
+inputs:
+  operation:
+    description: Claim delivery work, audit it, or clean after its consumers
+    default: clean
+  finish-job:
+    description: Whether this job owns monorepo delivery staging
+    default: 'true'
+  receipt:
+    description: Cleanup receipt destination
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Collect completed delivery work and unused releases
+      shell: bash
+      env:
+        STORAGE_RECEIPT: ${{ inputs.receipt }}
+        STORAGE_OPERATION: ${{ inputs.operation }}
+        STORAGE_FINISH_JOB: ${{ inputs.finish-job }}
+        GH_TOKEN: ${{ github.token }}
+        LAPLACE_HOST_LOCK_WAIT_SECONDS: ${{ env.LAPLACE_HOST_LOCK_WAIT_SECONDS || '120' }}
+      run: |
+        arguments=("$STORAGE_OPERATION")
+        if [[ "$STORAGE_FINISH_JOB" == true ]]; then arguments+=(--finish-job); fi
+        if [[ -n "$STORAGE_RECEIPT" ]]; then arguments+=(--receipt "$STORAGE_RECEIPT"); fi
+        bash "$GITHUB_ACTION_PATH/../storage.sh" "${arguments[@]}"

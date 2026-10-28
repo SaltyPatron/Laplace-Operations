@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Exercise actual POSIX collection with private output trees and real locks."""
+import importlib.util
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location('storage', Path(__file__).resolve().parents[1] / 'installation/storage.py')
+storage = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(storage)
+
+
+@unittest.skipIf(os.name == 'nt', 'POSIX filesystem and flock contract')
+class Storage(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix='laplace-storage-')
+        self.root = Path(self.temporary.name)
+        self.work, self.build, self.source = [self.root / part for part in ('work', 'build', 'source')]
+        self.site = self.work / 'mono-site'
+        self.prefix = self.root / 'runtime'
+        self.config = dict(prefix=str(self.prefix))
+        self.environment = patch.dict(os.environ, {'GITHUB_WORKSPACE': str(self.source / 'Laplace'), 'LAPLACE_HOST_LOCK_WAIT_SECONDS': '0'})
+        self.environment.start()
+        for path in (self.site, self.build, self.source, self.prefix / 'releases'):
+            path.mkdir(parents=True)
+        self.active, self.held, self.rollback, self.old = [self.release(letter, time) for letter, time in zip('abcd', (4, 3, 2, 1))]
+        (self.prefix / 'current').symlink_to(self.active)
+
+    def tearDown(self):
+        self.temporary.cleanup()
+        self.environment.stop()
+
+    def release(self, letter, time):
+        path = self.prefix / 'releases' / (letter * 64)
+        path.mkdir()
+        (path / 'package.json').write_text(json.dumps({'schema': 'laplace.modular-package/v1', 'files': {'test': 'hash'}}))
+        (path / 'test').write_text('payload')
+        os.utime(path, (time, time))
+        return path
+
+    def plan(self, **kwargs):
+        return storage.plan(self.work, self.build, self.source, self.site, self.config,
+                            references={self.held / 'test'}, **kwargs)
+
+    def test_liveness_rollback_real_collection_and_idempotence(self):
+        state = storage.collect(self.plan())
+        self.assertEqual(state['removed'], [str(self.old)])
+        for path in (self.active, self.held, self.rollback):
+            self.assertTrue(path.exists())
+        self.assertEqual(storage.collect(self.plan())['removed'], [])
+
+    def test_unknown_visibility_retains_native_releases(self):
+        self.assertFalse(any(entry['retire'] for entry in self.plan(unknown=True)['entries']))
+
+    def test_job_work_waits_for_consumers_and_preserves_recovery(self):
+        for name in ('stage', 'bundle'):
+            (self.site / name).mkdir()
+        self.assertFalse(any(entry['kind'] == 'delivery_work' for entry in self.plan()['entries']))
+        pending = self.source / 'Laplace/build/.api-publish-backup'
+        pending.parent.mkdir(parents=True)
+        pending.write_text('unresolved')
+        self.assertTrue(all(not entry['retire'] for entry in self.plan(finish_job=True)['entries'] if entry['kind'] == 'delivery_work'))
+        pending.unlink()
+        storage.collect(self.plan(finish_job=True))
+        self.assertFalse((self.site / 'stage').exists())
+
+    def test_symlink_and_source_boundaries_are_checked_before_any_delete(self):
+        (self.old / 'outside').symlink_to(self.root / 'outside')
+        (self.old / '.git').mkdir()
+        os.utime(self.old, (1, 1))
+        with self.assertRaisesRegex(ValueError, 'source checkout'):
+            storage.collect(self.plan())
+        self.assertTrue(self.old.exists())
+        with self.assertRaisesRegex(ValueError, 'escaped'):
+            storage.validate_tree(self.old, self.work)
+
+    def test_nested_symlinks_are_unlinked_without_following(self):
+        outside = self.root / 'outside'
+        outside.mkdir()
+        (outside / 'keep').write_text('kept')
+        (self.old / 'link').symlink_to(outside)
+        os.utime(self.old, (1, 1))
+        storage.collect(self.plan())
+        self.assertTrue((outside / 'keep').is_file())
+
+    def test_exclusive_host_lock_cannot_be_bypassed(self):
+        with storage.host_lock(self.work / 'locks/host-resource.lock'):
+            with self.assertRaises(BlockingIOError):
+                with storage.host_lock(self.work / 'locks/host-resource.lock'):
+                    self.fail('competing cleanup acquired a held lock')
+
+    def test_another_ci_run_owns_its_staging_between_steps(self):
+        (self.site / 'stage').mkdir()
+        (self.site / '.delivery-owner.json').write_text(json.dumps({'repository': 'owner/repo', 'run': '123'}))
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'owner/repo', 'GITHUB_RUN_ID': '456', 'GH_TOKEN': '', 'GITHUB_TOKEN': ''}):
+            state = self.plan(finish_job=True)
+            self.assertFalse(next(entry for entry in state['entries'] if entry['kind'] == 'delivery_work')['retire'])
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'owner/repo', 'GITHUB_RUN_ID': '123'}):
+            state = self.plan(finish_job=True)
+            self.assertTrue(next(entry for entry in state['entries'] if entry['kind'] == 'delivery_work')['retire'])
+
+
+if __name__ == '__main__':
+    unittest.main()

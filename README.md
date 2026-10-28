@@ -367,6 +367,31 @@ visibility keeps affected releases. Concurrent publishers prevent collection. Re
 under `$LAPLACE_WORK/operations/storage-*.json` list removed paths and drive free space
 before and after; logical hardlink lengths are never reported as reclaimed disk space.
 
+On the Ubuntu laptop, `bash setup.sh operator` registers `~/.local/bin/laplace-ops`.
+`laplace-ops clean` and `bash setup.sh clean` use its declared Linux work/build roots;
+`laplace-ops storage` audits without deletion. Native setup/deployment collects under
+its existing host lock, and extension installation removes its private staging even
+after failure. No IIS or Windows host declaration is required.
+
+Hosted maintenance uses GitHub Actions: `laplace-ops clean -Target staging -Wait` on
+Windows, or `laplace-ops clean --target staging --wait` on Linux, dispatches the
+existing **Product — maintenance** workflow. Select `production` or `cloud` in place
+of `staging` for those hosts. `storage` selects
+its audit operation. There is no SSH publication or production compilation. The
+staging and production delivery jobs collect after package upload and consumption;
+cloud qualification collects before releasing its lease. Cleanup receipts are retained
+as Actions artifacts for fourteen days. Cloud maintenance leaves a stopped VM off and
+defers to an active qualification lease's own cleanup.
+
+Delivery work is owned by repository/run ID across CI steps. A different active run,
+an unavailable run-status API, or unresolved rollback state preserves that staging.
+Native releases retain their current selection, live process/cache references and one
+rollback; managed applications retain their existing runtime-lease/rollback owner.
+Canonical incremental profiles, source, corpora, archives, databases and shared
+infrastructure are outside collection. Linux jobs share the same host-resource lock
+as deployment and ingestion. End-of-job cleanup runs on success, failure and cancellation;
+the next explicit cleanup can retire residue after a hard runner interruption.
+
 Windows modular builds preserve Ninja's outputs. Grammar generation and compilation
 reuse receipts that bind source/import/header contents, toolchain/options and output
 checksums; unchanged timestamps alone do not invalidate them. Missing or corrupted

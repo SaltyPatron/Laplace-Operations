@@ -118,6 +118,7 @@ jobs:
           python3 tests/runtime-owner.py
           python3 tests/modular-installation.py
           python3 tests/modular-client.py
+          python3 tests/storage.py
           pwsh -NoProfile -File tests/desktop-clients.ps1
           pwsh -NoProfile -File tests/deployment-artifacts.ps1
       - name: Verify acceptance result failure boundaries

@@ -157,7 +157,20 @@ if ($Operation -in @('prepare','build','test','run','start','stop','logs','confi
     throw "$Operation runs on desktop; target '$Target' is not supported. Use deploy to install a deployment target."
 }
 if ($Operation -eq 'storage') {
-    if ($Target -ne 'desktop') { throw 'storage operates on this desktop installation.' }
+    if ($Target -ne 'desktop') {
+        if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'Hosted cleanup requires the GitHub CLI.' }
+        $hostedOperation=if($StorageOperation -eq 'status'){'storage'}else{'clean'}
+        $output=& gh workflow run product-operator.yml --repo $Repository --ref $Revision -f "target=$Target" -f "operation=$hostedOperation" 2>&1
+        if($LASTEXITCODE){throw ($output -join "`n")}
+        $dispatch=$output -join "`n"
+        Write-Output $dispatch
+        if($Wait){
+            if($dispatch -notmatch '/actions/runs/(\d+)'){throw 'GitHub accepted cleanup without returning a run ID. Use laplace-ops runs.'}
+            & gh run watch $Matches[1] --repo $Repository --exit-status --interval 10
+            exit $LASTEXITCODE
+        }
+        exit 0
+    }
     . "$PSScriptRoot/laplace.env.ps1"
     . "$PSScriptRoot/installation/desktop-clients.ps1"
     . "$PSScriptRoot/installation/storage.ps1"

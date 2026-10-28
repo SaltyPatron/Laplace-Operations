@@ -24,6 +24,20 @@
 # declares its own.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
+if [[ ${1:-} == clean || ${1:-} == cleanup ]]; then
+  shift
+  exec bash "$here/storage.sh" clean --finish-job "$@"
+fi
+if [[ ${1:-} == operator ]]; then
+  operator=${SUDO_USER:-$(id -un)}
+  if [[ $(id -u) == 0 && "$operator" != root ]]; then
+    exec runuser -u "$operator" -- bash "$here/setup.sh" operator
+  fi
+  mkdir -p "$HOME/.local/bin"
+  ln -sfn "$here/laplace-ops" "$HOME/.local/bin/laplace-ops"
+  echo "Installed laplace-ops in $HOME/.local/bin"
+  exit 0
+fi
 if [[ ${1:-} == secrets-recover ]]; then
   shift
   exec bash "$here/secrets/recover.sh" "$@"
@@ -824,4 +838,10 @@ report(){ part report
 }
 
 setup_dispatch "$@"
+for requested in "${@:-all}"; do
+  if [[ "$requested" == all || "$requested" == rights ]]; then
+    runuser -u "$op" -- bash "$here/setup.sh" operator
+    break
+  fi
+done
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"
