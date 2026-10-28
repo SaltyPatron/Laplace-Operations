@@ -56,6 +56,35 @@ class Storage(unittest.TestCase):
     def test_unknown_visibility_retains_native_releases(self):
         self.assertFalse(any(entry['retire'] for entry in self.plan(unknown=True)['entries']))
 
+    def leased_releases(self):
+        for path in (self.active, self.held, self.rollback, self.old):
+            receipt = json.loads((path / 'package.json').read_text())
+            receipt.update(runtime_lease='flock-v1')
+            receipt['files']['.runtime-lease'] = 'empty-file'
+            (path / 'package.json').write_text(json.dumps(receipt))
+            (path / '.runtime-lease').touch()
+
+    def test_runtime_lease_protects_a_client_started_after_the_audit(self):
+        import fcntl
+        self.leased_releases()
+        state = self.plan(unknown=True)
+        with (self.old / '.runtime-lease').open() as lease:
+            fcntl.flock(lease, fcntl.LOCK_SH)
+            self.assertEqual(storage.collect(state)['removed'], [])
+            self.assertTrue(self.old.exists())
+            self.assertIn('live_runtime_lease', next(e for e in state['entries'] if e['path'] == str(self.old))['reasons'])
+        self.assertEqual(storage.collect(self.plan(unknown=True))['removed'], [str(self.old)])
+
+    def test_runtime_lease_does_not_hide_unobservable_database_cache_references(self):
+        self.leased_releases()
+        self.assertFalse(any(e['retire'] for e in self.plan(unknown=True, cache_unknown=True)['entries']))
+
+    def test_explicit_replacement_retires_legacy_releases_but_preserves_selected_and_known_references(self):
+        state = self.plan(unknown=True, replace_unselected=True)
+        self.assertEqual(set(storage.collect(state)['removed']), {str(self.old), str(self.rollback)})
+        self.assertTrue(self.active.exists())
+        self.assertTrue(self.held.exists())
+
     def test_job_work_waits_for_consumers_and_preserves_recovery(self):
         for name in ('stage', 'bundle'):
             (self.site / name).mkdir()

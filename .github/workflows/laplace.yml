@@ -47,6 +47,10 @@ on:
         description: "after staging has passed in this run: deploy the same revisions to hart-cloud for component verification and lay its record beside hart-server's"
         type: boolean
         default: false
+      rebuild_runtime:
+        description: "Clean-build and verify staging native runtime, then retire previous releases. Reconnect old clients. No database reset."
+        type: boolean
+        default: false
 concurrency:
   group: hart-server-laplace
   cancel-in-progress: false
@@ -214,7 +218,12 @@ jobs:
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
       - name: Deploy and verify the installed modular runtime
-        run: python3 ./Laplace-Operations/installation/modular.py deploy --source "$GITHUB_WORKSPACE"
+        env:
+          REBUILD_RUNTIME: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_runtime == true }}
+        run: |
+          arguments=()
+          if [[ "$REBUILD_RUNTIME" == true ]]; then arguments+=(--rebuild); fi
+          python3 ./Laplace-Operations/installation/modular.py deploy --source "$GITHUB_WORKSPACE" "${arguments[@]}"
   # Cloud verification uses the exact dependency revisions captured in staging. It runs only
   # after deployment readback AND staging runtime reads pass, on explicit cloud dispatch.
   cloud-acquire:

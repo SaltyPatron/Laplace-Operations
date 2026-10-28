@@ -392,6 +392,18 @@ infrastructure are outside collection. Linux jobs share the same host-resource l
 as deployment and ingestion. End-of-job cleanup runs on success, failure and cancellation;
 the next explicit cleanup can retire residue after a hard runner interruption.
 
+Native Linux packages hold a shared `.runtime-lease` lock for each client's whole
+lifetime. Collection takes the exclusive lock through deletion, so service accounts
+do not need permission to inspect each other's executables. Normal collection keeps
+the selected release, live leases/cache references and one rollback.
+
+To replace old unleased staging packages, run
+`gh workflow run laplace.yml --repo SaltyPatron/Laplace-Operations --ref main -f rebuild_runtime=true`.
+This explicitly recompiles the native runtime, activates and verifies it, then retires
+unselected old packages. Failed build/activation keeps normal retention. Database
+resets are separate inputs, defaulting to false. Reconnect existing stdio clients
+after this replacement because their old package paths are retired.
+
 Windows modular builds preserve Ninja's outputs. Grammar generation and compilation
 reuse receipts that bind source/import/header contents, toolchain/options and output
 checksums; unchanged timestamps alone do not invalidate them. Missing or corrupted

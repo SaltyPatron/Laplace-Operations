@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collect owned Linux delivery outputs; never sweep source, data or archives."""
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 import importlib.util
 import hashlib
@@ -144,7 +144,30 @@ UNION SELECT pg_catalog.current_setting(name,true) FROM
     return {Path(line) for line in result.stdout.splitlines() if line.startswith('/')}
 
 
-def plan(work, build, source, site, modular=None, references=None, unknown=False, finish_job=False):
+def has_runtime_lease(path):
+    receipt = json_file(path / 'package.json')
+    lease = path / '.runtime-lease'
+    return bool(receipt and receipt.get('runtime_lease') == 'flock-v1' and
+                '.runtime-lease' in receipt.get('files', {}) and lease.is_file() and not lease.is_symlink())
+
+
+@contextmanager
+def retirement_lease(path):
+    """Keep the exclusion until deletion finishes; a plan alone is not a lock."""
+    if not has_runtime_lease(path):
+        yield
+        return
+    import fcntl
+    descriptor = os.open(path / '.runtime-lease', os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def plan(work, build, source, site, modular=None, references=None, unknown=False, finish_job=False,
+         replace_unselected=False, cache_unknown=False):
     work, build, source, site = map(absolute, (work, build, source, site))
     entries, notes = [], []
     references = set(references or ())
@@ -188,10 +211,19 @@ def plan(work, build, source, site, modular=None, references=None, unknown=False
             if not path.is_dir() or not re.fullmatch(r'[a-f0-9]{64}|\.package-[\w-]+', path.name):
                 continue
             reasons = []
-            if unknown or selected is None:
+            leased = has_runtime_lease(path)
+            if (unknown and not leased and not replace_unselected) or selected is None:
                 reasons.append('reference_visibility_incomplete')
+            if cache_unknown:
+                reasons.append('database_reference_visibility_incomplete')
+            if leased:
+                try:
+                    with retirement_lease(path):
+                        pass
+                except BlockingIOError:
+                    reasons.append('live_runtime_lease')
             held = any(contains(path, ref) for ref in references)
-            if not held and not reasons and not path.name.startswith('.package-') and rollback < 1:
+            if not held and not reasons and not replace_unselected and not path.name.startswith('.package-') and rollback < 1:
                 reasons.append('rollback')
                 rollback += 1
             # A hexadecimal directory is a release only with its package receipt.
@@ -251,7 +283,8 @@ def plan(work, build, source, site, modular=None, references=None, unknown=False
     return dict(schema='laplace.storage/v1', host=socket.gethostname(), run=os.environ.get('GITHUB_RUN_ID'),
                 checked_utc=datetime.now(timezone.utc).isoformat(), entries=entries, notes=notes,
                 recovery_pending=recovery, delivery_held=delivery_held,
-                policy=dict(rollback_releases=1, source_data_archives='preserved',
+                policy=dict(rollback_releases=0 if replace_unselected else 1,
+                            explicit_native_replacement=replace_unselected, source_data_archives='preserved',
                             incremental_profiles='preserved', recovery='preserved'))
 
 
@@ -310,7 +343,13 @@ def collect(state):
         validate_tree(path, Path(entry['root']))
         device = path.stat().st_dev
         devices.setdefault(str(device), dict(path=str(path.parent), before=shutil.disk_usage(path).free))
-        shutil.rmtree(path)
+        try:
+            with retirement_lease(path) if entry['kind'] == 'native_release' else nullcontext():
+                shutil.rmtree(path)
+        except BlockingIOError:
+            entry['reasons'].append('live_runtime_lease')
+            entry['retire'] = False
+            continue
         removed.append(str(path))
     for device in devices.values():
         device['after'] = shutil.disk_usage(device['path']).free
@@ -318,19 +357,20 @@ def collect(state):
     return state
 
 
-def cleanup_native(config, receipt):
+def cleanup_native(config, receipt, replace_unselected=False):
     """Called by modular.py while its existing installation lock is still held."""
     work = Path(os.environ.get('LAPLACE_WORK', str(Path(config['receipts']).parents[1])))
     build = Path(os.environ.get('LAPLACE_BUILD', str(Path(config['build']).parent)))
     opaque = []
     references, unknown = process_references(absolute(config['prefix']), opaque)
-    notes = []
+    notes, cache_unknown = [], False
     try:
         references.update(database_references(config))
     except (ValueError, OSError, subprocess.SubprocessError) as error:
-        unknown = True
+        cache_unknown = True
         notes.append(str(error))
-    state = plan(work, build, Path(config['source']), work / 'mono-site', config, references, unknown)
+    state = plan(work, build, Path(config['source']), work / 'mono-site', config, references, unknown,
+                 replace_unselected=replace_unselected, cache_unknown=cache_unknown)
     state['opaque_processes'] = opaque
     state['notes'].extend(notes)
     try:
@@ -387,16 +427,17 @@ def main():
             print('Claimed delivery work: ' + str(site))
             return
         references, _ = process_references(site)
-        unknown, notes, opaque = False, [], []
+        unknown, notes, opaque, cache_unknown = False, [], [], False
         if config:
             native_references, unknown = process_references(absolute(config['prefix']), opaque)
             references.update(native_references)
             try:
                 references.update(database_references(config))
             except (ValueError, OSError, subprocess.SubprocessError) as error:
-                unknown = True
+                cache_unknown = True
                 notes.append(str(error))
-        state = plan(work, build, source, site, config, references, unknown, args.finish_job)
+        state = plan(work, build, source, site, config, references, unknown, args.finish_job,
+                     cache_unknown=cache_unknown)
         state['opaque_processes'] = opaque
         state['notes'].extend(notes)
         try:

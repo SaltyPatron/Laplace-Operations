@@ -483,7 +483,7 @@ def prepared_package(config, program):
     return {'release': str(release), 'package_id': release.name, 'revisions': receipt['revisions']}
 
 
-def package(config, receipt_path, repair=False):
+def package(config, receipt_path, repair=False, rebuild=False):
     program = Path(config['source']) / 'Laplace-MCP/deployment.py'
     if repair:
         prepared = prepared_package(config, program)
@@ -494,8 +494,10 @@ def package(config, receipt_path, repair=False):
             return Path(prepared['release'])
     config_path = receipt_path / 'selection.json'
     atomic(config_path, json.dumps(config) + '\n')
-    command = ['bash', '-c', '. "$1/laplace.env"; exec python3 "$2" package --config "$3" --output "$4"',
+    command = ['bash', '-c', '. "$1/laplace.env"; exec python3 "$2" package --config "$3" --output "$4" "${@:5}"',
                'modular-package', str(Path(config['source']) / 'Laplace-Operations'), str(program), str(config_path), str(receipt_path / 'package.json')]
+    if rebuild:
+        command.append('--clean-build')
     if os.geteuid() == 0:
         command = ['runuser', '-u', config['operator'], '--', *command]
     checked(command)
@@ -611,7 +613,11 @@ def main():
     parser.add_argument('config', nargs='?', help='Installed declaration for converge; a checkout run selects the host declaration')
     parser.add_argument('--manifest')
     parser.add_argument('--source')
+    parser.add_argument('--rebuild', action='store_true',
+                        help='Clean-build, verify and replace prior native releases; reconnect old clients')
     args = parser.parse_args()
+    if args.rebuild and (args.operation != 'deploy' or os.environ.get('GITHUB_ACTIONS') != 'true'):
+        raise ValueError('Native release replacement is an explicit CI deployment operation')
     # The installed helper is a root-owned copy of this file. It converges the declaration path
     # setup wrote into it, and must not load this checkout (that copy's directory is /usr/local/libexec).
     if args.operation == 'converge':
@@ -655,8 +661,9 @@ def main():
             operator = pwd.getpwnam(config['operator'])
             os.chown(receipt_path, operator.pw_uid, grp.getgrnam(config['deployment_group']).gr_gid)
         receipt_path.chmod(0o2775)
+        verified = False
         try:
-            release = package(config, receipt_path, repair=installing)
+            release = package(config, receipt_path, repair=installing, rebuild=args.rebuild)
             activate(config, release, receipt_path, installing)
             if installing:
                 restart_units(config)
@@ -673,11 +680,13 @@ def main():
                 'release': str(release), 'unit': UNIT, 'runtime_user': config['runtime_user'], 'database_role': config['role'],
                 'result': 'passed', 'runtime_evidence': str(receipt_path / 'runtime.json')}, indent=2) + '\n')
             print('Modular runtime verified: ' + str(receipt_path / 'acceptance.json'))
+            verified = True
         finally:
             spec = importlib.util.spec_from_file_location('storage', ROOT / 'installation/storage.py')
             storage = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(storage)
-            storage.cleanup_native(config, receipt_path / 'cleanup.json')
+            storage.cleanup_native(config, receipt_path / 'cleanup.json',
+                                   replace_unselected=args.rebuild and verified)
 
 
 if __name__ == '__main__':
