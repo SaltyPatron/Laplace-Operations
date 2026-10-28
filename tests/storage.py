@@ -58,11 +58,13 @@ class Storage(unittest.TestCase):
 
     def leased_releases(self):
         for path in (self.active, self.held, self.rollback, self.old):
+            times = path.stat()
             receipt = json.loads((path / 'package.json').read_text())
             receipt.update(runtime_lease='flock-v1')
             receipt['files']['.runtime-lease'] = 'empty-file'
             (path / 'package.json').write_text(json.dumps(receipt))
             (path / '.runtime-lease').touch()
+            os.utime(path, ns=(times.st_atime_ns, times.st_mtime_ns))
 
     def test_runtime_lease_protects_a_client_started_after_the_audit(self):
         import fcntl
