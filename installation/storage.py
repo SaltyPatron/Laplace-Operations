@@ -54,6 +54,29 @@ def json_file(path):
     return json.loads(path.read_text()) if path.is_file() else None
 
 
+def recovery_pending(source):
+    application = Path(os.environ.get('GITHUB_WORKSPACE', str(source / 'Laplace')))
+    if not (application / 'app').is_dir():
+        application = source if (source / 'app').is_dir() else source / 'Laplace'
+    markers = [application / 'build' / name for name in (
+        '.managed-publish-backup', '.api-publish-backup', '.application-publish-owner',
+        '.application-restore-pending', '.uci-publish-pending', '.web-publish-pending')]
+    markers.append(Path('/var/lib/laplace-managed/transaction.json'))
+    return any(path.exists() or path.is_symlink() for path in markers)
+
+
+def begin_delivery(site, source):
+    if not os.environ.get('GITHUB_RUN_ID') or not os.environ.get('GITHUB_REPOSITORY'):
+        raise ValueError('A delivery job must identify its GitHub run and repository')
+    if site.is_symlink() or recovery_pending(source):
+        raise ValueError('Recovery is pending; delivery work ownership was not changed')
+    site.mkdir(parents=True, exist_ok=True)
+    owner_file = site / '.delivery-owner.json'
+    if owner_file.is_symlink() or foreign_job_active(json_file(owner_file)):
+        raise ValueError('Another GitHub Actions run still owns delivery work')
+    owner_file.write_text(json.dumps(dict(repository=os.environ['GITHUB_REPOSITORY'], run=os.environ['GITHUB_RUN_ID'])) + '\n')
+
+
 def validate_tree(path, root):
     if path.parent != root:
         raise ValueError('Cleanup escaped its owning output directory: ' + str(path))
@@ -122,14 +145,8 @@ def plan(work, build, source, site, modular=None, references=None, unknown=False
     references = set(references or ())
     # Staging spans several CI steps. It ends only after upload/receive/readback,
     # or at explicit operator cleanup, never at the end of an intermediate phase.
-    application_source = Path(os.environ.get('GITHUB_WORKSPACE', str(source / 'Laplace')))
-    if not (application_source / 'app').is_dir():
-        application_source = source if (source / 'app').is_dir() else source / 'Laplace'
-    pending = [application_source / 'build' / name for name in (
-        '.managed-publish-backup', '.api-publish-backup', '.application-publish-owner',
-        '.application-restore-pending', '.uci-publish-pending', '.web-publish-pending')]
-    pending += [Path('/var/lib/laplace-managed/transaction.json')]
-    recovery = any(path.exists() or path.is_symlink() for path in pending)
+    recovery = recovery_pending(source)
+    delivery_held = foreign_job_active(json_file(site / '.delivery-owner.json'))
 
     def add(path, root, kind, reasons=()):
         if path.exists() or path.is_symlink():
@@ -143,9 +160,8 @@ def plan(work, build, source, site, modular=None, references=None, unknown=False
     if finish_job:
         if not contains(work, site):
             raise ValueError('Site delivery work must stay within the declared work root')
-        owner = json_file(site / '.delivery-owner.json')
         reasons = ['recovery_pending'] if recovery else []
-        if foreign_job_active(owner):
+        if delivery_held:
             reasons.append('another_ci_run')
         for name in ('stage', 'bundle'):
             add(site / name, site, 'delivery_work', reasons)
@@ -206,6 +222,7 @@ def plan(work, build, source, site, modular=None, references=None, unknown=False
             add(path, old_builds, 'abandoned_build', reasons)
     return dict(schema='laplace.storage/v1', host=socket.gethostname(), run=os.environ.get('GITHUB_RUN_ID'),
                 checked_utc=datetime.now(timezone.utc).isoformat(), entries=entries, notes=notes,
+                recovery_pending=recovery, delivery_held=delivery_held,
                 policy=dict(rollback_releases=1, source_data_archives='preserved',
                             incremental_profiles='preserved', recovery='preserved'))
 
@@ -301,7 +318,7 @@ def cleanup_managed(source):
     if not application.is_dir():
         return 'not_installed'
     helper = Path('/usr/local/libexec/laplace-managed-deploy')
-    if helper.is_file() and 'prune-releases)' in helper.read_text():
+    if helper.is_file() and re.search(r'''["']prune-releases["']|prune-releases\)''', helper.read_text()):
         subprocess.run(['sudo', '-n', str(helper), 'prune-releases'], check=True, stdout=sys.stderr)
     workspace = Path(os.environ.get('GITHUB_WORKSPACE', str(source / 'Laplace')))
     controller = workspace / 'deploy/linux/payload-sync.sh'
@@ -334,15 +351,9 @@ def main():
     lock = os.environ.get('LAPLACE_HOST_LOCK', os.environ.get('LAPLACE_LOCKS', str(work / 'locks')) + '/host-resource.lock')
     with host_lock(lock):
         if args.operation == 'begin':
-            if not os.environ.get('GITHUB_RUN_ID') or not os.environ.get('GITHUB_REPOSITORY'):
-                raise ValueError('A delivery job must identify its GitHub run and repository')
             if not contains(work, site) or site.is_symlink():
                 raise ValueError('Delivery work must use the declared work root')
-            site.mkdir(parents=True, exist_ok=True)
-            owner_file = site / '.delivery-owner.json'
-            if owner_file.is_symlink() or foreign_job_active(json_file(owner_file)):
-                raise ValueError('Another GitHub Actions run still owns delivery work')
-            owner_file.write_text(json.dumps(dict(repository=os.environ['GITHUB_REPOSITORY'], run=os.environ['GITHUB_RUN_ID'])) + '\n')
+            begin_delivery(site, source)
             print('Claimed delivery work: ' + str(site))
             return
         references, _ = process_references(site)
@@ -360,7 +371,10 @@ def main():
         try:
             if args.operation == 'clean':
                 collect(state)
-                state['managed_application'] = cleanup_managed(source)
+                if state['recovery_pending'] or state['delivery_held'] or (site / 'stage').exists() or (site / 'bundle').exists():
+                    state['managed_application'] = 'preserved_delivery_or_recovery'
+                else:
+                    state['managed_application'] = cleanup_managed(source)
                 if args.finish_job and not any(entry['kind'] == 'delivery_work' and not entry['retire'] for entry in state['entries']):
                     owner_file = site / '.delivery-owner.json'
                     if owner_file.is_file() and not owner_file.is_symlink() and not foreign_job_active(json_file(owner_file)):

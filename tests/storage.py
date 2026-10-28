@@ -63,7 +63,9 @@ class Storage(unittest.TestCase):
         pending = self.source / 'Laplace/build/.api-publish-backup'
         pending.parent.mkdir(parents=True)
         pending.write_text('unresolved')
-        self.assertTrue(all(not entry['retire'] for entry in self.plan(finish_job=True)['entries'] if entry['kind'] == 'delivery_work'))
+        state = self.plan(finish_job=True)
+        self.assertTrue(state['recovery_pending'])
+        self.assertTrue(all(not entry['retire'] for entry in state['entries'] if entry['kind'] == 'delivery_work'))
         pending.unlink()
         storage.collect(self.plan(finish_job=True))
         self.assertFalse((self.site / 'stage').exists())
@@ -98,10 +100,23 @@ class Storage(unittest.TestCase):
         (self.site / '.delivery-owner.json').write_text(json.dumps({'repository': 'owner/repo', 'run': '123'}))
         with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'owner/repo', 'GITHUB_RUN_ID': '456', 'GH_TOKEN': '', 'GITHUB_TOKEN': ''}):
             state = self.plan(finish_job=True)
+            self.assertTrue(state['delivery_held'])
             self.assertFalse(next(entry for entry in state['entries'] if entry['kind'] == 'delivery_work')['retire'])
         with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'owner/repo', 'GITHUB_RUN_ID': '123'}):
             state = self.plan(finish_job=True)
             self.assertTrue(next(entry for entry in state['entries'] if entry['kind'] == 'delivery_work')['retire'])
+
+    def test_new_delivery_cannot_take_ownership_of_pending_recovery(self):
+        owner = self.site / '.delivery-owner.json'
+        original = json.dumps({'repository': 'owner/repo', 'run': '1'})
+        owner.write_text(original)
+        marker = self.source / 'Laplace/build/.api-publish-backup'
+        marker.parent.mkdir(parents=True)
+        marker.write_text('recovery')
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'owner/repo', 'GITHUB_RUN_ID': '2'}):
+            with self.assertRaisesRegex(ValueError, 'Recovery is pending'):
+                storage.begin_delivery(self.site, self.source)
+        self.assertEqual(owner.read_text(), original)
 
 
 if __name__ == '__main__':
