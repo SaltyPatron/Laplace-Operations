@@ -3,23 +3,38 @@
 set -euo pipefail
 here=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
 operation=${1:-help}; shift || true
-target=local; wait=0; arguments=()
+target=local; wait=0; force=false; arguments=()
 while (($#)); do
   case "$1" in
     --target|-Target) target=$2; shift 2 ;;
     --wait|-Wait) wait=1; shift ;;
+    --force|-Force) force=true; shift ;;
     *) arguments+=("$1"); shift ;;
   esac
 done
+if [[ "$force" == true && ( "$operation" != components || "$target" != staging ) ]]; then
+  echo '--force explicitly replaces staging native releases; use components --target staging' >&2; exit 2
+fi
 if [[ "$target" != local ]]; then
   case "$target" in staging|production|cloud) ;; *) echo 'target must be staging, production or cloud' >&2; exit 2 ;; esac
-  case "$operation" in clean|cleanup) mode=clean ;; storage) mode=storage ;; *) exit 2 ;; esac
-  output=$(gh workflow run product-operator.yml --repo "${LAPLACE_GITHUB:-SaltyPatron}/Laplace" --ref main -f "target=$target" -f "operation=$mode")
+  repository="${LAPLACE_GITHUB:-SaltyPatron}/Laplace"
+  case "$operation" in
+    clean|cleanup|storage)
+      mode=$operation; [[ "$mode" != cleanup ]] || mode=clean
+      dispatch=(product-operator.yml -f "target=$target" -f "operation=$mode") ;;
+    components)
+      [[ "$target" != production ]] || { echo 'Production receives verified application packages; no build was dispatched' >&2; exit 2; }
+      repository="${LAPLACE_GITHUB:-SaltyPatron}/Laplace-Operations"
+      cloud=false; [[ "$target" != cloud ]] || cloud=true
+      dispatch=(laplace.yml -f drop=false -f reseed=false -f "cloud=$cloud" -f "rebuild_runtime=$force") ;;
+    *) exit 2 ;;
+  esac
+  output=$(gh workflow run "${dispatch[@]}" --repo "$repository" --ref main)
   printf '%s\n' "$output"
   if [[ "$wait" == 1 ]]; then
     run=$(printf '%s\n' "$output" | sed -n 's|.*/actions/runs/\([0-9][0-9]*\).*|\1|p')
-    [[ -n "$run" ]] || { echo 'GitHub returned no run ID; inspect laplace-ops runs' >&2; exit 1; }
-    gh run watch "$run" --repo "${LAPLACE_GITHUB:-SaltyPatron}/Laplace" --exit-status --interval 10
+    [[ -n "$run" ]] || { echo "GitHub returned no run ID; inspect gh run list --repo $repository" >&2; exit 1; }
+    gh run watch "$run" --repo "$repository" --exit-status --interval 10
   fi
   exit 0
 fi

@@ -398,7 +398,8 @@ do not need permission to inspect each other's executables. Normal collection ke
 the selected release, live leases/cache references and one rollback.
 
 To replace old unleased staging packages, run
-`gh workflow run laplace.yml --repo SaltyPatron/Laplace-Operations --ref main -f rebuild_runtime=true`.
+`laplace-ops components -Target staging -Force -Wait` (Windows) or
+`laplace-ops components --target staging --force --wait` (Linux).
 This explicitly recompiles the native runtime, activates and verifies it, then retires
 unselected old packages. Failed build/activation keeps normal retention. Database
 resets are separate inputs, defaulting to false. Reconnect existing stdio clients

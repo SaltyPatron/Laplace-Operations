@@ -114,6 +114,7 @@ LOCAL DESKTOP ONE-TIME SETUP & MODULAR CLI
   laplace-ops configure-development   Configure local Windows SSPI database roles and HBA rules
   laplace-ops enroll-development      Enroll Windows DPAPI workload credentials from OpenBao
   laplace-ops components desktop      Package Laplace-Native + Laplace-Engine and install the 'laplace' CLI
+  laplace-ops components staging -Force  Clean-build native runtime, verify it, then retire old native releases
   laplace-ops clients [-Json]          Show installed/running modular releases, client owners and release retention
   laplace-ops clients verify [-Json]   The same; exit 2 if older clients need reconnecting, 1 if inventory is incomplete
   laplace-ops storage [-Json]          Audit installed releases and reusable package/component retention
@@ -146,8 +147,11 @@ $desktopOperations = @('prepare','build','test','run','start','stop','logs','con
 if (-not $PSBoundParameters.ContainsKey('Target')) {
     $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
 }
-if(($PSBoundParameters.ContainsKey('Components') -or $Force) -and -not($Target -eq 'desktop' -and $Operation -in @('deploy','build'))){
-    throw '-Components and -Force select desktop build/deployment components; no operation was run.'
+if($PSBoundParameters.ContainsKey('Components') -and -not($Target -eq 'desktop' -and $Operation -in @('deploy','build'))){
+    throw '-Components selects desktop build/deployment components; no operation was run.'
+}
+if($Force -and -not(($Target -eq 'desktop' -and $Operation -in @('deploy','build')) -or ($Target -eq 'staging' -and $Operation -eq 'components'))){
+    throw '-Force rebuilds desktop components or explicitly replaces staging native releases; no operation was run.'
 }
 if($Package -and -not($Target -eq 'desktop' -and $Operation -eq 'deploy')){throw '-Package selects a prepared desktop deployment; no operation was run.'}
 if ($Plan -and -not ($Operation -in 'deploy','repair-postgres' -and $Target -eq 'desktop')) {
@@ -415,6 +419,7 @@ if ($Operation -eq 'components') {
     if (-not $PSBoundParameters.ContainsKey('Repository')) { $Repository = 'SaltyPatron/Laplace-Operations' }
     $workflow = 'laplace.yml'
     $inputs = @('-f','drop=false','-f','reseed=false','-f',"cloud=$($Target -eq 'cloud')".ToLowerInvariant())
+    if ($Force) { $inputs += @('-f','rebuild_runtime=true') }
     Write-Host "Verify component deployment from $Revision on $Target."
 } elseif ($Operation -eq 'deploy') {
     if ($Target -eq 'production') {

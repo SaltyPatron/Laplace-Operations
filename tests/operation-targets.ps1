@@ -3,7 +3,7 @@
 $ErrorActionPreference='Stop'
 $entry=(Resolve-Path "$PSScriptRoot/../laplace.ps1").Path
 function Dispatch([string[]]$Arguments) {
-    $quoted=@($Arguments | ForEach-Object { if ($_ -in '-Target','-SourcePath','-Database','-DatabaseOperation','-Yes') { $_ } else { "'" + $_.Replace("'", "''") + "'" } }) -join ' '
+    $quoted=@($Arguments | ForEach-Object { if ($_ -in '-Target','-SourcePath','-Database','-DatabaseOperation','-Yes','-Force') { $_ } else { "'" + $_.Replace("'", "''") + "'" } }) -join ' '
     $program=@"
 function gh {
     `$global:LASTEXITCODE=0
@@ -45,7 +45,15 @@ foreach ($dbCase in @(
         throw "DB dispatch did not preserve target/database/operation: $($dbResult.output)"
     }
 }
+$rebuild=Dispatch @('components','-Target','staging','-Force')
+if ($rebuild.exit -ne 0 -or $rebuild.output -notmatch 'DISPATCH:(\[[^\r\n]+\])') { throw $rebuild.output }
+$rebuildArgv=$Matches[1] | ConvertFrom-Json
+foreach ($required in 'laplace.yml','SaltyPatron/Laplace-Operations','rebuild_runtime=true','drop=false','reseed=false','cloud=false') {
+    if ($rebuildArgv -notcontains $required) { throw "Native replacement dispatch missing $required" }
+}
 foreach ($arguments in @(
+    @('components','-Target','production','-Force'),
+    @('components','-Target','cloud','-Force'),
     @('build','-Target','production'),
     @('prepare','-Target','staging'),
     @('start','-Target','staging'),
