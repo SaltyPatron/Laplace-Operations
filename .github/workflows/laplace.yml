@@ -219,6 +219,10 @@ jobs:
         with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
+      - name: Provide the pinned Rust compiler for recipe grammar generation
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: 1.90.0
       - name: Deploy and verify the installed modular runtime
         env:
           REBUILD_RUNTIME: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_runtime == true }}

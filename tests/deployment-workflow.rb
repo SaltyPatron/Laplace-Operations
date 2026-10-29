@@ -28,6 +28,13 @@ class DeploymentWorkflow < Minitest::Test
       refute steps.any? { |step| step['continue-on-error'] }
     end
   end
+  def test_runtime_packaging_job_has_its_own_pinned_grammar_compiler
+    steps=@jobs.fetch('reads').fetch('steps')
+    toolchain=steps.index { |step| step['uses']&.start_with?('dtolnay/rust-toolchain@') }
+    package=steps.index { |step| step['name']=='Deploy and verify the installed modular runtime' }
+    assert toolchain && package && toolchain < package
+    assert_equal '1.90.0', steps.fetch(toolchain).fetch('with').fetch('toolchain')
+  end
   def test_explicit_ingestion_requires_successful_readback
     assert_includes @jobs.fetch('ingest').fetch('if'), "needs.checks.result == 'success'"
     assert_includes @jobs.fetch('ingest').fetch('if'), "needs.deploy.outputs.ingest == 'true'"
