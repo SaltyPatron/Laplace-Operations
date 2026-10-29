@@ -51,13 +51,33 @@ try {
     $null=New-Item -ItemType Directory -Path (Join-Path $uciRoot 'agent')
     @{host=$env:COMPUTERNAME;site='laplace-mono-uci';directory=$uciRoot;revision=('1'*64);publish=$uciActive}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $uciRoot 'agent/installation.json')
     $iis|Add-Member chess @{match_engines=@{connector=(Join-Path $uciPinned 'test.dll')}}
+    $uciLegacy=Join-Path $uciRoot 'releases/legacy-build'
+    $null=New-Item -ItemType Directory -Path $uciLegacy
+    foreach($file in 'laplace-uci-connect.exe','laplace-uci-connect.dll'){Set-Content -LiteralPath (Join-Path $uciLegacy $file) 'legacy fixture'}
+    $configuration='serve --configuration "'+(Join-Path $uciRoot 'connector.json')+'"'
+    ('<configuration><system.webServer><aspNetCore processPath=".\laplace-uci-connect.exe" arguments="'+[Security.SecurityElement]::Escape($configuration)+'" /></system.webServer></configuration>')|Set-Content -LiteralPath (Join-Path $uciLegacy 'web.config')
+    $digest=Get-StorageUciPayload $uciLegacy
+    Rename-Item -LiteralPath $uciLegacy -NewName $digest
+    $uciLegacy=Join-Path $uciRoot ('releases/'+$digest)
+    (Get-Item -LiteralPath $uciLegacy).LastWriteTimeUtc=[DateTime]::UtcNow.AddDays(-5)
     $plan=Get-DesktopStoragePlan @args
+    Require ($plan.entries|Where-Object {$_.path -eq $uciLegacy -and $_.retire}) 'A verified older UCI payload was not selected.'
+    $legacyEntry=$plan.entries|Where-Object path -EQ $uciLegacy
+    Add-Content -LiteralPath (Join-Path $uciLegacy 'laplace-uci-connect.dll') 'changed after audit'
+    $refused=$false;try{Remove-StorageEntry $legacyEntry}catch{$refused=$true}
+    Require ($refused -and (Test-Path -LiteralPath $uciLegacy)) 'Modified UCI bytes were retired using an old digest.'
+    Set-Content -LiteralPath (Join-Path $uciLegacy 'laplace-uci-connect.dll') 'legacy fixture'
     Require ($plan.entries|Where-Object {$_.path -eq $uciOld -and $_.retire}) 'Unused UCI release was not selected.'
     foreach($path in $uciActive,$uciPinned,$uciRollback){Require (-not ($plan.entries|Where-Object path -EQ $path).retire) 'A selected, pinned or rollback UCI release was retired.'}
     $args.Processes+=@(1,2|ForEach-Object {[pscustomobject]@{pid=(100+$_);name='w3wp.exe';executable='w3wp.exe';command='w3wp.exe -ap "laplace-mono-uci"';modules=@();module_error=$false}})
     $overlap=Get-DesktopStoragePlan @args
     Require (-not ($overlap.entries|Where-Object path -EQ $uciOld).retire) 'An overlapped UCI worker lost its managed assembly.'
     $args.Processes=@($process)
+    $uciLock=[IO.File]::Open((Join-Path $uciRoot '.publication.lock'),'OpenOrCreate','ReadWrite','None')
+    try{
+        $refused=$false;try{Invoke-DesktopStorageCleanup @args|Out-Null}catch{$refused=$true}
+        Require ($refused -and (Test-Path -LiteralPath $uciLegacy)) 'Cleanup raced a connector publication.'
+    }finally{$uciLock.Dispose()}
     Require (-not ($plan.entries | Where-Object path -EQ $active).retire) 'Active modular release was retired.'
     Require (-not ($plan.entries | Where-Object path -EQ $held).retire) 'Running old release was retired.'
     Require (-not ($plan.entries | Where-Object path -EQ $database).retire) 'Database cache reference was retired.'
@@ -181,6 +201,7 @@ try {
     Require ($clean.status -eq 'passed') 'Cleanup did not pass.'
     Require (-not (Test-Path -LiteralPath $old)) 'Unused old release survived collection.'
     Require (-not (Test-Path -LiteralPath $uciOld)) 'Unused UCI release survived canonical collection.'
+    Require (-not (Test-Path -LiteralPath $uciLegacy)) 'Verified older UCI payload survived canonical collection.'
     foreach($path in $uciActive,$uciPinned,$uciRollback){Require (Test-Path -LiteralPath $path) 'UCI consumer or rollback release disappeared.'}
     Require (-not (Test-Path -LiteralPath $legacy)) 'Incomplete legacy payload survived collection.'
     Require (-not (Test-Path -LiteralPath $orphan)) 'Unlinked blob survived collection.'

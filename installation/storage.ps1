@@ -357,6 +357,48 @@ function Get-StorageUciInstallation($Iis) {
     return @{root=$root;release=$release;site=$service}
 }
 
+function Get-StorageUciPayload([string]$Directory) {
+    Assert-StorageTree $Directory (Split-Path -Parent $Directory)
+    $files=@(Get-ChildItem -LiteralPath $Directory -Recurse -File|Where-Object Name -NotIn @('web.config','uci-package.json')|Sort-Object FullName)
+    $entries=@($files|ForEach-Object {[IO.Path]::GetRelativePath($Directory,$_.FullName).Replace('\','/')+':'+(Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()})
+    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($entries -join "`n"))).ToLowerInvariant()
+}
+
+function Get-StorageUciReleases($Uci,[int]$Keep,[string[]]$References,[object[]]$Processes,[bool]$Unobservable) {
+    $root=Join-Path $Uci.root 'releases'
+    $entries=@(Get-StorageGroup $root 'uci-package.json' 'uci_release' 0 $References $Processes @() $Unobservable)
+    foreach($directory in Get-ChildItem -LiteralPath $root -Directory){
+        if($directory.Name -notmatch '^[a-f0-9]{7,64}$' -or (Test-Path -LiteralPath (Join-Path $directory.FullName 'uci-package.json'))){continue}
+        $webConfig=Join-Path $directory.FullName 'web.config'
+        $assembly=Join-Path $directory.FullName 'laplace-uci-connect.dll'
+        if(-not(Test-Path -LiteralPath $webConfig) -or -not(Test-Path -LiteralPath $assembly)){continue}
+        try{
+            $xml=[xml](Get-Content -LiteralPath $webConfig -Raw)
+            $handler=$xml.configuration.'system.webServer'.aspNetCore
+            if($handler.processPath -cne '.\laplace-uci-connect.exe' -or
+               $handler.arguments -cne ('serve --configuration "'+(Join-Path $Uci.root 'connector.json')+'"')){continue}
+            $digest=Get-StorageUciPayload $directory.FullName
+        }catch{continue}
+        # Earlier publishers used either this same payload hash or the exact
+        # source commit embedded in the assembly. Do not adopt arbitrary folders.
+        if($directory.Name.Length -eq 64){if($directory.Name -cne $digest){continue}}
+        else{
+            $version=[Diagnostics.FileVersionInfo]::GetVersionInfo($assembly).ProductVersion
+            if($version -notmatch '\+([a-f0-9]{40})$' -or -not $Matches[1].StartsWith($directory.Name)){continue}
+        }
+        $reasons=@()
+        if(Test-StorageReference $directory.FullName $References $Processes){$reasons+='live_reference'}
+        if($Unobservable){$reasons+='process_visibility_incomplete'}
+        $entries += [pscustomobject]@{path=$directory.FullName;root=[IO.Path]::GetFullPath($root);kind='uci_release';marker=$null;
+            revision=$directory.Name;modified_utc=$directory.LastWriteTimeUtc.ToString('o');reasons=$reasons;retire=($reasons.Count -eq 0);uci_payload_sha256=$digest}
+    }
+    $retained=0
+    foreach($entry in @($entries|Where-Object {$_.reasons.Count -eq 0}|Sort-Object modified_utc -Descending)){
+        if($retained++ -lt $Keep){$entry.retire=$false;$entry.reasons+='rollback_or_reuse'}
+    }
+    return $entries
+}
+
 function Get-DesktopStoragePlan {
     param([Parameter(Mandatory)][string]$WorkRoot, [Parameter(Mandatory)][string]$BuildRoot,
           [Parameter(Mandatory)]$Modular, [Parameter(Mandatory)]$Iis,
@@ -400,7 +442,7 @@ function Get-DesktopStoragePlan {
         # During an overlapped IIS recycle, an old managed assembly may not
         # appear in the native module inventory. Wait for the old worker to exit.
         $workers=@($Processes|Where-Object {$_.name -eq 'w3wp.exe' -and $_.command -match ('-ap\s+"?'+[regex]::Escape($uci.site)+'(?:"|\s|$)')})
-        $entries += @(Get-StorageGroup (Join-Path $uci.root 'releases') 'uci-package.json' 'uci_release' $Rollback $references $Processes @() ($unknownIis -or $workers.Count -gt 1))
+        $entries += @(Get-StorageUciReleases $uci $Rollback $references $Processes ($unknownIis -or $workers.Count -gt 1))
     }
     $revisions = @($entries | Where-Object {-not $_.retire -and $_.revision} | ForEach-Object revision)
     $packages = Join-Path $WorkRoot 'artifacts/iis-packages'
@@ -537,7 +579,7 @@ function Test-StoragePublisher($Process) {
     if(-not $Process.command){return $false}
     Initialize-StorageNative
     $arguments=[Laplace.StorageFile]::Arguments($Process.command)
-    $scripts=@('package-windows-client.py','windows-components.py','Build-IisPackage.ps1','Publish-IisRuntime.ps1','Deploy-Desktop.ps1','install-windows-client.ps1')
+    $scripts=@('package-windows-client.py','windows-components.py','Build-IisPackage.ps1','Publish-IisRuntime.ps1','Deploy-Desktop.ps1','install-windows-client.ps1','setup-iis.ps1','desktop-uci.ps1')
     if($Process.name -in @('pwsh.exe','powershell.exe')) {
         for($i=1;$i -lt $arguments.Length;$i++) {
             if($arguments[$i] -in @('-Command','-c','-EncodedCommand','-ec','-e')){return $false}
@@ -577,6 +619,7 @@ function Invoke-StorageDatabaseCleanup {
 
 function Remove-StorageEntry($Entry) {
     Assert-StorageTree $Entry.path $Entry.root
+    if($Entry.uci_payload_sha256 -and (Get-StorageUciPayload $Entry.path) -cne $Entry.uci_payload_sha256){throw "UCI payload changed during retention: $($Entry.path)"}
     if($Entry.kind -eq 'operation_history' -and (Test-Path -LiteralPath $Entry.path -PathType Container)) {
         if((Test-Path -LiteralPath (Join-Path $Entry.path '.retain')) -or
             @(Get-ChildItem -LiteralPath $Entry.path -Recurse -Force -Filter '.git').Count) {
@@ -628,7 +671,10 @@ function Invoke-DesktopStorageCleanup {
     try {
         # The existing publication/component locks prevent a candidate from
         # becoming installed while its retirement plan is being applied.
-        foreach ($path in @((Join-Path $Iis.directory 'web/.publication.lock'),(Join-Path $Modular.artifacts '.build.lock'))) {
+        $publicationLocks=@((Join-Path $Iis.directory 'web/.publication.lock'),(Join-Path $Modular.artifacts '.build.lock'))
+        $uci=Get-StorageUciInstallation $Iis
+        if($uci){$publicationLocks+=Join-Path $uci.root '.publication.lock'}
+        foreach ($path in $publicationLocks) {
             $locks += [IO.File]::Open($path,'OpenOrCreate','ReadWrite','None')
         }
         $processes = if ($PSBoundParameters.ContainsKey('Processes')) { $Processes } else { @(Get-StorageProcesses) }
