@@ -10,6 +10,11 @@ List the checks with `laplace-ops test -List`. Run selected checks with
 the run under the declared `LAPLACE_WORK/operations/test-*/receipt.json` without
 rebuilding or deploying components.
 
+`production-runtime-identity` and `production-resource-settings` execute the
+monorepo's canonical verifier in memory over SSH. Resource readback consumes
+Operations' selected tuning rules through stdin and checks the existing service,
+cluster and settings. Neither audit installs scripts or creates remote work.
+
 The installed-runtime checks are `desktop-source-interpretation` (the selected
 `laplace` binary, its packaged recipes and caches, and committed Native readback)
 and `desktop-sql-foundation` (the installed `laplace-mono` database configuration
