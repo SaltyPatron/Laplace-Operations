@@ -62,6 +62,7 @@ try{
 SELECT bool_and(to_regprocedure(format('%I.%I(%s)',n.nspname,api.name,api.arguments)) IS NOT NULL)
 FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace
 CROSS JOIN (VALUES ('laplace_stage_own','bigint,regclass[]'),('laplace_stage_retire',''),
+ ('laplace_accumulate_series','regclass,regclass'),
  ('laplace_attest_stage','regclass,regclass'),('laplace_present_stage','regclass,regclass,name,name')) api(name,arguments)
 WHERE e.extname='laplace';
 '@
