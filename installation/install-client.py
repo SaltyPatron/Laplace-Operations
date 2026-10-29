@@ -10,6 +10,29 @@ import sys
 import tempfile
 
 
+def linux_launcher(configuration):
+    # This stable bootstrap pins the code and binaries from one release. It
+    # contains no copied client implementation that can drift after deployment.
+    return '''#!/usr/bin/env python3
+import fcntl,json,os,pathlib,runpy,sys
+configuration=pathlib.Path(CONFIGURATION)
+profile=json.loads(configuration.read_text())
+host=json.loads(pathlib.Path(profile['installation']).read_text())
+prefix=pathlib.Path(host['prefix']).resolve(strict=True)
+release=pathlib.Path(host['release']).resolve(strict=True) if host.get('release') else (prefix/'current').resolve(strict=True)
+if not release.is_relative_to(prefix):
+    raise SystemExit('Selected client release is outside its installation')
+program=release/'libexec/laplace-client.py'
+if not program.is_file():
+    raise SystemExit('Selected release lacks its client controller; deploy a current modular package')
+lease=(release/'.runtime-lease').open('rb')
+fcntl.flock(lease,fcntl.LOCK_SH)
+os.set_inheritable(lease.fileno(),True)
+client=runpy.run_path(str(program))
+client['run_client'](configuration,release)
+'''.replace('CONFIGURATION', repr(str(configuration)), 1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--installation', type=Path, required=True)
@@ -82,7 +105,7 @@ def main():
                     program_pending.unlink(missing_ok=True)
                 stream.write('@"' + sys.executable.replace('%', '%%') + '" -I "%~dp0' + program_path.name + '" %*\n')
             else:
-                stream.write(program)
+                stream.write(linux_launcher(args.configuration))
         pending.chmod(0o755)
         os.replace(candidate, args.configuration)
         os.replace(pending, args.command)

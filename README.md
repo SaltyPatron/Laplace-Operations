@@ -50,6 +50,10 @@ the standalone Engine tree is not rebuilt. Without MCP, the declared standalone
 Engine profile remains the build owner.
 On HART-DESKTOP, the profile is `E:/Data/Laplace/clients/laplace/client.json` and the command
 is in the existing `%LOCALAPPDATA%/Laplace/bin` directory beside `laplace-mono`.
+The Linux operator command is a small bootstrap into the selected release's
+packaged client controller. It pins that release until the native process exits;
+subsequent deployments update the client code with its matching binaries. Run the
+normal client installer once to replace an older copied launcher.
 
 `installation/build-grammars.ps1 -Source <grammar-source-directory> -Output <build-directory>`
 builds selected Windows grammar sources, including C++ scanners, and fails on any compiler

@@ -11,7 +11,7 @@ import sys
 INPUT_ROOTS = {'source': 'LAPLACE_SRC', 'models': 'LAPLACE_MODELS'}
 
 
-def selected(configuration):
+def selected(configuration, release=None):
     profile = json.loads(configuration.read_text())
     if profile.get('schema') != 'laplace.modular-client/v1':
         raise ValueError('Expected a modular Laplace client declaration')
@@ -42,7 +42,8 @@ def selected(configuration):
         raise ValueError('Client data directory must be absolute')
     if not data.is_dir():
         raise ValueError('Missing declared client data directory: ' + str(data))
-    release = Path(host['release']).resolve(strict=True) if host.get('release') else (Path(host['prefix']) / 'current').resolve(strict=True)
+    release = Path(release).resolve(strict=True) if release is not None else (
+        Path(host['release']).resolve(strict=True) if host.get('release') else (Path(host['prefix']) / 'current').resolve(strict=True))
     if not release.is_relative_to(Path(host['prefix']).resolve()):
         raise ValueError('Release is outside the declared installation')
     package = json.loads((release / 'package.json').read_text())
@@ -157,10 +158,8 @@ def process_environment(environment):
     return {**inherited, **environment}
 
 
-def main():
-    configuration = Path(os.environ.get('LAPLACE_CLIENT_CONFIG') or
-                         str(Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config') / 'laplace/client.json'))
-    executable, environment, description = selected(configuration)
+def run_client(configuration, release=None):
+    executable, environment, description = selected(configuration, release)
     if sys.argv[1:] == ['--where']:
         print(json.dumps(description, indent=2))
         return
@@ -177,6 +176,12 @@ def main():
     if os.name == 'nt':
         sys.exit(subprocess.run([str(executable), *sys.argv[1:]], env=process_environment(environment)).returncode)
     os.execve(executable, [str(executable), *sys.argv[1:]], process_environment(environment))
+
+
+def main():
+    configuration = Path(os.environ.get('LAPLACE_CLIENT_CONFIG') or
+                         str(Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config') / 'laplace/client.json'))
+    run_client(configuration)
 
 
 if __name__ == '__main__':

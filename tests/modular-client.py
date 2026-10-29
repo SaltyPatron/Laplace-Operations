@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import subprocess
 import hashlib
 import tempfile
 import unittest
@@ -49,6 +50,47 @@ class ClientInputs(unittest.TestCase):
     def select(self):
         self.configuration.write_text(json.dumps(self.profile))
         return client.selected(self.configuration)
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX release bootstrap and lifetime lease')
+    def test_installed_bootstrap_uses_the_packaged_client_and_pins_code_and_native_selection(self):
+        spec = importlib.util.spec_from_file_location('install_client', ROOT / 'installation/install-client.py')
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        self.select()
+        installation = Path(self.profile['installation'])
+        host = json.loads(installation.read_text())
+        old = Path(host.pop('release'))
+        new = old.with_name('two')
+        current = Path(host['prefix']) / 'current'
+        current.symlink_to(old)
+        installation.write_text(json.dumps(host))
+        native = ('#!' + sys.executable + '\nimport fcntl,json,os,pathlib\n'
+                  'root=pathlib.Path(os.environ["LAPLACE_TIER0"]).parents[2]\n'
+                  'with (root/".runtime-lease").open() as lease:\n'
+                  '    try: fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB); held=False\n'
+                  '    except BlockingIOError: held=True\n'
+                  'print(json.dumps({"release":str(root),"lease_held":held}))\n')
+        for release in (old, new):
+            (release / 'bin').mkdir(exist_ok=True, parents=True)
+            (release / 'bin/laplace').write_text(native)
+            (release / 'bin/laplace').chmod(0o755)
+            (release / 'libexec').mkdir()
+            (release / '.runtime-lease').touch()
+            (release / 'package.json').write_text(json.dumps({'schema': 'laplace.modular-package/v1', 'revisions': {}}))
+            controller = (ROOT / 'installation/client.py').read_text()
+            if release == old:
+                controller += ('\nselected_run=run_client\ndef run_client(configuration,release=None):\n'
+                               '    current=Path(' + repr(str(current)) + ')\n'
+                               '    current.unlink(); current.symlink_to(' + repr(str(new)) + ')\n'
+                               '    selected_run(configuration,release)\n')
+            (release / 'libexec/laplace-client.py').write_text(controller)
+        bootstrap = self.root / 'laplace'
+        bootstrap.write_text(installer.linux_launcher(self.configuration))
+        for expected in (old, new):
+            result = subprocess.run([sys.executable, str(bootstrap), 'status'], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            readback = json.loads(result.stdout)
+            self.assertEqual(readback, {'release': str(expected), 'lease_held': True})
 
     def deployment(self):
         executable, environment, _ = self.select()
