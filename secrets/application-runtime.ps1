@@ -7,11 +7,29 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/process.ps1"
+function Sh([string]$Value) { "'" + $Value.Replace("'", "'\''") + "'" }
+function New-ApplicationRuntimeVerification($Configuration,[string]$Repository){
+    # Verification executes the canonical owner's readback in memory. It does
+    # not install scripts, create remote scratch, or replace serving artifacts.
+    $owner=Join-Path $Repository 'deploy/linux/runtime/application-runtime.py'
+    if(-not [IO.Path]::IsPathFullyQualified($Repository) -or -not(Test-Path -LiteralPath $owner -PathType Leaf)){throw 'The declared monorepo runtime verifier is missing.'}
+    if($Configuration.host -notmatch '^[a-zA-Z0-9._-]+$'){throw 'Invalid runtime verification host.'}
+    $loader='import io,json,sys; p=json.load(sys.stdin); sys.stdin=io.StringIO(json.dumps(p["configuration"])); sys.argv=["application-runtime.py","--phase","verify","--stdout-only"]; exec(compile(p["source"],"<laplace-runtime-verification>","exec"),{"__name__":"__main__","__file__":"<laplace-runtime-verification>"})'
+    @{arguments=@('sudo','-n','python3','-c',$loader);payload=(@{source=[IO.File]::ReadAllText($owner);configuration=$Configuration}|ConvertTo-Json -Depth 20 -Compress)}
+}
+if($MyInvocation.InvocationName -eq '.'){return}
 $targets = Get-Content -LiteralPath $Installation -Raw | ConvertFrom-Json -AsHashtable
 if (-not $targets.ContainsKey($Target)) { throw 'No application runtime installation declared for this target.' }
 $config = $targets[$Target]
 $root = "kv/hosts/$($config.host)"
-function Sh([string]$Value) { "'" + $Value.Replace("'", "'\''") + "'" }
+if($Phase -eq 'verify'){
+    . "$PSScriptRoot/../laplace.env.ps1"
+    $repository=if($env:LAPLACE_MONOREPO){$env:LAPLACE_MONOREPO}else{Join-Path $env:LAPLACE_SRC 'Laplace'}
+    $request=New-ApplicationRuntimeVerification $config $repository
+    $command=($request.arguments|ForEach-Object {Sh $_}) -join ' '
+    Invoke-Program ssh @('-o','BatchMode=yes',$config.host,$command) $request.payload -TimeoutSeconds 300
+    return
+}
 if ($Phase -eq 'prepare') {
     if ($config.bao_role -notmatch '^[a-z][a-z0-9_-]*$' -or $config.host -notmatch '^[a-zA-Z0-9._-]+$' -or $config.record -notmatch '^[a-z][a-z0-9_-]*$') {
         throw 'Invalid workload policy declaration.'

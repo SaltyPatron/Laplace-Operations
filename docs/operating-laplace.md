@@ -138,6 +138,8 @@ The production API's OS and application database identities are declared in
 ./secrets/application-runtime.ps1 -Phase verify -Target production
 ```
 
+`verify` executes `Laplace/deploy/linux/runtime/application-runtime.py` in memory with `--stdout-only`. It transfers no installer files and creates no remote scratch. Run `laplace-ops test -Check production-runtime-identity` to retain the result in the local bounded acceptance history.
+
 Preparation does not switch the serving process. Activation writes the declared runtime connection, moves writable
 API state to its private service home, and restarts under the separate OS account. It runs the installed application
 verifier and restores the prior configuration/service identity on failure. Migration credentials stay with the
