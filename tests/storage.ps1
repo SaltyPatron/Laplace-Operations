@@ -41,7 +41,23 @@ try {
     '<configuration><system.webServer><aspNetCore processPath=".\releases\'+('f'*64)+'\app.exe" /></system.webServer></configuration>' | Set-Content -LiteralPath (Join-Path $iisRoot 'web/web.config')
     $process=[pscustomobject]@{pid=21;name='lpm.exe';executable=(Join-Path $held 'test.exe');command='';modules=@();module_error=$false}
     $args=@{WorkRoot=$work;BuildRoot=$build;Modular=$modular;Iis=$iis;Processes=@($process);DatabaseReferences=@((Join-Path $database 'test.dll'));BuildReferences=@()}
+    $uciRoot=Join-Path $root 'laplace-mono-uci'
+    $uciActive=Fixture (Join-Path $uciRoot ('releases/'+('1'*64))) 'uci-package.json' ('1'*64)
+    Set-Content -LiteralPath (Join-Path $uciActive 'laplace-uci-connect.exe') 'fixture'
+    $uciPinned=Fixture (Join-Path $uciRoot ('releases/'+('2'*64))) 'uci-package.json' ('2'*64)
+    $uciRollback=Fixture (Join-Path $uciRoot ('releases/'+('3'*64))) 'uci-package.json' ('3'*64)
+    $uciOld=Fixture (Join-Path $uciRoot ('releases/'+('4'*64))) 'uci-package.json' ('4'*64)
+    (Get-Item -LiteralPath $uciOld).LastWriteTimeUtc=[DateTime]::UtcNow.AddDays(-4)
+    $null=New-Item -ItemType Directory -Path (Join-Path $uciRoot 'agent')
+    @{host=$env:COMPUTERNAME;site='laplace-mono-uci';directory=$uciRoot;revision=('1'*64);publish=$uciActive}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $uciRoot 'agent/installation.json')
+    $iis|Add-Member chess @{match_engines=@{connector=(Join-Path $uciPinned 'test.dll')}}
     $plan=Get-DesktopStoragePlan @args
+    Require ($plan.entries|Where-Object {$_.path -eq $uciOld -and $_.retire}) 'Unused UCI release was not selected.'
+    foreach($path in $uciActive,$uciPinned,$uciRollback){Require (-not ($plan.entries|Where-Object path -EQ $path).retire) 'A selected, pinned or rollback UCI release was retired.'}
+    $args.Processes+=@(1,2|ForEach-Object {[pscustomobject]@{pid=(100+$_);name='w3wp.exe';executable='w3wp.exe';command='w3wp.exe -ap "laplace-mono-uci"';modules=@();module_error=$false}})
+    $overlap=Get-DesktopStoragePlan @args
+    Require (-not ($overlap.entries|Where-Object path -EQ $uciOld).retire) 'An overlapped UCI worker lost its managed assembly.'
+    $args.Processes=@($process)
     Require (-not ($plan.entries | Where-Object path -EQ $active).retire) 'Active modular release was retired.'
     Require (-not ($plan.entries | Where-Object path -EQ $held).retire) 'Running old release was retired.'
     Require (-not ($plan.entries | Where-Object path -EQ $database).retire) 'Database cache reference was retired.'
@@ -50,7 +66,9 @@ try {
     Require (-not ($plan.entries | Where-Object path -EQ $boot).retire) 'web.config selection was retired while active.json lagged.'
     Require (-not ($plan.entries | Where-Object path -EQ $unknown)) 'Unowned directory was classified as a package.'
     $args.Processes=@([pscustomobject]@{pid=22;name='lpm.exe';executable=$null;command='';modules=@();module_error=$false})
-    Require (-not ((Get-DesktopStoragePlan @args).entries | Where-Object retire)) 'Incomplete process visibility permitted release retirement.'
+    Require (-not ((Get-DesktopStoragePlan @args).entries | Where-Object {$_.retire -and $_.kind -eq 'modular_release'})) 'Incomplete native process visibility permitted modular release retirement.'
+    $args.Processes=@([pscustomobject]@{pid=23;name='w3wp.exe';executable=$null;command='';modules=@();module_error=$true})
+    Require (-not ((Get-DesktopStoragePlan @args).entries | Where-Object {$_.retire -and $_.kind -in @('iis_release','uci_release')})) 'Incomplete IIS visibility permitted managed release retirement.'
     $outside=Join-Path $root 'outside';$null=New-Item -ItemType Directory -Path $outside
     Set-Content -LiteralPath (Join-Path $outside 'keep.txt') -Value 'keep'
     $link=Join-Path $old 'redirect';$null=New-Item -ItemType Junction -Path $link -Target $outside
@@ -160,6 +178,8 @@ try {
     }
     Require ($clean.status -eq 'passed') 'Cleanup did not pass.'
     Require (-not (Test-Path -LiteralPath $old)) 'Unused old release survived collection.'
+    Require (-not (Test-Path -LiteralPath $uciOld)) 'Unused UCI release survived canonical collection.'
+    foreach($path in $uciActive,$uciPinned,$uciRollback){Require (Test-Path -LiteralPath $path) 'UCI consumer or rollback release disappeared.'}
     Require (-not (Test-Path -LiteralPath $legacy)) 'Incomplete legacy payload survived collection.'
     Require (-not (Test-Path -LiteralPath $orphan)) 'Unlinked blob survived collection.'
     Require (-not (Test-Path -LiteralPath $abandoned)) 'Abandoned generated worktree build survived collection.'

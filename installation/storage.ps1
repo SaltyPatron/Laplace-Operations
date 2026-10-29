@@ -338,6 +338,25 @@ function Get-StorageGroup([string]$Root, [string]$Marker, [string]$Kind, [int]$K
     return $entries
 }
 
+function Get-StorageUciInstallation($Iis) {
+    $development=Read-StorageJson (Join-Path $PSScriptRoot '../development/installation.json')
+    if(-not $development.uci){return $null}
+    $service=[string]$development.uci.service
+    if($service -notmatch '^[a-zA-Z0-9-]+$'){throw 'Invalid declared UCI service for storage retention.'}
+    $root=Join-Path (Split-Path -Parent $Iis.directory) $service
+    $installed=Read-StorageJson (Join-Path $root 'agent/installation.json')
+    if(-not $installed){return $null}
+    $release=Join-Path $root ('releases/'+$installed.revision)
+    if($installed.host -ine $env:COMPUTERNAME -or $installed.site -cne $service -or
+       $installed.revision -notmatch '^[a-f0-9]{7,64}$' -or
+       [IO.Path]::GetFullPath($installed.directory) -ine [IO.Path]::GetFullPath($root) -or
+       [IO.Path]::GetFullPath($installed.publish) -ine [IO.Path]::GetFullPath($release) -or
+       -not(Test-Path -LiteralPath (Join-Path $release 'laplace-uci-connect.exe') -PathType Leaf)){
+        throw 'Installed UCI selection differs from its declared service and release root.'
+    }
+    return @{root=$root;release=$release;site=$service}
+}
+
 function Get-DesktopStoragePlan {
     param([Parameter(Mandatory)][string]$WorkRoot, [Parameter(Mandatory)][string]$BuildRoot,
           [Parameter(Mandatory)]$Modular, [Parameter(Mandatory)]$Iis,
@@ -360,6 +379,11 @@ function Get-DesktopStoragePlan {
         throw 'Installed selections must identify existing packages in their declared release roots.'
     }
     $references = @([string]$installed.release, (Join-Path $web ('releases/'+$active.revision))) + $DatabaseReferences
+    # API clients can deliberately pin a connector independently of its IIS
+    # service. Keep that real consumer reference until the client is updated.
+    if($Iis.chess.match_engines.connector){$references += [string]$Iis.chess.match_engines.connector}
+    $uci=Get-StorageUciInstallation $Iis
+    if($uci){$references += $uci.release}
     $webConfig = Join-Path $web 'web.config'
     if (Test-Path -LiteralPath $webConfig) {
         $xml = [xml](Get-Content -LiteralPath $webConfig -Raw)
@@ -372,6 +396,12 @@ function Get-DesktopStoragePlan {
     }).Count -gt 0
     $entries = @(Get-StorageGroup (Join-Path $Modular.prefix 'releases') 'package.json' 'modular_release' $Rollback $references $Processes @() $unknown)
     $entries += @(Get-StorageGroup (Join-Path $web 'releases') 'iis-package.json' 'iis_release' $Rollback $references $Processes @() $unknownIis)
+    if($uci){
+        # During an overlapped IIS recycle, an old managed assembly may not
+        # appear in the native module inventory. Wait for the old worker to exit.
+        $workers=@($Processes|Where-Object {$_.name -eq 'w3wp.exe' -and $_.command -match ('-ap\s+"?'+[regex]::Escape($uci.site)+'(?:"|\s|$)')})
+        $entries += @(Get-StorageGroup (Join-Path $uci.root 'releases') 'uci-package.json' 'uci_release' $Rollback $references $Processes @() ($unknownIis -or $workers.Count -gt 1))
+    }
     $revisions = @($entries | Where-Object {-not $_.retire -and $_.revision} | ForEach-Object revision)
     $packages = Join-Path $WorkRoot 'artifacts/iis-packages'
     $entries += @(Get-StorageGroup $packages 'iis-package.json' 'iis_package' 2 $references $Processes $revisions $unknownIis)
