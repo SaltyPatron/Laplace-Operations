@@ -4,21 +4,40 @@ set -euo pipefail
 here=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
 operation=${1:-help}; shift || true
 target=local; wait=0; force=false; arguments=()
+usage() {
+  echo 'laplace-ops runs'
+  echo 'laplace-ops status|verify|deploy --target staging|production [--wait]'
+  echo 'laplace-ops components --target staging|cloud [--wait] [--force]'
+  echo 'laplace-ops clean|cleanup|storage [--target staging|production] [--receipt PATH]'
+}
 while (($#)); do
   case "$1" in
-    --target|-Target) target=$2; shift 2 ;;
+    --target|-Target) (($# >= 2)) || { usage >&2; exit 2; }; target=$2; shift 2 ;;
     --wait|-Wait) wait=1; shift ;;
     --force|-Force) force=true; shift ;;
     *) arguments+=("$1"); shift ;;
   esac
 done
+if [[ "$operation" == help || "$operation" == --help || "$operation" == -h ]]; then usage; exit 0; fi
+if [[ "$operation" == runs ]]; then
+  [[ "$target" == local && "$wait" == 0 && "$force" == false && ${#arguments[@]} == 0 ]] || { usage >&2; exit 2; }
+  for repository in Laplace Laplace-Native Laplace-postgres Laplace-Engine Laplace-MCP Laplace-Operations; do
+    echo "$repository"
+    gh run list --repo "${LAPLACE_GITHUB:-SaltyPatron}/$repository" --limit 3
+  done
+  exit 0
+fi
 if [[ "$force" == true && ( "$operation" != components || "$target" != staging ) ]]; then
   echo '--force explicitly replaces staging native releases; use components --target staging' >&2; exit 2
 fi
 if [[ "$target" != local ]]; then
+  ((${#arguments[@]} == 0)) || { echo 'Unexpected hosted-operation arguments; no workflow dispatched' >&2; exit 2; }
   case "$target" in staging|production|cloud) ;; *) echo 'target must be staging, production or cloud' >&2; exit 2 ;; esac
   repository="${LAPLACE_GITHUB:-SaltyPatron}/Laplace"
   case "$operation" in
+    status|verify|deploy)
+      [[ "$target" != cloud ]] || { echo 'Cloud qualification uses components --target cloud' >&2; exit 2; }
+      dispatch=(product-operator.yml -f "target=$target" -f "operation=$operation") ;;
     clean|cleanup|storage)
       mode=$operation; [[ "$mode" != cleanup ]] || mode=clean
       dispatch=(product-operator.yml -f "target=$target" -f "operation=$mode") ;;
@@ -27,7 +46,7 @@ if [[ "$target" != local ]]; then
       repository="${LAPLACE_GITHUB:-SaltyPatron}/Laplace-Operations"
       cloud=false; [[ "$target" != cloud ]] || cloud=true
       dispatch=(laplace.yml -f drop=false -f reseed=false -f "cloud=$cloud" -f "rebuild_runtime=$force") ;;
-    *) exit 2 ;;
+    *) usage >&2; exit 2 ;;
   esac
   output=$(gh workflow run "${dispatch[@]}" --repo "$repository" --ref main)
   printf '%s\n' "$output"
@@ -41,5 +60,5 @@ fi
 case "$operation" in
   clean|cleanup) exec bash "$here/storage.sh" clean --finish-job "${arguments[@]}" ;;
   storage) exec bash "$here/storage.sh" status --finish-job "${arguments[@]}" ;;
-  *) echo 'laplace-ops clean|cleanup|storage [--receipt PATH]'; exit 2 ;;
+  *) usage >&2; exit 2 ;;
 esac
