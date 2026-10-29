@@ -7,6 +7,8 @@ import socket
 import hashlib
 import tempfile
 import unittest
+import sys
+import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -14,6 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('client', ROOT / 'installation/client.py')
 client = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(client)
+deploy_spec = importlib.util.spec_from_file_location('deploy_client', ROOT / 'installation/deploy-client.py')
+deploy_client = importlib.util.module_from_spec(deploy_spec)
+with patch.dict(sys.modules, {'client': client}):
+    deploy_spec.loader.exec_module(deploy_client)
 
 
 class ClientInputs(unittest.TestCase):
@@ -43,6 +49,44 @@ class ClientInputs(unittest.TestCase):
     def select(self):
         self.configuration.write_text(json.dumps(self.profile))
         return client.selected(self.configuration)
+
+    def deployment(self):
+        executable, environment, _ = self.select()
+        for path in (environment['LAPLACE_TIER0'], environment['LAPLACE_FLAGS'],
+                     environment['LAPLACE_FLAGS']+'.layout', environment['LAPLACE_HIGHWAY']):
+            Path(path).write_bytes(b'prepared')
+        psql = self.root / 'psql.exe'
+        psql.touch()
+        return executable, environment, psql
+
+    def test_recreate_uses_selected_client_and_stops_after_drop_failure(self):
+        executable, environment, psql = self.deployment()
+        with patch.object(deploy_client.subprocess, 'run', side_effect=deploy_client.subprocess.CalledProcessError(1, 'drop')) as run:
+            with self.assertRaises(deploy_client.subprocess.CalledProcessError):
+                deploy_client.deploy(self.configuration, psql, drop=True)
+        self.assertEqual(run.call_count, 1)
+        self.assertTrue(run.call_args.args[0][4].endswith(" dbname='postgres'"))
+        self.assertIn('laplace_database=selected', run.call_args.args[0])
+        self.assertNotIn('FORCE', run.call_args.kwargs['input'])
+
+    def test_installed_migration_does_not_drop_or_build(self):
+        executable, environment, psql = self.deployment()
+        with patch.object(deploy_client.subprocess, 'run') as run:
+            deploy_client.deploy(self.configuration, psql)
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_args.args[0], [str(executable), 'deploy', '--configure-server-cache'])
+        self.assertEqual(run.call_args.kwargs['env']['LAPLACE_CONNINFO'], environment['LAPLACE_CONNINFO'])
+
+    def test_recreate_refuses_missing_artifacts_before_database_calls(self):
+        executable, environment, psql = self.deployment()
+        for path in (environment['LAPLACE_TIER0'], environment['LAPLACE_FLAGS'],
+                     environment['LAPLACE_FLAGS']+'.layout', environment['LAPLACE_HIGHWAY']):
+            Path(path).unlink()
+            with patch.object(deploy_client.subprocess, 'run') as run:
+                with self.assertRaisesRegex(ValueError, 'Missing installed deployment artifact'):
+                    deploy_client.deploy(self.configuration, psql, drop=True)
+                run.assert_not_called()
+            Path(path).write_bytes(b'prepared')
 
     def test_declared_inputs_survive_a_conflicting_developer_environment(self):
         with patch.dict(os.environ, {'LAPLACE_SRC': 'wrong source', 'LAPLACE_MODELS': 'wrong models',
@@ -248,5 +292,50 @@ class PackageReuse(unittest.TestCase):
         self.assertTrue(os.path.samefile(cache, other))
 
 
+def installed_database_proof(configuration, psql, work):
+    """Exercise the installed owner against one disposable real database."""
+    import subprocess
+    original = json.loads(Path(configuration).read_text())
+    host = json.loads(Path(original['installation']).read_text())
+    database = 'laplace_deploy_test_' + uuid.uuid4().hex[:12]
+    with tempfile.TemporaryDirectory(prefix='installed-deploy-', dir=work) as directory:
+        root = Path(directory)
+        host['database'] = database
+        (root / 'installation.json').write_text(json.dumps(host))
+        original.update(installation=str(root / 'installation.json'), work=str(root / 'work'))
+        candidate = root / 'client.json'
+        candidate.write_text(json.dumps(original))
+        _, environment, _ = client.selected(candidate)
+        env = client.process_environment(environment)
+        maintenance = environment['LAPLACE_CONNINFO'] + " dbname='postgres'"
+        def query(sql):
+            return subprocess.check_output([str(psql), '-X', '-w', '-d', environment['LAPLACE_CONNINFO'],
+                                            '-Atq', '-v', 'ON_ERROR_STOP=1', '-c', sql], env=env, text=True).strip()
+        try:
+            deploy_client.deploy(candidate, psql)
+            query('CREATE TABLE public.deployment_probe (value integer)')
+            before = query('SELECT oid FROM pg_database WHERE datname=current_database()')
+            deploy_client.deploy(candidate, psql, drop=True)
+            after = query('SELECT oid FROM pg_database WHERE datname=current_database()')
+            if before == after or query("SELECT to_regclass('public.deployment_probe') IS NULL") != 't':
+                raise AssertionError('The installed reset did not recreate the private database')
+            if query("SELECT extversion FROM pg_extension WHERE extname='laplace'") != query("SELECT default_version FROM pg_available_extensions WHERE name='laplace'"):
+                raise AssertionError('Recreation did not install the declared extension version')
+            print(json.dumps({'database': database, 'recreated': True, 'installed_artifacts': True, 'builds': 0}))
+        finally:
+            subprocess.run([str(psql), '-X', '-w', '-d', maintenance, '-v', 'ON_ERROR_STOP=1',
+                            '-v', 'laplace_database=' + database], env=env, check=True, text=True,
+                           input="SELECT format('DROP DATABASE IF EXISTS %I', :'laplace_database')\n\\gexec\n")
+
+
 if __name__ == '__main__':
-    unittest.main()
+    if sys.argv[1:2] == ['--database']:
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--database', action='store_true')
+        parser.add_argument('--configuration', required=True, type=Path)
+        parser.add_argument('--psql', required=True, type=Path)
+        args = parser.parse_args()
+        installed_database_proof(args.configuration, args.psql, os.environ['LAPLACE_ACCEPTANCE_WORK'])
+    else:
+        unittest.main()

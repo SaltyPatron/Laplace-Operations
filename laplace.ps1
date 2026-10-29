@@ -130,7 +130,7 @@ INGESTION AND DATA (Laplace-Engine: the laplace program, recipes/order, the data
   laplace-ops ingest [SOURCE...]      Ingest every source in recipes/order, or the sources named (ingest.ps1)
   laplace-ops ingest staging [SOURCE...] [-Wait]
                                       The same on hart-server: dispatches Laplace-Operations ingest.yml
-  laplace-ops seed -Yes               DROP the Engine database, deploy it again empty, ingest every source (deploy.ps1 drop, ingest.ps1)
+  laplace-ops seed -Yes               Recreate the installed Engine's database, then ingest every source; no build
   laplace-ops seed staging -Yes [-Wait]
                                       The same on hart-server: ingest.yml with reseed
   laplace-ops data [status|fetch|record] [SET...]
@@ -314,7 +314,7 @@ if ($Operation -in @('ingest','seed','sources','data')) {
         . "$PSScriptRoot/laplace.env.ps1"
         switch ($Operation) {
             'ingest'  { & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1" @Names; exit $LASTEXITCODE }
-            'seed'    { & pwsh -NoProfile -File "$PSScriptRoot/deploy.ps1" drop; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            'seed'    { & pwsh -NoProfile -File "$PSScriptRoot/deploy.ps1" drop -Installed; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
                         & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1"; exit $LASTEXITCODE }
             'sources' { $laplace = Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd'
                         if (-not (Test-Path -LiteralPath $laplace -PathType Leaf)) { throw 'The modular client is not installed. Run setup.ps1 client for this host.' }

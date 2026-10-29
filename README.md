@@ -88,7 +88,7 @@ Prepare or install perf-caches as an independent operation. The existing generat
 
 `laplace ingest --highway --no-load` checks an existing sidecar without database access. `laplace ingest --highway` explicitly admits it to the declared database. Neither ordinary deployment nor ordinary source ingestion invokes this admission automatically. Existing content remains in existing databases; a new deployment stays empty until admission is requested. Automated artifact promotion and provenance receipts remain unfinished.
 
-Each deployment step writes under `$LAPLACE_WORK/logs/deploy`. `./deploy.sh drop` is an explicit destructive operation: it drops the named database through the role (`DROP DATABASE … WITH (FORCE)`, never `postgres` or an empty name), then recreates its infrastructure.
+Each source deployment step writes under `$LAPLACE_WORK/logs/deploy`. `./deploy.sh drop` is an explicit destructive operation: it drops the named database through the role (`DROP DATABASE … WITH (FORCE)`, never `postgres` or an empty name), then recreates its infrastructure. On desktop, `laplace-ops seed -Yes` uses `deploy.ps1 -Installed drop`: the installed human client's database, Engine and verified caches, without tuning or rebuilding. Active database clients make the drop fail. Its `modular-database` receipt and log use the bounded operation history; `laplace-ops test -Check desktop-installed-deployment` verifies recreation against a disposable database.
 
 ```sh
 ./data.sh fetch                                    # every data set data.tsv declares, from its publisher, at the latest

@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param([string]$Configuration="$PSScriptRoot/hart-desktop-operator.json", [string]$ModularInstallation,
     [ValidateSet('all','monorepo','modular')][string]$Scope='all',
-    [ValidateSet('none','source-interpretation','sql-foundation')][string]$Proof='none')
+    [ValidateSet('none','source-interpretation','sql-foundation','installed-deployment')][string]$Proof='none')
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot/../laplace.env.ps1"
 . "$PSScriptRoot/desktop-clients.ps1"
@@ -46,7 +46,11 @@ try{
         }
         $env:PGHOST=$target.host;$env:PGPORT=[string]$target.port;$env:PGUSER=$c.role;$env:PSQL=$psql
         $source=Join-Path $env:LAPLACE_SRC 'Laplace'
-        if ($Proof -eq 'source-interpretation') {
+        if ($Proof -eq 'installed-deployment') {
+            $declared=Get-DesktopClientDeclaration
+            $selection=Invoke-InstalledClient (Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd') @('--where')|ConvertFrom-Json
+            & py -3 -X utf8 (Join-Path $PSScriptRoot '../tests/modular-client.py') --database --configuration $declared.operator_client.configuration --psql $psql
+        } elseif ($Proof -eq 'source-interpretation') {
             $command=Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd'
             $selection=(Invoke-InstalledClient $command @('--where'))|ConvertFrom-Json
             if ($selection.database_host -ine $target.host) { throw 'Installed Engine selects another host.' }

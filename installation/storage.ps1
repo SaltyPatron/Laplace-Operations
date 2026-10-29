@@ -195,7 +195,7 @@ function Get-StorageOperationHistory {
     if(-not (Test-Path -LiteralPath $Root -PathType Container)){return @()}
     $entries=@();$records=@{}
     foreach($item in Get-ChildItem -LiteralPath $Root -Force) {
-        if($item.PSIsContainer -and $item.Name -match '^(desktop-deploy|iis-database|test|components)-\d{8}T\d{6,13}Z$') {
+        if($item.PSIsContainer -and $item.Name -match '^(desktop-deploy|iis-database|modular-database|test|components)-\d{8}T\d{6,13}Z$') {
             $family=$Matches[1];$marker=if($family -eq 'components'){'components.json'}else{'receipt.json'}
             $receipt=Join-Path $item.FullName $marker
         } elseif($item.PSIsContainer -and $item.Name -match '^(desktop-run|desktop-verification)-\d{8}-\d{6}(?:-[a-f0-9]{8})?$') {
@@ -217,7 +217,7 @@ function Get-StorageOperationHistory {
                 if(-not $record.operation -or -not $record.target){continue}
                 $group='deploy|'+$record.target
             }
-            'iis-database' {
+            {$_ -in @('iis-database','modular-database')} {
                 if(-not $record.host -or -not $record.database -or -not $record.operation -or $record.completed -isnot [bool]){continue}
                 $group='database|'+$record.host+'|'+$record.database+'|'+$record.operation
                 $status=if($record.completed){'passed'}else{'failed'}

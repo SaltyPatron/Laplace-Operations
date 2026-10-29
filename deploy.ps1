@@ -6,12 +6,39 @@
     pwsh -File deploy.ps1                                        the database laplace.env.ps1 names
     $env:LAPLACE_CONNINFO = '... dbname=NAME'; pwsh -File deploy.ps1   another database; made if the server does not have it
     pwsh -File deploy.ps1 drop                                   the database dropped first and made again, empty
+    pwsh -File deploy.ps1 -Installed [drop]                       use the installed client and caches, without a build
   What it needs first: setup.ps1 run (the server, its settings, its access), and the data under LAPLACE_DATA. What each
   step said is kept in $LAPLACE_WORK\logs\deploy.
 #>
-param([string]$Drop = '')
+param([string]$Drop = '',[switch]$Installed)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\laplace.env.ps1"
+if($Installed){
+    . "$PSScriptRoot/installation/desktop-clients.ps1"
+    . "$PSScriptRoot/installation/storage.ps1"
+    $declared=Get-DesktopClientDeclaration
+    $operation=Enter-DesktopStorageOperation
+    $run=Join-Path $env:LAPLACE_WORK ('operations/modular-database-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ'))
+    $null=New-Item -ItemType Directory -Path $run
+    $receipt=@{host=$declared.host;database=$declared.database;operation=$(if($Drop -eq 'drop'){'recreate'}else{'migrate'});completed=$false}
+    try{
+        if($Drop -and $Drop -ne 'drop'){throw 'The installed deployment accepts only an explicit drop or no drop.'}
+        $profile=Read-StorageJson $declared.operator_client.configuration
+        if(-not $profile -or [IO.Path]::GetFullPath($profile.installation) -ine [IO.Path]::GetFullPath($declared.installed_config)){throw 'The operator client does not select the declared modular installation.'}
+        $selected=Read-StorageJson $profile.installation
+        if($selected.host -ine $declared.host -or $selected.socket -ine $declared.socket -or $selected.database -cne $declared.database){throw 'The installed database differs from the declared modular target.'}
+        $receipt.installation=$profile.installation;$receipt.release=$selected.release
+        $options=if($Drop -eq 'drop'){@('--drop')}else{@()}
+        & py -3 "$PSScriptRoot/installation/deploy-client.py" --configuration $declared.operator_client.configuration --psql (Join-Path $env:LAPLACE_PG_DIR 'bin/psql.exe') @options 2>&1 | Tee-Object -FilePath (Join-Path $run 'deploy.log')
+        if($LASTEXITCODE){throw "Installed database deployment exited $LASTEXITCODE. See $run/deploy.log"}
+        $receipt.completed=$true
+    }finally{
+        $receipt.finished_utc=[DateTime]::UtcNow.ToString('o');$receipt|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $run 'receipt.json')
+        Write-Host "Receipt: $run/receipt.json"
+        Exit-DesktopStorageOperation -Operation $operation
+    }
+    return
+}
 $db = if ($env:LAPLACE_CONNINFO -match 'dbname=(\S+)') { $Matches[1] } else { 'default' }
 New-Item -ItemType Directory -Force $env:LAPLACE_LOCKS | Out-Null
 # one deployment per database at a time, whoever runs it: the lock is held open, no sharing, while this runs; the

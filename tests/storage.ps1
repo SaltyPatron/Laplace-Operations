@@ -118,6 +118,7 @@ try {
     $args.Processes+=@([pscustomobject]@{pid=77;parent_pid=424243;name='python.exe';executable='python.exe';command='';modules=@();module_error=$false},
         [pscustomobject]@{pid=4;parent_pid=0;name='System';executable=$null;command='';modules=@();module_error=$false})
     $dbHistory=@(1..12|ForEach-Object {HistoryFixture 'iis-database' $_ @{host='desktop';database='substrate';operation='status';completed=$true}})
+    $modularHistory=@(41..44|ForEach-Object {HistoryFixture 'modular-database' $_ @{host='desktop';database='laplace';operation='recreate';completed=$true}})
     $dbFailures=@(20..21|ForEach-Object {HistoryFixture 'iis-database' $_ @{host='desktop';database='substrate';operation='status';completed=$false}})
     $otherTarget=HistoryFixture 'iis-database' 0 @{host='other-host';database='substrate';operation='status';completed=$true}
     $args.Processes+=@([pscustomobject]@{pid=78;parent_pid=0;name='reader.exe';executable=(Join-Path $dbHistory[0] 'reader.exe');command='';modules=@();module_error=$false})
@@ -143,6 +144,7 @@ try {
     $runHistory=@(50..54|ForEach-Object {HistoryFixture 'desktop-run' $_ @{source='E:/source';build_root=$build;base_url='http://localhost:5187';status='verified'}})
     $verification=HistoryFixture 'desktop-verification' 55 @{source='E:/source';url='http://localhost:5187';status='verified';run_directory=$runHistory[0]}
     $historyPlan=Get-DesktopStoragePlan @args
+    Require ($historyPlan.entries|Where-Object {$_.path -eq $modularHistory[0] -and $_.retire}) 'Installed database operation history was not bounded.'
     Require ($historyPlan.entries|Where-Object {$_.path -eq $zoneHistory[0] -and $_.retire}) 'UTC completion times were shifted into the future by JSON date conversion.'
     Require (-not ($historyPlan.entries|Where-Object path -EQ $runHistory[0]).retire) 'Retained verification lost its original run.'
     Require ($historyPlan.entries|Where-Object {$_.path -eq $runHistory[1] -and $_.retire}) 'Completed development run histories were unbounded.'
