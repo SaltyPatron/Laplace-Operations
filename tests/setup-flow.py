@@ -26,7 +26,7 @@ setup_runtime_verified=0
 stage() { printf '%s\n' "$1" >> "$TRACE"; [[ $1 != "$FAIL_STAGE" ]] || return 37; }
 part() { :; }
 say() { :; }
-for name in volumes packages rights kernel deps cluster settings access backup landing site agents idlestop report drop; do
+for name in volumes packages rights kernel deps cluster settings access backup landing configured_secrets site agents idlestop report drop; do
   eval "$name() { stage $name; }"
 done
 appdb_cluster() { stage application_database; }
@@ -37,6 +37,10 @@ python3() {
   fi
   if [[ $# == 2 && $1 == "$here/installation/modular.py" && $2 == install ]]; then
     stage modular
+    return
+  fi
+  if [[ $# == 3 && $1 == "$here/installation/database-restart.py" && $2 == --environment && $3 == --install ]]; then
+    stage restart_controller
     return
   fi
   [[ $# == 1 && $1 == "$here/installation/runtime.py" ]]
@@ -58,11 +62,13 @@ printf 'complete:%s\n' "$setup_runtime_verified" >> "$TRACE"
                 self.assertNotIn('site', stages)
                 self.assertLess(stages.index('modular'), stages.index('report'))
                 self.assertLess(stages.index('cluster'), stages.index('postgres'))
+                self.assertLess(stages.index('postgres'), stages.index('restart_controller'))
+                self.assertLess(stages.index('restart_controller'), stages.index('settings'))
                 self.assertLess(stages.index('postgres'), stages.index('application_database'))
                 self.assertEqual(stages[-1], 'complete:0')
 
     def test_failures_stop_before_success_report(self):
-        for failed in ('packages', 'postgres', 'modular'):
+        for failed in ('packages', 'postgres', 'restart_controller', 'modular'):
             with self.subTest(failed=failed):
                 result, stages = self.run_setup(fail=failed)
                 self.assertEqual(result.returncode, 37, result.stderr)

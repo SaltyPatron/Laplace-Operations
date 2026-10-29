@@ -454,7 +454,7 @@ tune_restart() {
     # (setup.sh rights), never while an ingest holds its lock
     date -u +%FT%TZ > "$LAPLACE_LOCKS/restart-pg"
   else
-    echo "tune-pg: $pending pending_restart; $unit was not restarted (sudo ./setup.sh rights installs the restart the runner may ask for)" >&2
+    echo "tune-pg: $pending pending_restart; $unit was not restarted (sudo ./setup.sh restart-controller installs the declared controller)" >&2
     return 1
   fi
   # restarted when the server answers with a start time later than the one it had

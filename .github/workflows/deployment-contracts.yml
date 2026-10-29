@@ -122,6 +122,7 @@ jobs:
           python3 tests/host-repair.py
           python3 tests/runtime-owner.py
           python3 tests/modular-installation.py
+          python3 tests/database-restart.py
           python3 tests/modular-client.py
           python3 tests/storage.py
           pwsh -NoProfile -File tests/desktop-clients.ps1

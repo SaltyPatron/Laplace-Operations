@@ -113,6 +113,7 @@ sudo ./setup.sh                                    # once per machine: volumes, 
 ./tune-pg.sh --plan                                # the facts read from this machine and every setting they give; no connection
 tests/tune-pg-plan.sh                              # the rules against every host's measured facts, and the invariants they must keep
 sudo ./setup.sh settings                           # the same declaration, when a pending restart needs root
+sudo ./setup.sh restart-controller                 # validate the running cluster, then converge its bounded restart helper
 sudo ./setup.sh machine                            # repair declaration permissions only; no provisioning
 ./setup.sh repair --check                          # validate this host against installation/<hostname>.json; no sudo
 sudo ./setup.sh repair --storage-report            # measure declared existing volumes, protected files and deleted-open files

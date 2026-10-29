@@ -3,7 +3,7 @@
 #
 #   sudo ./setup.sh            everything below, in order; each part looks at the state and makes only what is missing
 #   sudo ./setup.sh access     one part, or several: volumes | packages | rights | kernel | deps | cluster | settings | access |
-#                              appdb | backup | site | runtime | modular | agents | shared | locks | logging | idlestop | report
+#                              appdb | backup | site | runtime | modular | restart-controller | agents | shared | locks | logging | idlestop | report
 #   sudo ./setup.sh machine    public declaration permissions only; no packages, database or service changes
 #   sudo ./setup.sh secrets-stack  converge the existing hart-server Vaultwarden/OpenBao stack; not part of all
 #   sudo ./setup.sh secrets-recover recover nginx and unseal existing Bao from its private escrow; no initialization
@@ -385,22 +385,8 @@ rights(){ part rights
   for pth in $LEGACY_PATHS; do [ -e "$pth" ] || [ -L "$pth" ] || continue; rm -rf "$pth"; say "removed" "$pth"; done
   command -v nginx >/dev/null && nginx -t -q 2>/dev/null && systemctl reload nginx 2>/dev/null || true
   for u in $LEGACY_USERS; do id "$u" >/dev/null 2>&1 && { userdel "$u" 2>/dev/null; say "user" "removed $u"; }; done
-  # The one thing the runner has of root: the server restarted, for a setting that needs it (tune-pg.sh). The runner
-  # writes $LAPLACE_LOCKS/restart-pg; root's unit restarts $SERVICE and nothing else, never while an ingest holds a lock.
-  # No sudo: polkit 0.105 (Ubuntu 22.04) cannot grant one unit alone.
-  cat > /usr/local/sbin/laplace-pg-restart <<SH
-#!/bin/sh
-for l in $LAPLACE_LOCKS/ingest-*.lock; do [ -e "\$l" ] || continue
-  flock -n "\$l" true || { echo "an ingest holds \$l: $SERVICE not restarted"; exit 1; }; done
-exec systemctl restart $SERVICE.service
-SH
-  chown root:root /usr/local/sbin/laplace-pg-restart; chmod 755 /usr/local/sbin/laplace-pg-restart
-  printf '[Unit]\nDescription=Restart %s when tune-pg.sh asks, never under an ingest\n[Service]\nType=oneshot\nExecStart=/usr/local/sbin/laplace-pg-restart\n' "$SERVICE" \
-    > /etc/systemd/system/laplace-pg-restart.service
-  printf '[Unit]\nDescription=tune-pg.sh asks for %s to be restarted\n[Path]\nPathChanged=%s/restart-pg\n[Install]\nWantedBy=multi-user.target\n' "$SERVICE" "$LAPLACE_LOCKS" \
-    > /etc/systemd/system/laplace-pg-restart.path
-  systemctl daemon-reload; systemctl enable --now -q laplace-pg-restart.path
-  say "restart" "the runner may ask for $SERVICE to be restarted (write $LAPLACE_LOCKS/restart-pg); nothing else"
+  # The restart controller is installed after PostgreSQL has established its
+  # actual service/cluster identity, by the restart-controller setup stage.
   return 0
 }
 drop(){ part drop

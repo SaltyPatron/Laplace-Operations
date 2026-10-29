@@ -7,19 +7,16 @@ setup_dispatch() {
   ((${#parts[@]})) || parts=(all)
   for p in "${parts[@]}"; do
     case $p in
-      all|drop|rights|volumes|packages|kernel|deps|cluster|postgres|settings|access|appdb|backup|site|runtime|modular|agents|shared|locks|logging|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client|database-client) ;;
+      all|drop|rights|volumes|packages|kernel|deps|cluster|postgres|restart-controller|settings|access|appdb|backup|site|runtime|modular|agents|shared|locks|logging|idlestop|report|chess|shares|landing|secrets-stack|secrets-backup|secrets-client|database-client) ;;
       *) echo "Unknown setup stage: $p" >&2; return 2 ;;
     esac
   done
   for p in "${parts[@]}"; do
     case $p in
       all)
-        volumes; packages; rights; kernel; deps; cluster; postgres; settings; access; appdb; backup
+        volumes; packages; rights; kernel; deps; cluster; postgres; restart-controller; settings; access; appdb; backup
         landing_of_all=1; landing; landing_of_all=
-        if [[ -f /etc/laplace/secrets-protection.json ]]; then
-          bash "$here/secrets/recover.sh"
-          python3 "$here/secrets/protection.py" --configuration /etc/laplace/secrets-protection.json
-        fi
+        configured_secrets
         modular; agents; idlestop; report
         ;;
       *) "$p" ;;
@@ -27,9 +24,21 @@ setup_dispatch() {
   done
 }
 
+configured_secrets() {
+  if [[ -f /etc/laplace/secrets-protection.json ]]; then
+    bash "$here/secrets/recover.sh"
+    python3 "$here/secrets/protection.py" --configuration /etc/laplace/secrets-protection.json
+  fi
+}
+
 postgres() {
   part 'PostgreSQL installation'
   python3 "$here/installation/postgres-installation.py"
+}
+
+restart-controller() {
+  part 'PostgreSQL restart controller'
+  python3 "$here/installation/database-restart.py" --environment --install
 }
 
 modular() {
