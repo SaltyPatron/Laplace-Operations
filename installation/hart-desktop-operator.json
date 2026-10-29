@@ -59,8 +59,7 @@
       "databases": [
         "postgres",
         "laplace",
-        "laplace-mono",
-        "laplace-desktop-app"
+        "laplace-mono"
       ]
     },
     {
