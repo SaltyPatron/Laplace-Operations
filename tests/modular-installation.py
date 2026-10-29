@@ -491,6 +491,35 @@ class Installation(unittest.TestCase):
         self.assertIn('-U', called[0])
         self.assertIn('laplace', called[0])
 
+    def test_database_cache_paths_restore_exact_prior_settings_on_activation_failure(self):
+        config, release = self.prepared_release()
+        config['database'] = 'selected_database'
+        prepared = release / 'share/prepared'
+        prepared.mkdir(parents=True)
+        for name in ('tier0.bin', 'tier0.flags', 'tier0.highway'):
+            (prepared / name).write_bytes(b'cache presence fixture')
+        expected = dict(zip(('laplace.tier0', 'laplace.flags', 'laplace.highway'),
+                            map(str, (prepared / name for name in ('tier0.bin', 'tier0.flags', 'tier0.highway')))))
+        previous = {'laplace.tier0': "/prior/owner's/tier0.bin"}
+        with patch.object(modular, 'sql', side_effect=[json.dumps(previous), '', json.dumps(expected), '']) as execute:
+            with self.assertRaisesRegex(RuntimeError, 'activation failed'):
+                with modular.database_prepared_paths(config, release) as paths:
+                    self.assertEqual(paths, expected)
+                    raise RuntimeError('activation failed')
+        restore = execute.call_args_list[-1].args[1]
+        self.assertIn("SET laplace.tier0 TO '/prior/owner''s/tier0.bin'", restore)
+        self.assertIn('RESET laplace.flags;', restore)
+        self.assertIn('RESET laplace.highway;', restore)
+        self.assertTrue(restore.startswith('BEGIN;') and restore.endswith('COMMIT;'))
+
+    def test_database_cache_paths_refuse_a_source_tree_before_sql(self):
+        config, _ = self.prepared_release()
+        with patch.object(modular, 'sql') as execute:
+            with self.assertRaisesRegex(ValueError, 'selected installed release'):
+                with modular.database_prepared_paths(config, self.directory / 'build/selected'):
+                    self.fail('A build directory was accepted')
+        execute.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

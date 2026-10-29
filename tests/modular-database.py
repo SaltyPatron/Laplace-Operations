@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +52,40 @@ CREATE TABLE stage.runtime_batch(id int); INSERT INTO stage.runtime_batch VALUES
     assert sql(name,'SELECT id FROM public.entity;')=='17'
     attributes = sql(name, f"SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname='{name}';")
     assert attributes == 'f|f|f|f|f', attributes
+    spec = importlib.util.spec_from_file_location('modular_owner', ROOT / 'installation/modular.py')
+    owner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(owner)
+    with tempfile.TemporaryDirectory(prefix='database-cache-binding-') as temporary:
+        cache_config = dict(config, prefix=temporary)
+        release = Path(temporary) / 'releases/verified'
+        prepared = release / 'share/prepared'
+        prepared.mkdir(parents=True)
+        for filename in ('tier0.bin', 'tier0.flags', 'tier0.highway'):
+            (prepared / filename).write_bytes(b'configuration-only presence fixture')
+        # The real PostgreSQL transport is retained; only the configuration
+        # owner is given this disposable database instead of the application.
+        original_sql = owner.sql
+        owner.sql = lambda selected, statement: sql(selected['database'], statement)
+        try:
+            def observed():
+                return json.loads(sql(name, "SELECT json_build_object('laplace.tier0',current_setting('laplace.tier0',true),"
+                    "'laplace.flags',current_setting('laplace.flags',true),'laplace.highway',current_setting('laplace.highway',true));"))
+            before = observed()
+            try:
+                with owner.database_prepared_paths(cache_config, release) as paths:
+                    assert observed() == paths
+                    raise RuntimeError('activation failed')
+            except RuntimeError as error:
+                assert str(error) == 'activation failed'
+            assert observed() == before
+            with owner.database_prepared_paths(cache_config, release) as paths:
+                assert observed() == paths
+            assert observed() == paths
+            with owner.database_prepared_paths(cache_config, release):
+                assert observed() == paths
+        finally:
+            owner.sql = original_sql
+    print('Actual PostgreSQL cache bindings passed: fresh connections, exact failure restoration, successful persistence and repeat invocation.')
     print('Actual PostgreSQL grants passed: read/write/staging permitted; private schema, DDL and administrator impersonation denied; rerun idempotent.')
 finally:
     sql('postgres', f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE);')

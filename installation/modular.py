@@ -349,6 +349,48 @@ def grants(config):
     return package_api(ROOT / 'installation/database.py').runtime_grants(config)
 
 
+@contextmanager
+def database_prepared_paths(config, release):
+    """Keep PostgreSQL on the verified release, restoring its settings on failure."""
+    release = Path(release)
+    if (not release.is_absolute() or '..' in release.parts or release.is_symlink()
+            or release.parent.resolve() != (Path(config['prefix']) / 'releases').resolve()):
+        raise ValueError('Database caches must belong to the selected installed release')
+    expected = {'laplace.' + key: str(release / 'share/prepared' / filename)
+                for key, filename in (('tier0', 'tier0.bin'), ('flags', 'tier0.flags'), ('highway', 'tier0.highway'))}
+    if any(not Path(path).is_file() or not Path(path).stat().st_size for path in expected.values()):
+        raise ValueError('The installed release lacks its database caches')
+    literal = lambda value: "'" + str(value).replace("'", "''") + "'"
+    database = '"' + config['database'].replace('"', '""') + '"'
+    names = ','.join(literal(name) for name in expected)
+    previous = json.loads(sql(config, f"""SELECT COALESCE(json_object_agg(split_part(setting,'=',1),
+substr(setting,strpos(setting,'=')+1)), '{{}}'::json) FROM pg_catalog.pg_db_role_setting r
+CROSS JOIN LATERAL unnest(r.setconfig) setting WHERE r.setdatabase=(SELECT oid FROM pg_catalog.pg_database
+WHERE datname=current_database()) AND r.setrole=0 AND split_part(setting,'=',1) IN ({names});"""))
+
+    def write(values):
+        statements = [f'ALTER DATABASE {database} ' +
+                      (f'SET {name} TO {literal(values[name])}' if name in values else f'RESET {name}') + ';'
+                      for name in expected]
+        sql(config, 'BEGIN;\n' + '\n'.join(statements) + '\nCOMMIT;')
+
+    changed = previous != expected
+    if changed:
+        write(expected)
+    try:
+        # sql() opens a fresh connection: these must be startup settings, not
+        # temporary values set in the deployment's own session.
+        observed = json.loads(sql(config, 'SELECT json_build_object(' + ','.join(
+            literal(name) + ',current_setting(' + literal(name) + ',true)' for name in expected) + ');'))
+        if observed != expected:
+            raise ValueError('Fresh database connections do not select the installed cache paths')
+        yield expected
+    except BaseException:
+        if changed:
+            write(previous)
+        raise
+
+
 def include_file(path, line):
     text = path.read_text()
     if line not in text.splitlines():
@@ -640,7 +682,8 @@ def main():
         verified = False
         try:
             release = package(config, receipt_path, repair=installing, rebuild=args.rebuild)
-            activate(config, release, receipt_path, installing)
+            with database_prepared_paths(config, release) as prepared_paths:
+                activate(config, release, receipt_path, installing)
             if installing:
                 restart_units(config)
                 install_credential_helper(config)
@@ -654,7 +697,8 @@ def main():
                                for value in ('--' + key, client[key])]])
             atomic(receipt_path / 'acceptance.json', json.dumps({'scope': 'modular MCP installed runtime', 'host': config['host'],
                 'release': str(release), 'unit': UNIT, 'runtime_user': config['runtime_user'], 'database_role': config['role'],
-                'result': 'passed', 'runtime_evidence': str(receipt_path / 'runtime.json')}, indent=2) + '\n')
+                'result': 'passed', 'database_prepared_paths': prepared_paths,
+                'runtime_evidence': str(receipt_path / 'runtime.json')}, indent=2) + '\n')
             print('Modular runtime verified: ' + str(receipt_path / 'acceptance.json'))
             verified = True
         finally:
