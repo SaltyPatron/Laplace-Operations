@@ -301,7 +301,7 @@ ssl                              on
 port                             $TUNE_PORT
 max_connections                  $(v conns)
 superuser_reserved_connections   3
-max_prepared_transactions        32
+max_prepared_transactions        0
 SET
   [ "$PROFILE" = substrate ] && echo "temp_tablespaces                 pgtemp"
   return 0

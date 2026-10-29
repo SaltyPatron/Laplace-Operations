@@ -423,6 +423,14 @@
           "evidence": "Saved pgAdmin connections to all declared Laplace databases: local Windows SSPI and remote non-exportable user-store certificates, exact identities, TLS, password-free roles, and rejected unmapped identities/missing keys/wrong certificates. GUI interaction, browser OAuth and renewal automation remain separate."
         },
         {
+          "id": "desktop-native-roundtrip",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "installation/Verify-DesktopDatabases.ps1", "-Proof", "native-roundtrip"],
+          "timeout_seconds": 300,
+          "scratch": true,
+          "evidence": "Prototype's maintained Gates A/B consume the installed Engine, caches, grammar formats and a separately compiled Native reader against one temporary database in the existing cluster; actual reconstruction, structural checks, crosswalk connectivity and unchanged replay. No private PostgreSQL instance."
+        },
+        {
           "id": "desktop-installed-deployment",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "installation/Verify-DesktopDatabases.ps1", "-Proof", "installed-deployment"],

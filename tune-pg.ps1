@@ -271,7 +271,7 @@ function TuneDeclared {
         port                             = $env:LAPLACE_PGPORT
         max_connections                  = "$($p.conns)"
         superuser_reserved_connections   = '3'
-        max_prepared_transactions        = '32'
+        max_prepared_transactions        = '0'
     }
     if ($TuneProfile -eq 'substrate' -and $env:LAPLACE_PGTEMP) { $s['temp_tablespaces'] = 'pgtemp' }
     $s

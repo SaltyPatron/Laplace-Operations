@@ -6,6 +6,7 @@ $bash = if (Test-Path 'C:/Program Files/Git/bin/bash.exe') { 'C:/Program Files/G
 Remove-Item Env:LAPLACE_PG_ACTIVE_QUERIES, Env:LAPLACE_PG_SERVING, Env:LAPLACE_PG_WORK_NODES -ErrorAction SilentlyContinue
 
 function Assert-Memory($p) {
+    if((TuneDeclared).max_prepared_transactions -ne '0'){throw 'Native unlogged ingestion must not enable prepared transactions.'}
     if ($p.backends -ne $p.active_queries + $p.par) { throw 'Parallel workers missing from executor budget' }
     if ($p.temp_total_kb -ne $p.conns * $p.temp_kb) { throw 'Connection temporary buffers missing' }
     $used = $p.backends * $p.work_nodes * $p.work_kb + $p.temp_total_kb + $p.mwm_kb + $p.avw * $p.avwm_kb

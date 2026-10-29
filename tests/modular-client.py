@@ -54,6 +54,7 @@ class ClientInputs(unittest.TestCase):
         executable, environment, _ = self.select()
         for path in (environment['LAPLACE_TIER0'], environment['LAPLACE_FLAGS'],
                      environment['LAPLACE_FLAGS']+'.layout', environment['LAPLACE_HIGHWAY']):
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
             Path(path).write_bytes(b'prepared')
         psql = self.root / 'psql.exe'
         psql.touch()
@@ -191,7 +192,7 @@ class PackageReuse(unittest.TestCase):
         self.package = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.package)
         self.config = {key: str(self.root / key) for key in
-                       ('prefix', 'state', 'ucd', 'build', 'engine', 'prepared', 'grammars', 'mkl_runtime')}
+                       ('prefix', 'state', 'ucd', 'build', 'engine', 'native', 'prepared', 'grammars', 'mkl_runtime')}
         self.config.update(schema='laplace.modular-installation/v1', host='test', socket='test', port=5432,
                            database='test', threads=2, batch_mb=64, installed_config=str(self.root / 'installed.json'),
                            runtime_directories=[str(self.root / 'runtime')], mkl_runtime_libraries=['mkl_*.dll'])
@@ -201,6 +202,7 @@ class PackageReuse(unittest.TestCase):
             'bin/dependency.dll': self.root / 'runtime/dependency.dll',
             'share/recipes/order': self.root / 'engine/recipes/order',
             'share/firmware/program.firmware': self.root / 'engine/firmware/program.firmware',
+            'share/manifest/banks.tsv': self.root / 'native/manifest/banks.tsv',
             'share/grammars/test.dll': self.root / 'grammars/test.dll',
             **{'share/prepared/' + name: self.root / 'prepared' / name
                for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway')},
@@ -208,7 +210,7 @@ class PackageReuse(unittest.TestCase):
         for key, source in self.sources.items():
             source.parent.mkdir(parents=True, exist_ok=True)
             source.write_bytes(key.encode())
-        package = {'schema': 'laplace.modular-package/v1', 'revisions': {'Laplace-Engine': 'revision'},
+        package = {'schema': 'laplace.modular-package/v1', 'revisions': {'Laplace-Engine': 'revision'}, 'frozen_manifest_verified': True, 'recipe_sources': 'runtime-v1',
                    'files': {key: self.package.digest(source) for key, source in self.sources.items()}}
         identity = hashlib.sha256(json.dumps(package, sort_keys=True).encode()).hexdigest()
         self.release = self.root / 'prefix/releases' / identity

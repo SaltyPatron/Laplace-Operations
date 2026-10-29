@@ -63,6 +63,7 @@ function RunCheck($item) {
         [void][IO.Directory]::CreateDirectory($scratch)
         foreach ($name in 'TMPDIR','TMP','TEMP','LAPLACE_ACCEPTANCE_WORK') { $info.Environment[$name]=$scratch }
         $info.Environment['LAPLACE_ACCEPTANCE_RESULTS']=Join-Path (Split-Path $outputPath -Parent) $item.id
+        [void][IO.Directory]::CreateDirectory($info.Environment['LAPLACE_ACCEPTANCE_RESULTS'])
         $lease=@{schema='laplace.acceptance-scratch/v1';owner_pid=$PID;child_pid=0;receipt=$outputPath;check=$item.id}
         $leasePath=Join-Path $scratch '.laplace-scratch.json'
         [IO.File]::WriteAllText($leasePath+'.next',($lease|ConvertTo-Json))

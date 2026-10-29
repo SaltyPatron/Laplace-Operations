@@ -335,6 +335,15 @@ pwsh -File setup.ps1 clean            # the same collector through setup; cleanu
 ```
 
 Desktop deployment uses the enrolled Windows operator and the declared developer shell.
+Modular packages include their frozen Native manifests and verify that Native can
+reproduce the selected Highway from them. Prepared inputs and compiled grammar
+roots are build inputs; installed processes read their release's copies. Shared
+immutable files use hardlinks, while grammar generator sources stay out of the
+runtime recipe tree. `laplace-ops test -Check desktop-native-roundtrip` runs the
+maintained Prototype Gates A/B against the installed client and the existing
+cluster, using a disposable database. Native ingestion keeps prepared transactions
+disabled (`max_prepared_transactions=0`).
+
 It runs the maintained tuner in apply mode before building: changed settings are
 written, reloaded and verified. A required service restart follows the tuner's
 existing permission and active-ingestion checks; unresolved changes fail the stage.

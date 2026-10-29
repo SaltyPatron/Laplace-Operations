@@ -290,6 +290,7 @@ def plan(work, build, source, site, modular=None, references=None, unknown=False
     return dict(schema='laplace.storage/v1', host=socket.gethostname(), run=os.environ.get('GITHUB_RUN_ID'),
                 checked_utc=datetime.now(timezone.utc).isoformat(), entries=entries, notes=notes,
                 recovery_pending=recovery, delivery_held=delivery_held,
+                native_asset_store=str(absolute(modular['prefix']) / 'assets') if modular else None,
                 policy=dict(rollback_releases=0 if replace_unselected else 1,
                             explicit_native_replacement=replace_unselected, source_data_archives='preserved',
                             incremental_profiles='preserved', recovery='preserved'))
@@ -358,6 +359,32 @@ def collect(state):
             entry['retire'] = False
             continue
         removed.append(str(path))
+    # The publisher uses the same Operations artifact store and flock. Retired
+    # releases drop their links first; only ownerless content blobs follow.
+    store = state.get('native_asset_store')
+    if store and Path(store).is_dir():
+        import fcntl
+        store = absolute(store)
+        blobs = store / 'blobs'
+        with (store / '.build.lock').open('a+b') as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                state.setdefault('notes', []).append('Native asset collection deferred while its publisher holds the store')
+            else:
+                if blobs.is_dir():
+                    validate_tree(blobs, store)
+                    for bucket in blobs.iterdir():
+                        if not bucket.is_dir() or not re.fullmatch('[0-9a-f]{2}', bucket.name):
+                            continue
+                        for blob in bucket.iterdir():
+                            if (blob.is_file() and re.fullmatch('[0-9a-f]{64}', blob.name)
+                                    and blob.name.startswith(bucket.name) and blob.stat().st_nlink == 1):
+                                devices.setdefault(str(blob.stat().st_dev), dict(path=str(store), before=shutil.disk_usage(store).free))
+                                blob.unlink()
+                                removed.append(str(blob))
+                        if not any(bucket.iterdir()):
+                            bucket.rmdir()
     for device in devices.values():
         device['after'] = shutil.disk_usage(device['path']).free
     state.update(status='passed', removed=removed, devices=devices)

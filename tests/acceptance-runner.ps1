@@ -8,7 +8,7 @@ $manifest = Join-Path $work 'criteria.json'
 $platform = if ($IsWindows) { 'windows' } else { 'linux' }
 $other = if ($IsWindows) { 'linux' } else { 'windows' }
 $cases = @(
-    @{ id='pass'; platform='any'; scratch=$true; argv=@('pwsh','-NoProfile','-Command','[IO.File]::WriteAllText((Join-Path $env:LAPLACE_ACCEPTANCE_WORK payload.txt),"fixture"); exit 0'); evidence='fixture'; timeout_seconds=10 },
+    @{ id='pass'; platform='any'; scratch=$true; argv=@('pwsh','-NoProfile','-Command','if(-not [IO.Directory]::Exists($env:LAPLACE_ACCEPTANCE_RESULTS)){exit 9}; [IO.File]::WriteAllText((Join-Path $env:LAPLACE_ACCEPTANCE_WORK payload.txt),"fixture"); Copy-Item (Join-Path $env:LAPLACE_ACCEPTANCE_WORK payload.txt) -Destination (Join-Path $env:LAPLACE_ACCEPTANCE_RESULTS proof.log); exit 0'); evidence='fixture'; timeout_seconds=10 },
     @{ id='fail'; platform='any'; scratch=$true; argv=@('pwsh','-NoProfile','-Command','exit 7'); evidence='fixture'; timeout_seconds=10 },
     @{ id='missing'; platform='any'; scratch=$true; argv=@('laplace-missing-fixture-command'); evidence='fixture'; timeout_seconds=10 },
     @{ id='pending'; platform='any'; argv=$null; evidence='not implemented' },
@@ -32,6 +32,7 @@ foreach ($case in @(@('pass',0,'passed'), @('fail',1,'failed'), @('missing',1,'f
     if ($case[0] -in 'pass','fail','missing','timeout') {
         Assert ($selected[0].scratch_removed -and -not (Test-Path (Join-Path $work ($case[0]+'-scratch')))) "$($case[0]): runner left transient payload behind"
     }
+    if($case[0] -eq 'pass'){Assert ([IO.File]::ReadAllText((Join-Path $work 'pass/proof.log')) -ceq 'fixture') 'Child evidence was not retained after scratch cleanup.'}
 }
 $existing = Join-Path $work 'pass.json'
 $hash = (Get-FileHash $existing).Hash

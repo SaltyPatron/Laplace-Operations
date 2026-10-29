@@ -56,6 +56,30 @@ class Storage(unittest.TestCase):
     def test_unknown_visibility_retains_native_releases(self):
         self.assertFalse(any(entry['retire'] for entry in self.plan(unknown=True)['entries']))
 
+    def test_native_resources_share_immutable_blobs_and_orphans_follow_release_retirement(self):
+        import hashlib
+        import fcntl
+        store = self.prefix / 'assets'
+        def blob(payload):
+            identity = hashlib.sha256(payload).hexdigest()
+            path = store / 'blobs' / identity[:2] / identity
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+            return path
+        shared, expired = blob(b'shared grammar'), blob(b'expired cache')
+        os.link(shared, self.active / 'grammar.so')
+        os.link(shared, self.old / 'grammar.so')
+        os.link(expired, self.old / 'highway.bin')
+        with (store / '.build.lock').open('a+b') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            storage.collect(self.plan())
+            self.assertTrue(expired.exists(), 'A publisher lost its unlinked blob')
+        state = storage.collect(self.plan())
+        self.assertFalse(expired.exists())
+        self.assertIn(str(expired), state['removed'])
+        self.assertTrue(os.path.samefile(shared, self.active / 'grammar.so'))
+        self.assertEqual(storage.collect(self.plan())['removed'], [])
+
     def leased_releases(self):
         for path in (self.active, self.held, self.rollback, self.old):
             times = path.stat()

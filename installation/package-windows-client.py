@@ -35,6 +35,31 @@ def copy_prepared(source, destination):
         stage_file(source / name, destination / name)
 
 
+def verify_frozen_manifest(config, candidate):
+    """Ask Native to reproduce the prepared Highway from its packaged inputs."""
+    executable = candidate / 'bin/laplace.exe'
+    environment = {key: value for key, value in os.environ.items() if not key.startswith('LAPLACE_')}
+    environment.update(LAPLACE_TIER0=str(candidate / 'share/prepared/tier0.bin'),
+                       LAPLACE_MANIFEST=str(candidate / 'share/manifest'),
+                       LAPLACE_CONNINFO='host=127.0.0.1 port=1 connect_timeout=1 dbname=unused')
+    with tempfile.TemporaryDirectory(prefix='.highway-', dir=candidate) as temporary:
+        generated = Path(temporary) / 'highway.bin'
+        result = subprocess.run([str(executable), 'highway', '-o', str(generated)], env=environment,
+                                capture_output=True, text=True, timeout=120)
+        if result.returncode:
+            raise ValueError('Packaged frozen manifests could not reproduce Highway: ' + result.stderr)
+        fingerprints = []
+        for path in (candidate / 'share/prepared/tier0.highway', generated):
+            result = subprocess.run([str(executable), 'highway', '--fingerprint', '-o', str(path)],
+                                    env=environment, capture_output=True, text=True, timeout=20)
+            if result.returncode:
+                raise ValueError('Native could not verify prepared Highway: ' + result.stderr)
+            fingerprints.append(result.stdout.strip())
+        if fingerprints[0] != fingerprints[1]:
+            raise ValueError('Prepared Highway does not match the selected frozen manifests (' +
+                             ' versus '.join(fingerprints) + '). Prepare it with this Engine and Native manifest before installation.')
+
+
 def run(argv):
     result = subprocess.run(list(map(str, argv)), capture_output=True, text=True)
     if result.returncode:
@@ -93,14 +118,18 @@ def reusable_release(config, revisions):
             return None
         package = json.loads((release / 'package.json').read_text())
         if (package.get('schema') != 'laplace.modular-package/v1' or package.get('revisions') != revisions
+                or package.get('frozen_manifest_verified') is not True
+                or package.get('recipe_sources') != 'runtime-v1'
                 or hashlib.sha256(json.dumps(package, sort_keys=True).encode()).hexdigest() != release.name):
             return None
         inputs = {'bin/laplace.exe': Path(config['build']) / 'laplace.exe'}
         if config.get('mcp'):
             inputs.update({f'bin/{name}': Path(config['mcp_build']) / name for name in ('lpm.exe', 'lpm.dll')})
         for root, target in ((Path(config['engine']) / 'recipes', 'share/recipes'),
-                             (Path(config['engine']) / 'firmware', 'share/firmware')):
-            inputs.update({target + '/' + file.relative_to(root).as_posix(): file for file in root.rglob('*') if file.is_file()})
+                             (Path(config['engine']) / 'firmware', 'share/firmware'),
+                             (Path(config['native']) / 'manifest', 'share/manifest')):
+            inputs.update({target + '/' + file.relative_to(root).as_posix(): file for file in root.rglob('*')
+                           if file.is_file() and not (target == 'share/recipes' and file.relative_to(root).as_posix().startswith('formats/grammars/'))})
         inputs.update({'share/prepared/' + name: Path(config['prepared']) / name
                        for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway')})
         grammars = sorted(Path(config['grammars']).glob('*.dll'))
@@ -236,8 +265,11 @@ def main():
         if has_mcp:
             stage_file(Path(config['mcp_build']) / 'lpm.exe', candidate / 'bin/lpm.exe')
             stage_file(Path(config['mcp_build']) / 'lpm.dll', candidate / 'bin/lpm.dll')
-        shutil.copytree(Path(config['engine']) / 'recipes', candidate / 'share/recipes', copy_function=stage_file)
+        recipe_root = Path(config['engine']) / 'recipes'
+        shutil.copytree(recipe_root, candidate / 'share/recipes', copy_function=stage_file,
+                        ignore=lambda directory, names: ['grammars'] if Path(directory) == recipe_root / 'formats' else [])
         shutil.copytree(Path(config['engine']) / 'firmware', candidate / 'share/firmware', copy_function=stage_file)
+        shutil.copytree(Path(config['native']) / 'manifest', candidate / 'share/manifest', copy_function=stage_file)
         copy_prepared(Path(config['prepared']), candidate / 'share/prepared')
         grammars = sorted(grammar_source.glob('*.dll'))
         if not grammars:
@@ -254,13 +286,14 @@ def main():
             for file in libraries:
                 stage_file(file, candidate / 'bin' / file.name)
         closure(candidate, directories)
+        verify_frozen_manifest(config, candidate)
         files = {str(path.relative_to(candidate)).replace('\\', '/'): digest(path)
                  for path in sorted(candidate.rglob('*')) if path.is_file()}
         components = ['Laplace-Engine']
         if has_mcp:
             components.append('Laplace-MCP')
         package = {'schema': 'laplace.modular-package/v1', 'platform': 'windows-x86_64',
-                   'components': components, 'revisions': revisions, 'files': files,
+                   'components': components, 'revisions': revisions, 'files': files, 'frozen_manifest_verified': True, 'recipe_sources': 'runtime-v1',
                    'grammars': [path.stem.removeprefix('libtree-sitter-') for path in grammars]}
         identity = hashlib.sha256(json.dumps(package, sort_keys=True).encode()).hexdigest()
         release = releases / identity
@@ -305,7 +338,7 @@ def main():
             for operation in operations:
                 result = subprocess.run([str(executable), *operation], capture_output=True, text=True, env=environment, timeout=120)
                 if result.returncode:
-                    raise ValueError('Packaged Engine ' + operation[0] + ' failed: ' + result.stderr)
+                    raise ValueError('Packaged Engine ' + operation[0] + ' failed: ' + (result.stderr or result.stdout))
                 if operation == ['sources'] and result.stderr.strip():
                     raise ValueError('Packaged recipe resources failed: ' + result.stderr)
                 if operation == ['status'] and result.stdout.count("the same as this engine's") != 2:

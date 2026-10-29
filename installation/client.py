@@ -68,10 +68,13 @@ def selected(configuration):
         raise ValueError('The Windows network client requires full database certificate verification')
     connection = ' '.join(key + '=' + conn(value) for key, value in target.items())
     environment = {
-        'LAPLACE_CONNINFO': connection, 'LAPLACE_TIER0': host['tier0'], 'LAPLACE_FLAGS': host['flags'],
-        'LAPLACE_HIGHWAY': host['highway'], 'LAPLACE_GRAMMARS': host['grammars'], 'LAPLACE_UCD': host['ucd'],
+        'LAPLACE_CONNINFO': connection, 'LAPLACE_TIER0': str(release / 'share/prepared/tier0.bin'),
+        'LAPLACE_FLAGS': str(release / 'share/prepared/tier0.flags'),
+        'LAPLACE_HIGHWAY': str(release / 'share/prepared/tier0.highway'),
+        'LAPLACE_GRAMMARS': str(release / 'share/grammars'), 'LAPLACE_UCD': host['ucd'],
         'LAPLACE_WORK': str(work), 'LAPLACE_DATA': str(data), 'LAPLACE_ENGINE': str(executable),
         'LAPLACE_RECIPES': str(release / 'share/recipes'),
+        'LAPLACE_MANIFEST': str(release / 'share/manifest'),
         'LAPLACE_FIRMWARE': str(release / 'share/firmware/program.firmware'),
         'OMP_NUM_THREADS': str(host['threads']), 'MKL_NUM_THREADS': '1', 'LAPLACE_BATCH_MB': str(host['batch_mb']),
     }

@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param([string]$Configuration="$PSScriptRoot/hart-desktop-operator.json", [string]$ModularInstallation,
     [ValidateSet('all','monorepo','modular')][string]$Scope='all',
-    [ValidateSet('none','source-interpretation','sql-foundation','installed-deployment')][string]$Proof='none')
+    [ValidateSet('none','source-interpretation','sql-foundation','installed-deployment','native-roundtrip')][string]$Proof='none')
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot/../laplace.env.ps1"
 . "$PSScriptRoot/desktop-clients.ps1"
@@ -18,7 +18,7 @@ $psql=Join-Path $target.prefix 'bin/psql.exe'
 if($services[0].PathName.Replace('\','/') -notlike ('*'+$target.prefix+'/bin/pg_ctl.exe*')){throw 'The database service uses a different PostgreSQL build.'}
 $saved=@{}
 foreach($name in 'PGPASSWORD','PGPASSFILE','PGSERVICE','PGSERVICEFILE','PGHOSTADDR','PGSSLMODE','PGSSLROOTCERT','PGREQUIREAUTH','PGCONNECT_TIMEOUT',
-    'PGHOST','PGPORT','PGUSER','PGOPTIONS','PSQL','LAPLACE_TIER0','LAPLACE_FLAGS','LAPLACE_HIGHWAY','LAPLACE_GRAMMARS'){
+    'PGHOST','PGPORT','PGUSER','PGOPTIONS','PSQL','LAPLACE_TIER0','LAPLACE_FLAGS','LAPLACE_HIGHWAY','LAPLACE_GRAMMARS','LAPLACE_MANIFEST'){
     $saved[$name]=[Environment]::GetEnvironmentVariable($name)
     Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
 }
@@ -46,7 +46,30 @@ try{
         }
         $env:PGHOST=$target.host;$env:PGPORT=[string]$target.port;$env:PGUSER=$c.role;$env:PSQL=$psql
         $source=Join-Path $env:LAPLACE_SRC 'Laplace'
-        if ($Proof -eq 'installed-deployment') {
+        if ($Proof -eq 'native-roundtrip') {
+            $command=Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd'
+            $selection=Invoke-InstalledClient $command @('--where')|ConvertFrom-Json
+            if($selection.database_host -ine $target.host){throw 'Installed Engine selects another database host.'}
+            $installed=Get-Content -LiteralPath $selection.installation -Raw|ConvertFrom-Json
+            $nativeProof=Join-Path $env:LAPLACE_BUILD 'Laplace-Prototype/proofs/proof_native.exe'
+            if(-not(Test-Path -LiteralPath $nativeProof -PathType Leaf)){throw 'Build Laplace-Prototype/tests in the declared Laplace-Prototype/proofs build profile before running its proof.'}
+            $env:LAPLACE_TIER0=$installed.tier0;$env:LAPLACE_FLAGS=$installed.flags
+            $env:LAPLACE_HIGHWAY=$installed.highway;$env:LAPLACE_GRAMMARS=$installed.grammars
+            $database='laplace_proof_'+[guid]::NewGuid().ToString('N').Substring(0,12)
+            $connection="host='$($target.host)' port=$($target.port) user='$($c.role)' dbname='$database'"
+            $priorPath=$env:PATH
+            try{
+                $env:PATH=(Join-Path $env:LAPLACE_BUILD 'Laplace-Native/icx-release')+';'+(Join-Path $selection.release 'bin')+';'+$env:PATH
+                $null=Query ('CREATE DATABASE "'+$database+'"')
+                $null=Invoke-InstalledClient $command @('deploy','-d',$connection,'--configure-server-cache')
+                & (Join-Path $env:LAPLACE_SRC 'Laplace-Prototype/tests/run-proofs.ps1') -Engine $selection.executable -NativeProof $nativeProof -Tier0 $installed.tier0 -Highway $installed.highway -Manifest (Join-Path $selection.release 'share/manifest') -Formats (Join-Path $selection.release 'share/recipes/formats') -ConnInfo $connection -Psql $psql -Scratch $env:LAPLACE_ACCEPTANCE_WORK
+            }finally{
+                $null=New-Item -ItemType Directory -Path $env:LAPLACE_ACCEPTANCE_RESULTS -Force
+                Get-ChildItem -LiteralPath $env:LAPLACE_ACCEPTANCE_WORK -File|Where-Object {$_.Extension -eq '.log' -or $_.Name -eq 'receipt.json'}|Copy-Item -Destination $env:LAPLACE_ACCEPTANCE_RESULTS
+                $env:PATH=$priorPath
+                $null=Query ('DROP DATABASE IF EXISTS "'+$database+'"')
+            }
+        } elseif ($Proof -eq 'installed-deployment') {
             $declared=Get-DesktopClientDeclaration
             $selection=Invoke-InstalledClient (Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd') @('--where')|ConvertFrom-Json
             & py -3 -X utf8 (Join-Path $PSScriptRoot '../tests/modular-client.py') --database --configuration $declared.operator_client.configuration --psql $psql

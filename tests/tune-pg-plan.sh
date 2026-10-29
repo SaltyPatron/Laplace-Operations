@@ -31,6 +31,7 @@ while IFS=$'\t' read -r name profile ram threads cores wal shared rot reserved c
   p=$(plan_of "$name" "$profile" "$ram" "$threads" "$cores" "$wal" "$shared" "$rot" "$reserved" "$cap"); plans[$name]=$p
   v(){ sed -n "s/^$1=//p" <<<"$p"; }
   d=$(plan_of "$name" "$profile" "$ram" "$threads" "$cores" "$wal" "$shared" "$rot" "$reserved" "$cap" declared)
+  [[ $(awk '$1 == "max_prepared_transactions" {print $2}' <<<"$d") == 0 ]] || { echo "  FAIL prepared transactions enabled for $name"; fail=1; }
   for trace in full reduced off; do
     trace_settings=$(LAPLACE_PG_TRACE=$trace plan_of "$name" "$profile" "$ram" "$threads" "$cores" "$wal" "$shared" "$rot" "$reserved" "$cap" declared)
     [[ $(awk '$1 == "auto_explain.log_min_duration" {print $2}' <<<"$trace_settings") == -1 ]] || {
