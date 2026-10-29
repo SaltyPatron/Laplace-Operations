@@ -12,6 +12,18 @@ class Revisions(unittest.TestCase):
         self.assertEqual(resolver.resolve('owner', 'push', {}, lambda _: {'sha': 'a' * 40}),
                          dict.fromkeys(resolver.COMPONENTS, 'a' * 40))
 
+    def test_operator_can_retain_a_qualified_engine_from_main_history(self):
+        result = resolver.resolve('owner', 'workflow_dispatch', {'inputs': {'engine_revision': 'b' * 40}},
+            lambda path: {'status': 'ahead'} if '/compare/' in path else {'sha': 'a' * 40})
+        self.assertEqual(result['engine'], 'b' * 40)
+        self.assertEqual(result['native'], 'a' * 40)
+        with self.assertRaisesRegex(ValueError, 'main history'):
+            resolver.resolve('owner', 'workflow_dispatch', {'inputs': {'engine_revision': 'b' * 40}},
+                lambda path: {'status': 'diverged'} if '/compare/' in path else {'sha': 'a' * 40})
+        with self.assertRaisesRegex(ValueError, 'full commit'):
+            resolver.resolve('owner', 'workflow_dispatch', {'inputs': {'engine_revision': 'main'}},
+                             lambda _: self.fail('invalid revision reached GitHub'))
+
     def test_delayed_dispatch_preserves_triggering_revision(self):
         result = resolver.resolve('owner', 'repository_dispatch', {'client_payload': {
             'repository': 'owner/Laplace-Engine', 'sha': 'b' * 40}},

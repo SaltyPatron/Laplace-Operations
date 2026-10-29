@@ -16,7 +16,10 @@ def resolve(owner, event_name, event, request):
         raise ValueError('Invalid repository owner')
     payload = event.get('client_payload', {}) if event_name == 'repository_dispatch' else {}
     repository, triggering_sha = payload.get('repository'), payload.get('sha')
-    if event_name == 'repository_dispatch':
+    pinned_engine = event.get('inputs', {}).get('engine_revision') if event_name == 'workflow_dispatch' else None
+    if pinned_engine:
+        repository, triggering_sha = f'{owner}/Laplace-Engine', pinned_engine
+    if event_name == 'repository_dispatch' or pinned_engine:
         if repository not in [f'{owner}/{name}' for name in COMPONENTS.values()]:
             raise ValueError('Dispatch must name a declared component repository')
         if not isinstance(triggering_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', triggering_sha):

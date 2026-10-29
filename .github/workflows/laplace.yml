@@ -37,6 +37,10 @@ on:
     types: [main-merged]
   workflow_dispatch:
     inputs:
+      engine_revision:
+        description: "Optional full Engine commit already in main; its real CI must pass. Empty selects latest main."
+        type: string
+        required: false
       drop:
         description: "drop the database and make it again, empty, before deploying (deploy.sh drop): everything in it is lost"
         type: boolean
