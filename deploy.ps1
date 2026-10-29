@@ -52,7 +52,7 @@ Step highway-fingerprint { & laplace.exe highway --fingerprint }
 if (-not (Get-ChildItem $env:LAPLACE_GRAMMARS -ErrorAction SilentlyContinue)) {
     Step grammars { & 'C:\Program Files\Git\bin\bash.exe' (Join-Path $env:LAPLACE_SRC 'Laplace-Engine\tools\build_grammars.sh') $env:LAPLACE_GRAMMAR_SRC $env:LAPLACE_GRAMMARS }
 }
-Step deploy   { & laplace.exe deploy }
+Step deploy   { & laplace.exe deploy --configure-server-cache }
 Step status   { & laplace.exe status }
 $deployLock.Close()
 ''; "=== done   {0:HH:mm:ss}   $log" -f (Get-Date).ToUniversalTime()

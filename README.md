@@ -57,6 +57,12 @@ The machine Laplace runs on, and Laplace on it, from nothing: one environment fi
 code is in Laplace-Native, Laplace-postgres and Laplace-Engine, side by side under one source root; this repository
 holds what installs, sets up, deploys, repairs and runs them (Operations in the Wiki).
 
+The host deployment scripts explicitly call `laplace deploy --configure-server-cache`
+to select the declared server-local cache paths. Ordinary `laplace deploy` from a
+client preserves database configuration and upgrades the installed extension in
+its own namespace; it does not adopt matching public tables. Index maintenance
+uses the server's configured memory and touches only Native relations.
+
 ```sh
 git clone https://github.com/SaltyPatron/Laplace-Operations /repos/src/Laplace-Operations
 cd /repos/src/Laplace-Operations

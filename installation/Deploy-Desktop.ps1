@@ -42,7 +42,7 @@ if($mono.Count){
     }
 }
 if($selected.Contains('modular')){
-    $steps+=@{name='Migrate the installed modular substrate';command=(Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd');arguments=@('deploy')}
+    $steps+=@{name='Migrate the installed modular substrate and select server-local caches';command=(Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd');arguments=@('deploy','--configure-server-cache')}
 }
 $steps+=@{name='Verify selected installed components';script="$PSScriptRoot/Verify-DesktopDatabases.ps1";arguments=@('-ModularInstallation',$ModularInstallation,'-Scope',$scope)}
 Write-Host 'Laplace desktop deployment' -ForegroundColor Cyan

@@ -24,6 +24,9 @@ if($modular -notmatch 'install-windows-client.*-Force' -or $modular -match 'Buil
 if($modular -notmatch 'Migrate the installed modular substrate'){
     throw 'Modular delivery selected a client without updating its substrate.'
 }
+if($modular -notmatch 'deploy --configure-server-cache'){
+    throw 'The host installer did not explicitly select server-local cache paths.'
+}
 $all=Plan all
 if($all -notmatch 'tune-pg' -or $all -notmatch 'install-windows-client' -or $all -notmatch 'Build-IisPackage'){
     throw 'Full delivery lost a component owner.'

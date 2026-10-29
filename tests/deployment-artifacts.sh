@@ -25,7 +25,7 @@ done
 cat > "$work/bin/laplace" <<'STUB'
 #!/bin/sh
 printf 'laplace %s\n' "$*" >> "$CALL_LOG"
-case "$*" in 'highway --fingerprint'|deploy|status) exit 0;; *) exit 90;; esac
+case "$*" in 'highway --fingerprint'|'deploy --configure-server-cache'|status) exit 0;; *) exit 90;; esac
 STUB
 cat > "$work/bin/psql" <<'STUB'
 #!/bin/sh
@@ -36,12 +36,12 @@ chmod +x "$work/bin/laplace" "$work/bin/psql"
 export FIXTURE="$work" CALL_LOG="$work/calls"
 artifacts=(tier0.bin tier0.flags tier0.flags.layout tier0.highway)
 for artifact in "${artifacts[@]}"; do printf 'prepared\n' > "$work/$artifact"; done
-bash "$work/deploy.sh" as-is > "$work/output" 2>&1
+bash "$work/deploy.sh" as-is > "$work/output" 2>&1 || { cat "$work/output"; exit 1; }
 cat > "$work/expected" <<'EXPECTED'
 tune-pg.sh 
 build.sh install
 laplace highway --fingerprint
-laplace deploy
+laplace deploy --configure-server-cache
 laplace status
 EXPECTED
 diff -u "$work/expected" "$CALL_LOG"

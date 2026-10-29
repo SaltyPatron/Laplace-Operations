@@ -350,30 +350,7 @@ def sql(config, statement):
 
 
 def grants(config):
-    role, database = config['role'], config['database']
-    return f'''BEGIN;
-DO $$ BEGIN
- IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='{role}') THEN CREATE ROLE "{role}" LOGIN; END IF;
- IF EXISTS (SELECT FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname='{role}')) THEN
-  RAISE EXCEPTION 'Dedicated modular role already has memberships'; END IF;
-END $$;
-ALTER ROLE "{role}" NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT CONNECTION LIMIT {config['connection_limit']};
-GRANT CONNECT,TEMPORARY ON DATABASE "{database}" TO "{role}";
-GRANT SET ON PARAMETER session_replication_role TO "{role}";
-GRANT USAGE ON SCHEMA public TO "{role}";
-GRANT EXECUTE ON FUNCTION public.laplace_clean_pending_list(regclass) TO "{role}";
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO "{role}";
-CREATE SCHEMA IF NOT EXISTS stage;
-GRANT USAGE,CREATE ON SCHEMA stage TO "{role}";
-GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,MAINTAIN ON ALL TABLES IN SCHEMA stage TO "{role}";
-DO $$ DECLARE item record; BEGIN
- FOR item IN SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-  WHERE n.nspname='public' AND c.relkind IN ('r','p')
-   AND c.relname ~ '^(entity|physicality|consensus)(_[0-9a-f]{{1,2}})?$|^witness$'
- LOOP EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,MAINTAIN ON TABLE public.%I TO "{role}"',item.relname); END LOOP;
-END $$;
-COMMIT;
-'''
+    return package_api(ROOT / 'installation/database.py').runtime_grants(config)
 
 
 def include_file(path, line):
@@ -425,7 +402,10 @@ def peer_check(config):
     command = ['runuser', '-u', config['runtime_user'], '--', Path(config['pgbin']) / 'psql',
                '-XwAt', '-v', 'ON_ERROR_STOP=1', '-h', config['socket'], '-p', config['port'], '-U', config['role']]
     output = checked(command + ['-d', config['database'], '-c',
-        "SELECT current_user; SELECT extversion FROM pg_extension WHERE extname='laplace'; SELECT count(*) FROM public.entity WHERE id='5b7e40e9a23ae55eaccd45646934977d'::blake3;"], capture_output=True).stdout
+        "SELECT current_user; SELECT extversion FROM pg_catalog.pg_extension WHERE extname='laplace'; "
+        "DO $$ DECLARE native name; BEGIN SELECT n.nspname INTO STRICT native FROM pg_catalog.pg_extension e "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace WHERE e.extname='laplace'; "
+        "EXECUTE format('SELECT count(*) FROM %I.entity',native); END $$;"], capture_output=True).stdout
     if output.splitlines()[0] != config['role']:
         raise ValueError('Peer runtime database identity differs')
     for database, statement in ((config['database'], 'SET ROLE laplace;'),
