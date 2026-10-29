@@ -20,6 +20,11 @@
   "root_certificate": "C:/Users/ahart/AppData/Local/Laplace/pgadmin/hart-desktop-postgresql.crt",
   "windows_identities": [
     "HART-DESKTOP\\ahart",
-    "IIS APPPOOL\\laplace-mono"
-  ]
+    "IIS APPPOOL\\laplace-mono",
+    "IIS APPPOOL\\laplace-mono-uci"
+  ],
+  "uci": {
+    "service": "laplace-mono-uci",
+    "profiles": ["mono-development"]
+  }
 }

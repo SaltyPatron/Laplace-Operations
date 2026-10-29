@@ -264,6 +264,12 @@ On Windows, `laplace-ops sources desktop` reads that installed client's recipe c
 statistics, install diagnostic extensions or run a full benchmark after ingestion.
 Run `laplace bench` separately when measurements are wanted.
 
+When the declared desktop UCI service is installed, development configuration and
+UCI delivery bind its `mono-development` profile to the API's local SSPI substrate.
+UCI delivery incrementally builds and publishes the separate connector, then checks
+a real search through its authenticated HTTPS endpoint. Web-only delivery leaves it
+alone. One-time UCI setup owns its service, certificate and operator ACLs.
+
 The shared/modular root steps are `sudo ./setup.sh`. Its explicit compatibility part `site` runs the monorepo's `deploy/linux/site-host.sh` (the API and SPA
 over `laplace-mono` behind nginx). Its part `agents` runs `agents.sh`, which gives every repository of `LAPLACE_REPOS` its
 runner. `agents.sh status` fails when any repository of the owner with a self-hosted workflow has no runner here, or is

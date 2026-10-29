@@ -73,3 +73,6 @@ foreach($pair in @(@('pg_hba.conf','pg_hba.development.conf',$rules),@('pg_ident
 if((Query 'SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL') -ne '0' -or (Query 'SELECT count(*) FROM pg_ident_file_mappings WHERE error IS NOT NULL') -ne '0'){throw 'PostgreSQL rejected a Windows development authentication rule.'}
 $null=Query 'SELECT pg_reload_conf()'
 'Configured distinct Windows-authenticated development roles for '+$c.substrate_database+' and '+$c.application_database+'.'
+if($c.uci -and $env:LAPLACE_IIS_INSTALLATION -and (Test-Path -LiteralPath $env:LAPLACE_IIS_INSTALLATION)){
+    & "$PSScriptRoot/../installation/desktop-uci.ps1" -Development $Installation -IisInstallation $env:LAPLACE_IIS_INSTALLATION
+}

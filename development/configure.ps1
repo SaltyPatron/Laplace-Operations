@@ -2,6 +2,7 @@
 [CmdletBinding()]
 param([string]$Installation = $(if ($env:LAPLACE_DEVELOPMENT_INSTALLATION) { $env:LAPLACE_DEVELOPMENT_INSTALLATION } else { "$PSScriptRoot/installation.json" }))
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot/../laplace.env.ps1"
 . "$PSScriptRoot/../secrets/process.ps1"
 . "$PSScriptRoot/credentials.ps1"
 $config = Read-DevelopmentConfig $Installation

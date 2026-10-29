@@ -15,6 +15,7 @@ function Read-DevelopmentConfig([string]$Installation) {
         $c.admin_role = $env:USERNAME
         $c.root_certificate = (Join-Path $env:LOCALAPPDATA "Laplace/pgadmin/$hostLower-postgresql.crt") -replace '\\', '/'
         $c.windows_identities = @("$env:COMPUTERNAME\$env:USERNAME", "IIS APPPOOL\laplace-mono")
+        if($c.uci){$c.windows_identities+=('IIS APPPOOL\'+$c.uci.service)}
     }
     $c
 }

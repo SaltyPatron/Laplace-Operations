@@ -54,6 +54,37 @@ try {
     $refused=$false
     try { $null=Get-DesktopClientDeclaration $declarationPath } catch { $refused=$true }
     if (-not $refused) { throw 'A foreign host declaration was accepted.' }
+    . "$PSScriptRoot/../installation/desktop-uci.ps1"
+    function New-LaplaceWindowsDatabaseConnection($Database){'Host=test-host;Database=substrate;Username=runtime;SSL Mode=VerifyFull;Require Auth=SSPI'}
+    function Write-IisAtomic([string]$Path,[string]$Value){[IO.File]::WriteAllText($Path,$Value)}
+    $data=Join-Path $temporary 'state'
+    $uciRoot=Join-Path $data 'services/test-uci'
+    $app=Join-Path $data 'services/test-api'
+    $revision='a'*64
+    $releaseRoot=Join-Path $app 'web/releases'
+    $selection=Join-Path $app 'web/active.json'
+    foreach($directory in @((Join-Path $uciRoot 'agent'),(Join-Path $uciRoot 'releases/connector'),(Join-Path $releaseRoot "$revision/uci"))){$null=New-Item -ItemType Directory -Force -Path $directory}
+    Set-Content -LiteralPath (Join-Path $releaseRoot "$revision/uci/laplace-uci.exe") -Value ''
+    @{revision=$revision}|ConvertTo-Json|Set-Content -LiteralPath $selection
+    $certificate=Join-Path $temporary 'trust.crt';Set-Content -LiteralPath $certificate -Value 'declared desktop trust'
+    $devConfig=[pscustomobject]@{client='test-host';database_host='test-host';port=5432;substrate_database='substrate';substrate_role='runtime'
+        root_certificate=$certificate;windows_identities=@('IIS APPPOOL\test-uci');uci=@{service='test-uci';profiles=@('local')}}
+    $iis=[pscustomobject]@{directory=$app;database=@{host='test-host';port=5432;authentication='sspi';substrate_database='substrate';substrate_role='runtime';pool_max=4}}
+    $installedUci=Join-Path $uciRoot 'agent/installation.json'
+    @{host='test-host';site='test-uci';directory=$uciRoot;revision='connector';engine='old';engine_directory='old';publish='old';database_certificate='old'
+      connector=@{profiles=@{local=@{transport='process';implementation='laplace-mono';knowledge='old-server/substrate'
+        release=@{directory=$releaseRoot;selectionFile=$selection;executable='uci/laplace-uci.exe'}};remote=@{transport='websocket';knowledge='external'}}}}|
+        ConvertTo-Json -Depth 12|Set-Content -LiteralPath $installedUci
+    $result=Set-DesktopUciDatabase $devConfig $iis $data
+    if($result.status -ne 'configured' -or $result.changed.Count -ne 3){throw ('Desktop UCI binding did not write its three installed files: '+($result|ConvertTo-Json -Depth 5 -Compress))}
+    $configured=Get-Content -LiteralPath $installedUci -Raw|ConvertFrom-Json
+    if($configured.connector.profiles.local.knowledge -cne 'test-host/substrate' -or
+       $configured.connector.profiles.local.variables.LAPLACE_DB -notmatch '(?i)Require Auth=SSPI' -or
+       $configured.connector.profiles.remote.knowledge -cne 'external'){throw 'Desktop UCI binding changed the wrong profile or lost authentication.'}
+    if((Set-DesktopUciDatabase $devConfig $iis $data).changed.Count){throw 'Unchanged desktop UCI binding rewrote its files.'}
+    $iis.database.host='different-host';$refused=$false
+    try{$null=Set-DesktopUciDatabase $devConfig $iis $data}catch{$refused=$true}
+    if(-not $refused){throw 'A remote database silently replaced the declared local UCI binding.'}
     'Desktop clients: mixed releases, owner ancestry, PID reuse, retention, missing visibility and host isolation passed.'
 } finally {
     $env:COMPUTERNAME=$savedHost
