@@ -69,7 +69,8 @@ class Installation(unittest.TestCase):
         for key in ('source', 'build', 'state', 'prefix'):
             self.value[key] = str(self.directory / ('alternate ' + key))
         config = self.load()
-        environment = modular.runtime_environment(config, Path(config['prefix']) / 'current')
+        environment = modular.runtime_environment({'LAPLACE_ENGINE': config['prefix'] + '/current/bin/laplace',
+                                                   'LAPLACE_WORK': config['state']})
         self.assertIn(config['prefix'] + '/current/bin/laplace', environment)
         self.assertIn('LAPLACE_WORK="' + config['state'] + '"', environment)
         self.assertNotIn('/repos/build/Laplace-Engine', environment)
@@ -194,11 +195,14 @@ class Installation(unittest.TestCase):
 
         with patch.object(modular, 'UNITS', units), patch.object(modular, 'checked', side_effect=command), \
              patch.object(modular, 'release_controller', return_value=new / 'libexec/laplace-mcp-deployment.py'), \
+             patch.object(modular, 'package_api', return_value=SimpleNamespace(runtime_environment=Mock(return_value={'LAPLACE_WORK': config['state']}))) as controller, \
              patch.object(modular, 'legacy_command', side_effect=legacy_command), patch.object(modular, 'peer_check'), \
              patch.object(modular, 'unit_text', return_value='new unit'), \
              patch.object(modular.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
             with self.assertRaisesRegex(RuntimeError, 'injected'):
                 modular.activate(config, new, self.directory, True)
+        controller.assert_called_once_with(new / 'libexec/laplace-mcp-deployment.py')
+        controller.return_value.runtime_environment.assert_called_once_with(config, prefix / 'current')
         self.assertEqual(unit.read_text(), 'old unit')
         self.assertEqual(Path(config['environment_file']).read_text(), 'old configuration')
         self.assertEqual((prefix / 'current').resolve(), old)

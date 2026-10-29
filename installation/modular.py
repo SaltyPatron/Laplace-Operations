@@ -282,13 +282,9 @@ def ensure_listener_credential(config):
     raise ValueError('The listener credential was not converged: ' + str(token_file(config)))
 
 
-def runtime_environment(config, release):
-    values = {'LAPLACE_CONNINFO': config['connection'], 'LAPLACE_TIER0': config['tier0'],
-        'LAPLACE_FLAGS': config['flags'], 'LAPLACE_HIGHWAY': config['highway'], 'LAPLACE_GRAMMARS': config['grammars'],
-        'LAPLACE_UCD': config['ucd'], 'LAPLACE_WORK': config['state'], 'LAPLACE_ENGINE': str(release / 'bin/laplace'),
-        'LAPLACE_RECIPES': str(release / 'share/recipes'), 'LAPLACE_MCP_HOST': config['bind'],
-        'LAPLACE_MCP_PORT': str(config['http_port']), 'OMP_NUM_THREADS': str(config['threads']),
-        'MKL_NUM_THREADS': '1', 'LAPLACE_BATCH_MB': str(config['batch_mb'])}
+def runtime_environment(values):
+    # Resource selection belongs to the verified package controller. Operations
+    # only renders those values for systemd.
     # EnvironmentFile does not expand shell/systemd specifiers in values.
     return ''.join(k + '=' + '"' + v.replace('\\', '\\\\').replace('"', '\\"') + '"\n' for k, v in values.items())
 
@@ -508,7 +504,6 @@ def activate(config, release, receipt_path, install):
     program = release_controller(config, release)
     # The service environment points through current, so a release switch includes
     # Engine and recipes atomically and recurring deployment needs no root write.
-    environment = runtime_environment(config, current)
     unit = UNITS / UNIT
     files = [unit, Path(config['environment_file'])]
     prior = {p: p.read_text() if p.exists() else None for p in files}
@@ -524,6 +519,7 @@ def activate(config, release, receipt_path, install):
                  '--config', config['installed_config'], '--release', release, '--output', Path(config['state']) / 'candidate.json'])
     try:
         if install:
+            environment = runtime_environment(package_api(program).runtime_environment(config, current))
             atomic(unit, unit_text(config))
             atomic(config['environment_file'], environment)
             if not current.exists():
