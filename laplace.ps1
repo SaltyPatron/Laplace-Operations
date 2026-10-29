@@ -316,8 +316,8 @@ if ($Operation -in @('ingest','seed','sources','data')) {
             'ingest'  { & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1" @Names; exit $LASTEXITCODE }
             'seed'    { & pwsh -NoProfile -File "$PSScriptRoot/deploy.ps1" drop; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
                         & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1"; exit $LASTEXITCODE }
-            'sources' { $laplace = Join-Path $env:LAPLACE_BUILD 'Laplace-Engine\icx-release\laplace.exe'
-                        if (-not (Test-Path $laplace)) { throw "no laplace program at $laplace`: deploy.ps1 builds it" }
+            'sources' { $laplace = Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd'
+                        if (-not (Test-Path -LiteralPath $laplace -PathType Leaf)) { throw 'The modular client is not installed. Run setup.ps1 client for this host.' }
                         $raw = & $laplace ingest --catalog
                         if ($LASTEXITCODE) { exit $LASTEXITCODE }
                         if ($Json) { $raw; exit 0 }

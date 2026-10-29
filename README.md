@@ -258,6 +258,12 @@ These are hart-server's declared paths and existing human database identity, not
 installed client; do not copy it onto PATH. Prepared tier/grammar inputs still use the installation's declared
 paths. `laplace-mono` is the separate monorepo client; `laplace-refactor` is not installed by this operation.
 
+On Windows, `laplace-ops sources desktop` reads that installed client's recipe catalog.
+`laplace-ops ingest desktop <sources...>` and `ingest.ps1` forward to the same installed
+`laplace ingest` operation. They do not use a build-tree executable, reset statement
+statistics, install diagnostic extensions or run a full benchmark after ingestion.
+Run `laplace bench` separately when measurements are wanted.
+
 The shared/modular root steps are `sudo ./setup.sh`. Its explicit compatibility part `site` runs the monorepo's `deploy/linux/site-host.sh` (the API and SPA
 over `laplace-mono` behind nginx). Its part `agents` runs `agents.sh`, which gives every repository of `LAPLACE_REPOS` its
 runner. `agents.sh status` fails when any repository of the owner with a self-hosted workflow has no runner here, or is

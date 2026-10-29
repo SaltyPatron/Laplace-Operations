@@ -75,4 +75,32 @@ foreach ($arguments in @(
 }
 $listed=Dispatch @('test','-List')
 if ($listed.exit -ne 0 -or $listed.output -notmatch 'operation-targets' -or $listed.output -match 'DISPATCH:') { throw 'Registered tests are not discoverable through laplace-ops.' }
+if($IsWindows){
+    $temporary=Join-Path ([IO.Path]::GetTempPath()) ('laplace-operator-client-'+[guid]::NewGuid().ToString('N'))
+    $savedLocal=$env:LOCALAPPDATA
+    try{
+        $bin=Join-Path $temporary 'Laplace/bin'
+        $null=New-Item -ItemType Directory -Path $bin -Force
+        @'
+@echo off
+if "%~2"=="--catalog" (
+echo {"sources":[],"formats":[]}
+exit /b 0
+)
+echo INSTALLED-INGEST: "%~1" "%~2" "%~3"
+exit /b 23
+'@ | Set-Content -LiteralPath (Join-Path $bin 'laplace.cmd') -Encoding ascii
+        $env:LOCALAPPDATA=$temporary
+        $catalog=& pwsh -NoProfile -File $entry sources desktop -Json
+        if($LASTEXITCODE -or ($catalog|ConvertFrom-Json).sources.Count -ne 0){throw 'sources did not use the installed client catalog.'}
+        $output=@(& pwsh -NoProfile -File $entry ingest desktop 'one source' two 2>&1)
+        if($LASTEXITCODE -ne 23 -or ($output -join "`n") -notlike '*INSTALLED-INGEST: "ingest" "one source" "two"*'){
+            throw "Installed ingestion arguments or failure exit were changed: $($output -join ' ')"
+        }
+    }finally{
+        $env:LOCALAPPDATA=$savedLocal
+        if([IO.Path]::GetDirectoryName($temporary) -ne [IO.Path]::GetTempPath().TrimEnd('\','/')){throw 'Invalid operator fixture cleanup root.'}
+        Remove-Item -LiteralPath $temporary -Recurse -Force
+    }
+}
 'Operation targets: dispatch preserves staging/production; invalid local/remote combinations refused.'
