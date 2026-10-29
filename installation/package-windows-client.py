@@ -94,6 +94,36 @@ def build_run(argv):
     subprocess.run(list(map(str, argv)), check=True)
 
 
+def runtime_binaries(config):
+    if config.get('mcp'):
+        root = Path(config['mcp_build'])
+        return {'bin/laplace.exe': root / 'engine/laplace.exe',
+                **{'bin/' + name: root / name for name in ('lpm.exe', 'lpm.dll')}}
+    return {'bin/laplace.exe': Path(config['build']) / 'laplace.exe'}
+
+
+def prepare_runtime(config, force=False):
+    clean = ['--clean-first'] if force else []
+    if config.get('mcp'):
+        root = Path(config['mcp_build'])
+        options = ['-UCMAKE_RUNTIME_OUTPUT_DIRECTORY', '-DLAPLACE_BUNDLE_ENGINE=ON',
+                   '-DLAPLACE_INSTALL_RECIPE_RESOURCES=OFF',
+                   '-DLAPLACE_ENGINE_SRC=' + (Path(config['engine']) / 'src').as_posix(),
+                   '-DLAPLACE_NATIVE=' + Path(config['native']).as_posix()]
+        if not (root / 'CMakeCache.txt').is_file():
+            toolchain = Path(__file__).resolve().parent.parent / 'toolchain/laplace.cmake'
+            options += ['-G', 'Ninja', '-DCMAKE_TOOLCHAIN_FILE=' + str(toolchain), '-DCMAKE_BUILD_TYPE=RelWithDebInfo']
+        build_run(['cmake', '-S', config['mcp'], '-B', root, *options])
+        build_run(['cmake', '--build', root, *clean, '--target', 'laplace_engine', 'lpm_program', 'lpm_lib'])
+    else:
+        cache = (Path(config['build']) / 'CMakeCache.txt').read_text()
+        for variable, key in (('CMAKE_HOME_DIRECTORY', 'engine'), ('LAPLACE_NATIVE', 'native')):
+            selected = re.search(r'^' + variable + r':[^=]+=(.+)$', cache, re.M)
+            if not selected or Path(selected.group(1).strip()).resolve() != Path(config[key]).resolve():
+                raise ValueError('Configured build does not use the declared source: ' + variable)
+        build_run(['cmake', '--build', config['build'], *clean, '--target', 'laplace_engine'])
+
+
 def digest(path):
     value = hashlib.sha256()
     with path.open('rb') as stream:
@@ -122,9 +152,7 @@ def reusable_release(config, revisions):
                 or package.get('recipe_sources') != 'runtime-v1'
                 or hashlib.sha256(json.dumps(package, sort_keys=True).encode()).hexdigest() != release.name):
             return None
-        inputs = {'bin/laplace.exe': Path(config['build']) / 'laplace.exe'}
-        if config.get('mcp'):
-            inputs.update({f'bin/{name}': Path(config['mcp_build']) / name for name in ('lpm.exe', 'lpm.dll')})
+        inputs = runtime_binaries(config)
         for root, target in ((Path(config['engine']) / 'recipes', 'share/recipes'),
                              (Path(config['engine']) / 'firmware', 'share/firmware'),
                              (Path(config['native']) / 'manifest', 'share/manifest')):
@@ -223,29 +251,13 @@ def main():
                 revisions[name] = head + '-dirty-' + hashlib.sha256(diff_bytes).hexdigest()[:12]
             else:
                 revisions[name] = head
-        cache = (Path(config['build']) / 'CMakeCache.txt').read_text()
-        for variable, key in (('CMAKE_HOME_DIRECTORY', 'engine'), ('LAPLACE_NATIVE', 'native')):
-            selected = re.search(r'^' + variable + r':[^=]+=(.+)$', cache, re.M)
-            if not selected or Path(selected.group(1).strip()).resolve() != Path(config[key]).resolve():
-                raise ValueError('Configured build does not use the declared source: ' + variable)
-        clean = ['--clean-first'] if args.force else []
-        build_run(['cmake', '--build', config['build'], *clean, '--target', 'laplace_engine'])
-        if has_mcp:
-            mcp_build = Path(config['mcp_build'])
-            cache_file = mcp_build / 'CMakeCache.txt'
-            if cache_file.is_file() and 'CMAKE_RUNTIME_OUTPUT_DIRECTORY' in cache_file.read_text():
-                build_run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-UCMAKE_RUNTIME_OUTPUT_DIRECTORY'])
-            if not cache_file.is_file():
-                toolchain = Path(__file__).resolve().parent.parent / 'toolchain/laplace.cmake'
-                build_run(['cmake', '-S', config['mcp'], '-B', str(mcp_build), '-G', 'Ninja',
-                     f'-DCMAKE_TOOLCHAIN_FILE={toolchain}', '-DCMAKE_BUILD_TYPE=RelWithDebInfo'])
-            build_run(['cmake', '--build', str(mcp_build), *clean, '--target', 'lpm_program', 'lpm_lib'])
+        prepare_runtime(config, args.force)
         grammar_source = Path(config['grammars'])
         definitions = Path(config['engine']) / 'recipes/formats/grammars'
         if definitions.is_dir():
             builder = Path(__file__).resolve().parent / 'build-grammars.ps1'
             build_run(['pwsh', '-NoProfile', '-File', str(builder), '-Source', str(definitions),
-                       '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['build']) / 'grammars'),
+                       '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['mcp_build'] if has_mcp else config['build']) / 'grammars'),
                        *(['-Force'] if args.force else [])])
         reusable = reusable_release(config, revisions) if not args.force else None
         if reusable is not None:
@@ -261,10 +273,8 @@ def main():
             raise ValueError('Package staging is outside the declared release directory')
         STAGING.append((candidate, releases))
         (candidate / 'bin').mkdir()
-        stage_file(Path(config['build']) / 'laplace.exe', candidate / 'bin/laplace.exe')
-        if has_mcp:
-            stage_file(Path(config['mcp_build']) / 'lpm.exe', candidate / 'bin/lpm.exe')
-            stage_file(Path(config['mcp_build']) / 'lpm.dll', candidate / 'bin/lpm.dll')
+        for relative, source in runtime_binaries(config).items():
+            stage_file(source, candidate / relative)
         recipe_root = Path(config['engine']) / 'recipes'
         shutil.copytree(recipe_root, candidate / 'share/recipes', copy_function=stage_file,
                         ignore=lambda directory, names: ['grammars'] if Path(directory) == recipe_root / 'formats' else [])

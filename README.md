@@ -44,6 +44,10 @@ native dependencies, recipes, firmware and artifacts into an immutable release u
 the declared prefix, then verifies native composition and the selected database before
 publishing the human command. No PostgreSQL instance is created. The command works from
 any directory and reads its installed client profile; it does not need a developer shell.
+When MCP is selected, Engine and MCP build in the declared MCP profile with one
+Native dependency graph. The package selects that graph's Engine executable;
+the standalone Engine tree is not rebuilt. Without MCP, the declared standalone
+Engine profile remains the build owner.
 On HART-DESKTOP, the profile is `E:/Data/Laplace/clients/laplace/client.json` and the command
 is in the existing `%LOCALAPPDATA%/Laplace/bin` directory beside `laplace-mono`.
 
