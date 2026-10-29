@@ -9,6 +9,10 @@ These operational criteria do not replace Laplace's product specification.
 `desktop-installed-runtime` check verify the serving IIS release without a build
 or a second application process. `desktop-runtime` and `desktop-lifecycle`
 separately exercise the source-run localhost application and require its build.
+API status and verification return their own result without appending client
+inventory to JSON output. An older external MCP session does not change the API
+check's result; `laplace-ops clients verify` reports its distinct nonzero result
+when a reconnect or visibility repair is needed.
 
 List the checks with `laplace-ops test -List`. Run selected checks with
 `laplace-ops test -Check <id,...>`. This reuses the registry runner and records

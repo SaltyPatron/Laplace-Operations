@@ -401,15 +401,6 @@ if ($Operation -in 'start','stop','logs' -or ($Operation -in 'status','verify' -
     & pwsh @localArgs
     $code=$LASTEXITCODE
     if ($code -ne 0) { exit $code }
-    if ($Operation -in @('status','verify')) {
-        . "$PSScriptRoot/installation/desktop-clients.ps1"
-        $state=Get-DesktopClientState -Declaration (Get-DesktopClientDeclaration $Installation)
-        Write-DesktopClientState $state
-        if ($Operation -eq 'verify') {
-            if ($state.status -eq 'unverifiable') { exit 1 }
-            if ($state.status -eq 'reconnect_required') { exit 2 }
-        }
-    }
     exit 0
 }
 if ($Operation -eq 'enroll-development') {
