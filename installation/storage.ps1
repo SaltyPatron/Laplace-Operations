@@ -52,7 +52,7 @@ function Get-StorageScratch([string]$Root,[string]$Pattern,[string]$Kind,[string
     }
 }
 
-function Enter-DesktopStorageOperation([string]$WorkRoot=$env:LAPLACE_WORK) {
+function Enter-DesktopStorageOperation([string]$WorkRoot=$env:LAPLACE_WORK,[switch]$IfIdle) {
     $previous=$env:LAPLACE_STORAGE_OWNER_PID
     $previousRoot=$env:LAPLACE_STORAGE_WORK_ROOT
     $fullRoot=[IO.Path]::GetFullPath($WorkRoot)
@@ -60,7 +60,10 @@ function Enter-DesktopStorageOperation([string]$WorkRoot=$env:LAPLACE_WORK) {
     $directory=Join-Path $WorkRoot 'operations'
     $null=New-Item -ItemType Directory -Path $directory -Force
     try { $lock=[IO.File]::Open((Join-Path $directory '.storage-operation.lock'),'OpenOrCreate','ReadWrite','None') }
-    catch [IO.IOException] { throw 'Another Laplace build/install/publication owns storage. Run laplace-ops clean after it finishes; no rebuild is needed.' }
+    catch [IO.IOException] {
+        if($IfIdle){Write-Warning 'History cleanup deferred while another Laplace operation owns storage.';return $false}
+        throw 'Another Laplace build/install/publication owns storage. Run laplace-ops clean after it finishes; no rebuild is needed.'
+    }
     $env:LAPLACE_STORAGE_OWNER_PID=[string]$PID
     $env:LAPLACE_STORAGE_WORK_ROOT=$fullRoot
     return @{lock=$lock;previous=$previous;previous_root=$previousRoot}
@@ -163,6 +166,151 @@ function Test-StorageReference([string]$Path, [string[]]$References, [object[]]$
             $command.IndexOf($prefix.Replace('\','/'),[StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
     }
     return $false
+}
+
+function Test-StorageLeaseOwner($Lease,[object[]]$Processes) {
+    $owners=@(@($Lease.owner_pid,$Lease.child_pid)|Where-Object {$_ -gt 0}|Select-Object -Unique)
+    do {
+        $children=@($Processes|Where-Object {$_.pid -gt 0 -and $_.parent_pid -in $owners -and $_.pid -notin $owners}|ForEach-Object pid)
+        $owners+=$children
+    } while($children.Count)
+    return @($Processes|Where-Object {$_.pid -in $owners}).Count -gt 0
+}
+
+function Get-StorageReceiptReferences($Value) {
+    if ($null -eq $Value -or $Value -is [string] -or $Value -is [ValueType]) { return }
+    if ($Value -is [Collections.IDictionary]) { $members=@($Value.Keys | ForEach-Object { @{Name=$_;Value=$Value[$_]} }) }
+    elseif ($Value -is [Collections.IEnumerable]) { foreach($item in $Value){Get-StorageReceiptReferences $item};return }
+    else { $members=@($Value.PSObject.Properties) }
+    foreach($member in $members) {
+        if ($member.Name -in @('receipt','run_directory') -and $member.Value -is [string] -and
+            [IO.Path]::IsPathFullyQualified($member.Value)) { $member.Value }
+        else { Get-StorageReceiptReferences $member.Value }
+    }
+}
+
+function Get-StorageOperationHistory {
+    param([string]$Root,[object[]]$Processes,[string[]]$References,
+          [ValidateRange(1,20)][int]$Successes=3,[ValidateRange(1,20)][int]$Failures=1)
+    if(-not (Test-Path -LiteralPath $Root -PathType Container)){return @()}
+    $entries=@();$records=@{}
+    foreach($item in Get-ChildItem -LiteralPath $Root -Force) {
+        if($item.PSIsContainer -and $item.Name -match '^(desktop-deploy|iis-database|test|components)-\d{8}T\d{6,13}Z$') {
+            $family=$Matches[1];$marker=if($family -eq 'components'){'components.json'}else{'receipt.json'}
+            $receipt=Join-Path $item.FullName $marker
+        } elseif($item.PSIsContainer -and $item.Name -match '^(desktop-run|desktop-verification)-\d{8}-\d{6}(?:-[a-f0-9]{8})?$') {
+            $family=$Matches[1];$marker='receipt.json';$receipt=Join-Path $item.FullName $marker
+        } elseif(-not $item.PSIsContainer -and $item.Name -match '^storage-\d{8}T\d{6,13}Z\.json$') {
+            $family='storage';$marker=$null;$receipt=$item.FullName
+        } elseif(-not $item.PSIsContainer -and $item.Name -match '^development-\d{8}-\d{6}\.json$') {
+            $family='development';$marker=$null;$receipt=$item.FullName
+        } else {continue}
+        if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+            ((Test-Path -LiteralPath $receipt) -and ((Get-Item -LiteralPath $receipt).Attributes -band [IO.FileAttributes]::ReparsePoint))){continue}
+        # Only the existing owners' completed receipts establish ownership.
+        # Missing, malformed and unfinished output is not adopted by its name.
+        try {$record=Read-StorageJson $receipt}catch{continue}
+        if(-not $record){continue}
+        $group=$null;$finished=$record.finished_utc;$status=$record.status
+        switch($family) {
+            'desktop-deploy' {
+                if(-not $record.operation -or -not $record.target){continue}
+                $group='deploy|'+$record.target
+            }
+            'iis-database' {
+                if(-not $record.host -or -not $record.database -or -not $record.operation -or $record.completed -isnot [bool]){continue}
+                $group='database|'+$record.host+'|'+$record.database+'|'+$record.operation
+                $status=if($record.completed){'passed'}else{'failed'}
+            }
+            'test' {
+                if($record.schema_version -ne 1 -or -not $record.checks){continue}
+                $finished=$record.completed_utc;$status=$record.selected_checks_verdict
+                $group='test|desktop'
+            }
+            'components' {
+                if($record.schema -ne 'laplace.windows-components/v1' -or $record.plan -ne $false -or -not $record.components){continue}
+                $group='components|desktop'
+                $status='passed';$finished=(Get-Item -LiteralPath $receipt).LastWriteTimeUtc.ToString('o')
+            }
+            'storage' {$group='storage'}
+            'development' {
+                if(-not $record.source -or -not $record.build_root -or $record.operation -notin @('build','test')){continue}
+                $group='development|desktop|'+$record.operation
+            }
+            'desktop-run' {
+                if(-not $record.source -or -not $record.base_url -or -not $record.build_root){continue}
+                $group='desktop-run|'+$record.base_url
+                if($status -in @('verified','stopped')){$status='passed'}
+            }
+            'desktop-verification' {
+                if(-not $record.source -or -not $record.url -or -not $record.run_directory){continue}
+                $group='desktop-verification|'+$record.url
+                if($status -eq 'verified'){$status='passed'}
+            }
+        }
+        if(-not $group -or -not $finished -or $status -notin @('passed','failed','installed_pending_reconnect')){continue}
+        # PowerShell 7.5+ deserializes ISO timestamps into DateTime. Parsing
+        # their culture-formatted string would discard the offset a second time.
+        try {
+            $time=if($finished -is [DateTime]){$finished.ToUniversalTime()}
+                elseif($finished -is [DateTimeOffset]){$finished.UtcDateTime}
+                else{[DateTimeOffset]::Parse($finished).UtcDateTime}
+        }catch{continue}
+        $reasons=@()
+        if($item.Attributes -band [IO.FileAttributes]::ReparsePoint){$reasons+='reparse_point'}
+        if(Test-StorageReference $item.FullName $References $Processes){$reasons+='live_reference'}
+        if($item.PSIsContainer -and (Test-Path -LiteralPath (Join-Path $item.FullName '.retain'))){$reasons+='operator_retained'}
+        if($family -eq 'test') {
+            foreach($scratch in Get-ChildItem -LiteralPath $item.FullName -Directory -Filter '*-scratch') {
+                if($scratch.Attributes -band [IO.FileAttributes]::ReparsePoint){$reasons+='reparse_point';continue}
+                try {$lease=Read-StorageJson (Join-Path $scratch.FullName '.laplace-scratch.json')}catch{continue}
+                if($lease.schema -eq 'laplace.acceptance-scratch/v1' -and $lease.owner_pid -gt 0 -and
+                    [IO.Path]::IsPathFullyQualified([string]$lease.receipt) -and
+                    [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($lease.receipt)) -ieq $item.FullName -and
+                    $scratch.Name -ceq ($lease.check+'-scratch') -and (Test-StorageLeaseOwner $lease $Processes)) {
+                    $reasons+='live_owner';break
+                }
+            }
+        }
+        if(([DateTime]::UtcNow-$time).TotalMinutes -lt 5){$reasons+='recent_run'}
+        $entry=[pscustomobject]@{path=$item.FullName;root=[IO.Path]::GetFullPath($Root);kind='operation_history';
+            marker=$marker;revision=$null;modified_utc=$time.ToString('o');reasons=$reasons;retire=$false;
+            history_group=$group;history_status=$status;receipt_path=$receipt;receipt_sha256=(Get-FileHash -LiteralPath $receipt -Algorithm SHA256).Hash}
+        $entries+=$entry;$records[$item.FullName]=$record
+    }
+    foreach($group in $entries|Group-Object history_group) {
+        $success=0;$failure=0
+        foreach($entry in $group.Group|Sort-Object modified_utc -Descending) {
+            if($entry.reasons.Count){continue}
+            # A cleanup writes the next storage receipt after retirement.
+            $keep=if($entry.history_group -eq 'storage'){[Math]::Max(1,$Successes-1)}else{$Successes}
+            if($entry.history_status -eq 'failed') {
+                if($failure++ -lt $Failures){$entry.reasons+='recent_failure'}else{$entry.retire=$true}
+            } elseif($success++ -lt $keep){$entry.reasons+='recent_success'}else{$entry.retire=$true}
+        }
+    }
+    foreach($entry in $entries|Where-Object retire) {
+        if(Test-Path -LiteralPath $entry.path -PathType Container) {
+            $tree=@(Get-ChildItem -LiteralPath $entry.path -Recurse -Force -ErrorAction Stop)
+            if(@($tree|Where-Object {$_.Attributes -band [IO.FileAttributes]::ReparsePoint}).Count) {
+                $entry.retire=$false;$entry.reasons+='reparse_point'
+            }
+            if(@($tree|Where-Object Name -EQ '.git').Count) {
+                $entry.retire=$false;$entry.reasons+='source_checkout'
+            }
+        }
+    }
+    # Follow explicit receipt links from retained runs, not paths merely listed
+    # in old inventories. The latter would pin all historical output forever.
+    do {
+        $linked=@($References)
+        foreach($entry in $entries|Where-Object {-not $_.retire}) {$linked+=@(Get-StorageReceiptReferences $records[$entry.path])}
+        $changed=$false
+        foreach($entry in $entries|Where-Object retire) {
+            if(Test-StorageReference $entry.path $linked @()) {$entry.retire=$false;$entry.reasons+='retained_receipt_reference';$changed=$true}
+        }
+    } while($changed)
+    return $entries
 }
 
 function Get-StorageGroup([string]$Root, [string]$Marker, [string]$Kind, [int]$Keep,
@@ -284,22 +432,27 @@ function Get-DesktopStoragePlan {
                     $lease.owner_pid -le 0 -or -not [IO.Path]::IsPathFullyQualified([string]$lease.receipt) -or
                     [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($lease.receipt)) -ine $run.FullName -or
                     [IO.Path]::GetFileName($entry.path) -cne ($lease.check+'-scratch')) { continue }
-                $owners=@([int]$lease.owner_pid,[int]$lease.child_pid)
                 # A dead runner can leave a child finishing cleanup. Follow its
                 # descendants too, even when the parent PID has already exited.
-                do {
-                    $children=@($Processes | Where-Object { $_.parent_pid -in $owners -and $_.pid -notin $owners } | ForEach-Object pid)
-                    $owners+=$children
-                } while ($children.Count)
-                if (@($Processes | Where-Object { $_.pid -in $owners }).Count) { $entry.reasons+='live_owner';$entry.retire=$false }
+                if (Test-StorageLeaseOwner $lease $Processes) { $entry.reasons+='live_owner';$entry.retire=$false }
                 $entry.marker=$marker
                 $entries+=$entry
             }
         }
     }
+    $heldScratch=@($entries|Where-Object {$_.kind -eq 'acceptance_scratch' -and -not $_.retire}|ForEach-Object path)
+    $entries+=@(Get-StorageOperationHistory -Root $operations -Processes $Processes -References (@($protected)+$heldScratch))
+    $historyRoots=@($entries|Where-Object {$_.kind -eq 'operation_history' -and $_.retire}|ForEach-Object path)
+    foreach($entry in $entries|Where-Object {$_.retire -and $_.kind -ne 'operation_history'}) {
+        foreach($parent in $historyRoots) {
+            if($entry.path.StartsWith($parent+'\',[StringComparison]::OrdinalIgnoreCase)) {
+                $entry.retire=$false;$entry.reasons+='collected_with_run';break
+            }
+        }
+    }
     [ordered]@{schema='laplace.desktop-storage/v1';checked_utc=[DateTime]::UtcNow.ToString('o');
         build_root=[IO.Path]::GetFullPath($BuildRoot);work_root=[IO.Path]::GetFullPath($WorkRoot);
-        policy=@{rollback_releases=$Rollback;reusable_components=2;reusable_packages=2};entries=$entries;database_references=$DatabaseReferences;
+        policy=@{rollback_releases=$Rollback;reusable_components=2;reusable_packages=2;operation_successes=3;operation_failures=1};entries=$entries;database_references=$DatabaseReferences;
         source_and_build_policy='Keep source checkouts, registered worktree builds and declared incremental build profiles. Retire abandoned generated worktree builds and publisher scratch.'}
 }
 
@@ -392,6 +545,43 @@ function Invoke-StorageDatabaseCleanup {
     return @(($databaseOutput -join "`n") | ConvertFrom-Json)
 }
 
+function Remove-StorageEntry($Entry) {
+    Assert-StorageTree $Entry.path $Entry.root
+    if($Entry.kind -eq 'operation_history' -and (Test-Path -LiteralPath $Entry.path -PathType Container)) {
+        if((Test-Path -LiteralPath (Join-Path $Entry.path '.retain')) -or
+            @(Get-ChildItem -LiteralPath $Entry.path -Recurse -Force -Filter '.git').Count) {
+            throw "Operation became protected during retention: $($Entry.path)"
+        }
+    }
+    if($Entry.marker -and -not (Read-StorageJson (Join-Path $Entry.path $Entry.marker))){throw "Retirement marker changed: $($Entry.path)"}
+    if($Entry.receipt_sha256 -and (Get-FileHash -LiteralPath $Entry.receipt_path -Algorithm SHA256).Hash -ne $Entry.receipt_sha256) {
+        throw "Operation receipt changed during retention: $($Entry.path)"
+    }
+    Remove-Item -LiteralPath $Entry.path -Recurse -Force -ErrorAction Stop
+}
+
+function Invoke-OperationHistoryCleanup {
+    param([string]$WorkRoot=$env:LAPLACE_WORK,[object[]]$Processes)
+    $operation=Enter-DesktopStorageOperation $WorkRoot -IfIdle
+    if($operation -is [bool] -and -not $operation){return}
+    $plan=@{schema='laplace.operation-history/v1';status='failed';entries=@();removed=@()}
+    try {
+        $root=Join-Path $WorkRoot 'operations'
+        if(-not $PSBoundParameters.ContainsKey('Processes')){$Processes=@(Get-StorageProcesses)}
+        $plan.entries=@(Get-StorageOperationHistory -Root $root -Processes $Processes -References @())
+        foreach($entry in $plan.entries|Where-Object retire){Remove-StorageEntry $entry;$plan.removed+=$entry.path}
+        $plan.status='passed'
+    } catch {$plan.error=$_.Exception.Message;throw}
+    finally {
+        try {if($plan.removed.Count -or $plan.error) {
+            $receipt=Join-Path $root ('storage-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')+'.json')
+            $plan.finished_utc=[DateTime]::UtcNow.ToString('o');$plan.receipt=$receipt
+            $plan|ConvertTo-Json -Depth 9|Set-Content -LiteralPath $receipt
+            Write-Host "History cleanup: $($plan.removed.Count) superseded runs removed. Receipt: $receipt"
+        }} finally {Close-DesktopStorageOperation $operation}
+    }
+}
+
 function Invoke-DesktopStorageCleanup {
     param([Parameter(Mandatory)][string]$WorkRoot,[Parameter(Mandatory)][string]$BuildRoot,
           [Parameter(Mandatory)]$Modular,[Parameter(Mandatory)]$Iis,
@@ -421,9 +611,7 @@ function Invoke-DesktopStorageCleanup {
         $plan = Get-DesktopStoragePlan -WorkRoot $WorkRoot -BuildRoot $BuildRoot -Modular $Modular -Iis $Iis -Processes $processes -Rollback $Rollback -DatabaseReferences $references -BuildReferences $buildReferences
         $plan.database_cleanup=@(Invoke-StorageDatabaseCleanup)
         foreach ($entry in $plan.entries | Where-Object retire) {
-            Assert-StorageTree $entry.path $entry.root
-            if ($entry.marker -and -not (Read-StorageJson (Join-Path $entry.path $entry.marker))) { throw "Retirement marker changed: $($entry.path)" }
-            Remove-Item -LiteralPath $entry.path -Recurse -Force -ErrorAction Stop
+            Remove-StorageEntry $entry
             $removed += $entry.path
         }
         # Shared files survive while any retained release or component links

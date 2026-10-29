@@ -134,4 +134,6 @@ try {
     if ($receipt.status -eq 'running') { $receipt.status = 'stopped' }
     $receipt.finished_utc = [DateTime]::UtcNow.ToString('o')
     $receipt | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$work/receipt.json"
+    . "$PSScriptRoot/../installation/storage.ps1"
+    try{Invoke-OperationHistoryCleanup}catch{if($receipt.status -ne 'failed'){throw};Write-Warning "History cleanup failed: $_"}
 }

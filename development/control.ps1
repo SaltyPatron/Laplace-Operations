@@ -37,6 +37,7 @@ function ActiveRun {
 $lockName='Local\LaplaceDevelopment-' + [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes("$operations|$port")))
 $mutex=[Threading.Mutex]::new($false,$lockName)
 $locked=$false
+$completed=$false
 try {
     try { $locked=$mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $locked=$true }
     if (-not $locked) { throw 'Another desktop lifecycle operation is in progress.' }
@@ -137,4 +138,11 @@ try {
         [ordered]@{status='running';url=$active.record.base_url;pid=$active.record.process_id;revision=$active.record.revision;
             source=$active.record.source;logs=$active.directory} | ConvertTo-Json
     } elseif ($Operation -eq 'status') { @{status='stopped';url="http://localhost:$port"} | ConvertTo-Json }
-} finally { if ($locked) { $mutex.ReleaseMutex() }; $mutex.Dispose() }
+    $completed=$true
+} finally {
+    if ($locked) { $mutex.ReleaseMutex() }; $mutex.Dispose()
+    if($Operation -in @('verify','stop')) {
+        . "$PSScriptRoot/../installation/storage.ps1"
+        try{Invoke-OperationHistoryCleanup}catch{if($completed){throw};Write-Warning "History cleanup failed: $_"}
+    }
+}

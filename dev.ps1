@@ -55,4 +55,6 @@ try {
     [void](New-Item -ItemType Directory -Path (Split-Path $receipt) -Force)
     $result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $receipt
     Write-Host "Development evidence: $receipt"
+    . "$PSScriptRoot/installation/storage.ps1"
+    try{Invoke-OperationHistoryCleanup}catch{if($result.status -eq 'passed'){throw};Write-Warning "History cleanup failed: $_"}
 }

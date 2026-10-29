@@ -12,6 +12,17 @@ function Fixture([string]$Path,[string]$Marker,[string]$Revision) {
     Set-Content -LiteralPath (Join-Path $Path 'test.dll') -Value 'fixture'
     return $Path
 }
+function HistoryFixture([string]$Family,[int]$Sequence,$Record) {
+    $time=[DateTime]::new(2020,1,1,0,0,0,[DateTimeKind]::Utc).AddMinutes($Sequence)
+    $stamp=if($Family -in @('desktop-run','desktop-verification')){$time.ToString('yyyyMMdd-HHmmss')+'-01234567'}else{$time.ToString('yyyyMMddTHHmmssfffffffZ')}
+    $path=Join-Path $work ('operations/'+$Family+'-'+$stamp)
+    $null=New-Item -ItemType Directory -Path $path -Force
+    if(-not $Record.Contains('finished_utc')){$Record.finished_utc=$time.ToString('o')}
+    $marker=if($Family -eq 'components'){'components.json'}else{'receipt.json'}
+    $Record|ConvertTo-Json -Depth 9|Set-Content -LiteralPath (Join-Path $path $marker)
+    (Get-Item -LiteralPath (Join-Path $path $marker)).LastWriteTimeUtc=$time
+    return $path
+}
 try {
     $work=Join-Path $root 'work';$build=Join-Path $root 'build';$prefix=Join-Path $root 'modular';$iisRoot=Join-Path $root 'iis'
     $store=Join-Path $work 'artifacts/windows-components';$modular=[pscustomobject]@{prefix=$prefix;artifacts=$store;installed_config=(Join-Path $root 'installed.json')}
@@ -86,7 +97,53 @@ try {
         @{schema='laplace.acceptance-scratch/v1';owner_pid=$case.owner;child_pid=$case.child;receipt=$testReceipt;check=$case.check}|ConvertTo-Json|Set-Content (Join-Path $scratch '.laplace-scratch.json')
     }
     Set-Content $testReceipt 'retained evidence'
-    $args.Processes+=@([pscustomobject]@{pid=77;parent_pid=424243;name='python.exe';executable='python.exe';command='';modules=@();module_error=$false})
+    $args.Processes+=@([pscustomobject]@{pid=77;parent_pid=424243;name='python.exe';executable='python.exe';command='';modules=@();module_error=$false},
+        [pscustomobject]@{pid=4;parent_pid=0;name='System';executable=$null;command='';modules=@();module_error=$false})
+    $dbHistory=@(1..12|ForEach-Object {HistoryFixture 'iis-database' $_ @{host='desktop';database='substrate';operation='status';completed=$true}})
+    $dbFailures=@(20..21|ForEach-Object {HistoryFixture 'iis-database' $_ @{host='desktop';database='substrate';operation='status';completed=$false}})
+    $otherTarget=HistoryFixture 'iis-database' 0 @{host='other-host';database='substrate';operation='status';completed=$true}
+    $args.Processes+=@([pscustomobject]@{pid=78;parent_pid=0;name='reader.exe';executable=(Join-Path $dbHistory[0] 'reader.exe');command='';modules=@();module_error=$false})
+    Set-Content -LiteralPath (Join-Path $dbHistory[1] '.retain') -Value 'operator retained'
+    $null=New-Item -ItemType Directory -Path (Join-Path $dbHistory[3] '.git')
+    $deployHistory=HistoryFixture 'desktop-deploy' 30 @{operation='deploy';target='desktop';status='passed';cleanup=@{receipt=(Join-Path $dbHistory[2] 'receipt.json')}}
+    $storageHistory=@(1..4|ForEach-Object {
+        $path=Join-Path $work ('operations/storage-20200101T000'+$_+'000000000Z.json')
+        @{status='passed';finished_utc=[DateTime]::new(2020,1,1).AddMinutes($_).ToString('o')}|ConvertTo-Json|Set-Content -LiteralPath $path
+        $path
+    })
+    $linked=Read-StorageJson (Join-Path $dbHistory[2] 'receipt.json')
+    $linked|Add-Member NoteProperty cleanup @{receipt=$storageHistory[0]}
+    $linked|ConvertTo-Json -Depth 5|Set-Content -LiteralPath (Join-Path $dbHistory[2] 'receipt.json')
+    $testHistory=@(31..35|ForEach-Object {HistoryFixture 'test' $_ @{schema_version=1;completed_utc=[DateTime]::new(2020,1,1).AddMinutes($_).ToString('o');selected_checks_verdict='passed';checks=@(@{check='fixture';status='passed'})}})
+    $scratch=Join-Path $testHistory[0] 'fixture-scratch'
+    $null=New-Item -ItemType Directory -Path $scratch
+    @{schema='laplace.acceptance-scratch/v1';owner_pid=21;child_pid=0;receipt=(Join-Path $testHistory[0] 'receipt.json');check='fixture'}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $scratch '.laplace-scratch.json')
+    $unfinished=HistoryFixture 'desktop-deploy' 36 @{operation='deploy';target='desktop';status='failed';finished_utc=$null}
+    $malformed=HistoryFixture 'desktop-deploy' 37 @{operation='deploy';target='desktop';status='passed'}
+    Set-Content -LiteralPath (Join-Path $malformed 'receipt.json') -Value 'unfinished JSON {'
+    $zoneHistory=@(41..44|ForEach-Object {HistoryFixture 'desktop-deploy' $_ @{operation='deploy';target='timezone-regression';status='passed';finished_utc=[DateTime]::UtcNow.AddHours(-1).AddSeconds($_).ToString('o')}})
+    $runHistory=@(50..54|ForEach-Object {HistoryFixture 'desktop-run' $_ @{source='E:/source';build_root=$build;base_url='http://localhost:5187';status='verified'}})
+    $verification=HistoryFixture 'desktop-verification' 55 @{source='E:/source';url='http://localhost:5187';status='verified';run_directory=$runHistory[0]}
+    $historyPlan=Get-DesktopStoragePlan @args
+    Require ($historyPlan.entries|Where-Object {$_.path -eq $zoneHistory[0] -and $_.retire}) 'UTC completion times were shifted into the future by JSON date conversion.'
+    Require (-not ($historyPlan.entries|Where-Object path -EQ $runHistory[0]).retire) 'Retained verification lost its original run.'
+    Require ($historyPlan.entries|Where-Object {$_.path -eq $runHistory[1] -and $_.retire}) 'Completed development run histories were unbounded.'
+    foreach($kept in @($dbHistory[0],$dbHistory[1],$dbHistory[2],$dbHistory[3],$dbHistory[9],$dbHistory[10],$dbHistory[11],$dbFailures[1],$otherTarget,$testHistory[0],$storageHistory[0])) {
+        Require (-not ($historyPlan.entries|Where-Object path -EQ $kept).retire) "Protected operation history was selected: $kept"
+    }
+    foreach($retired in @($dbHistory[4],$dbHistory[5],$dbHistory[6],$dbHistory[7],$dbHistory[8],$dbFailures[0],$testHistory[1],$storageHistory[1])) {
+        Require ($historyPlan.entries|Where-Object {$_.path -eq $retired -and $_.retire}) "Superseded operation history was not selected: $retired"
+    }
+    Require (-not ($historyPlan.entries|Where-Object {$_.path -in @($unfinished,$malformed)})) 'Incomplete receipts established deletion ownership.'
+    # Receipt edits between audit and collection invalidate the deletion decision.
+    $changed=$historyPlan.entries|Where-Object path -EQ $dbHistory[4]
+    Add-Content -LiteralPath $changed.receipt_path -Value ' '
+    $rejected=$false;try{Remove-StorageEntry $changed}catch{$rejected=$true}
+    Require ($rejected -and (Test-Path -LiteralPath $changed.path)) 'A changed receipt did not invalidate retirement.'
+    $pinned=$historyPlan.entries|Where-Object path -EQ $dbHistory[5]
+    Set-Content -LiteralPath (Join-Path $pinned.path '.retain') -Value 'new operator pin'
+    $rejected=$false;try{Remove-StorageEntry $pinned}catch{$rejected=$true}
+    Require ($rejected -and (Test-Path -LiteralPath $pinned.path)) 'An operator pin added after the audit did not invalidate retirement.'
     $scratchPlan=Get-DesktopStoragePlan @args
     Require ($scratchPlan.entries | Where-Object {$_.path -eq (Join-Path $testRun 'expired-scratch') -and $_.retire}) 'Expired owned test payload was not selected.'
     Require (-not ($scratchPlan.entries | Where-Object path -EQ (Join-Path $testRun 'running-scratch')).retire) 'Running test payload was selected.'
@@ -95,6 +152,12 @@ try {
     Require (Test-Path (Join-Path $testRun 'running-scratch')) 'Running test payload was deleted.'
     Require (Test-Path (Join-Path $testRun 'finishing-scratch')) 'A surviving child lost its payload after its runner exited.'
     Require (Test-Path $testReceipt) 'Cleanup deleted test evidence.'
+    foreach($retired in @($dbHistory[4],$dbFailures[0],$testHistory[1],$storageHistory[1])) {
+        Require (-not (Test-Path -LiteralPath $retired)) "Canonical cleanup left superseded history: $retired"
+    }
+    foreach($kept in @($dbHistory[0],$dbHistory[1],$dbHistory[2],$dbHistory[3],$dbHistory[9],$dbFailures[1],$otherTarget,$testHistory[0],$unfinished,$malformed,$storageHistory[0])) {
+        Require (Test-Path -LiteralPath $kept) "Canonical cleanup removed protected history: $kept"
+    }
     Require ($clean.status -eq 'passed') 'Cleanup did not pass.'
     Require (-not (Test-Path -LiteralPath $old)) 'Unused old release survived collection.'
     Require (-not (Test-Path -LiteralPath $legacy)) 'Incomplete legacy payload survived collection.'
@@ -107,6 +170,12 @@ try {
     Require ($receipt.status -eq 'passed' -and $receipt.removed -contains $old) 'Cleanup receipt is incomplete.'
     $again=Invoke-DesktopStorageCleanup @args
     Require ($again.removed.Count -eq 0) 'Repeated cleanup was not idempotent.'
+    # Normal test/database completion uses the same history owner without
+    # requiring installed releases or running the database collector.
+    $extra=HistoryFixture 'iis-database' 40 @{host='desktop';database='substrate';operation='status';completed=$true}
+    Invoke-OperationHistoryCleanup -WorkRoot $work -Processes $args.Processes
+    Require (-not (Test-Path -LiteralPath $dbHistory[9])) 'Normal operation exit did not bound completed history.'
+    Require (Test-Path -LiteralPath $extra) 'History cleanup removed the latest completed operation.'
     $failedOutput=Fixture (Join-Path $prefix ('releases/'+('8'*64))) 'package.json' ('8'*64)
     (Get-Item -LiteralPath $failedOutput).LastWriteTimeUtc=[DateTime]::UtcNow.AddDays(-5)
     $operation=Enter-DesktopStorageOperation $work
@@ -117,7 +186,7 @@ try {
     Require $originalFailure 'Automatic cleanup replaced the original publisher failure.'
     Require (-not (Test-Path -LiteralPath $failedOutput)) 'Failed operation did not collect in its finally block.'
     Require ($env:LAPLACE_STORAGE_OWNER_PID -eq $initialOwner) 'Operation ownership leaked after cleanup.'
-    'Storage: references, rollback, visibility, path bounds, locks, failed payloads, hardlinks, receipts, idempotence and nested/failing operation cleanup passed.'
+    'Storage: references, rollback, visibility, path bounds, locks, hardlinks, bounded success/failure histories, live owners, PID zero, linked receipts, changed receipts, idempotence and finally cleanup passed.'
 } finally {
     if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($root)) -ne [IO.Path]::GetTempPath().TrimEnd('\','/')) { throw 'Invalid fixture cleanup root.' }
     Remove-Item -LiteralPath $root -Recurse -Force

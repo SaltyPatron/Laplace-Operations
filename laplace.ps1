@@ -121,8 +121,8 @@ LOCAL DESKTOP ONE-TIME SETUP & MODULAR CLI
   laplace-ops components staging -Force  Clean-build native runtime, verify it, then retire old native releases
   laplace-ops clients [-Json]          Show installed/running modular releases, client owners and release retention
   laplace-ops clients verify [-Json]   The same; exit 2 if older clients need reconnecting, 1 if inventory is incomplete
-  laplace-ops storage [-Json]          Audit installed releases and reusable package/component retention
-  laplace-ops storage clean [-Json]    Retire unreferenced packaged outputs; preserve live selections and rollback
+  laplace-ops storage [-Json]          Audit releases, reusable packages/components and operation history
+  laplace-ops storage clean [-Json]    Retire unused outputs and superseded runs; preserve live selections and rollback
   laplace-ops clean [-Json]            Clean unused releases, packages, blobs and abandoned build/scratch output
 
 INGESTION AND DATA (Laplace-Engine: the laplace program, recipes/order, the data sets of data.tsv)
@@ -229,7 +229,12 @@ if ($Check -or $List) {
         $arguments+=@('-Check',$Check,'-Output',(Join-Path $run 'receipt.json'))
     }
     & pwsh @arguments
-    exit $LASTEXITCODE
+    $result=$LASTEXITCODE
+    if(-not $List){
+        . "$PSScriptRoot/installation/storage.ps1"
+        try{Invoke-OperationHistoryCleanup}catch{Write-Warning "History cleanup failed: $_";if(-not $result){$result=1}}
+    }
+    exit $result
 }
 if ($Operation -eq 'db') {
     if ($Target -eq 'desktop') {
@@ -240,13 +245,20 @@ if ($Operation -eq 'db') {
         $scopes = if ($Database -eq 'both') { @('application','substrate') } else { @($Database) }
         if (Test-Path -LiteralPath $iisConfig) {
             $invokeDb = Join-Path $source 'deploy/windows/Invoke-IisDatabase.ps1'
-            foreach ($scope in $scopes) {
-                $dbArgs = @('-NoProfile','-File',$invokeDb,'-Installation',$iisConfig,'-Database',$scope,'-Operation',$DatabaseOperation)
-                if ($Yes) { $dbArgs += '-Yes' }
-                & pwsh @dbArgs
-                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $result=0
+            try {
+                foreach ($scope in $scopes) {
+                    $dbArgs = @('-NoProfile','-File',$invokeDb,'-Installation',$iisConfig,'-Database',$scope,'-Operation',$DatabaseOperation)
+                    if ($Yes) { $dbArgs += '-Yes' }
+                    & pwsh @dbArgs
+                    $result=$LASTEXITCODE
+                    if ($result) { break }
+                }
+            } finally {
+                . "$PSScriptRoot/installation/storage.ps1"
+                try{Invoke-OperationHistoryCleanup}catch{Write-Warning "History cleanup failed: $_";if(-not $result){$result=1}}
             }
-            exit 0
+            exit $result
         }
         . (Join-Path $source 'scripts/win/laplace-paths.ps1')
         Import-LaplaceEnv

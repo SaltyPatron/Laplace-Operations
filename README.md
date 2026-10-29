@@ -367,11 +367,23 @@ They do not define a historical package repository.
 
 `clean` also removes obsolete generated worktree builds and abandoned publisher scratch.
 Declared incremental profiles and builds belonging to registered Git worktrees are kept;
-source checkouts, canonical database content, corpora, perf-caches, indexes and diagnostic receipts
+source checkouts, canonical database content, corpora, perf-caches and indexes
 are outside its deletion policy. Paths with junctions are rejected. Incomplete process
 visibility keeps affected releases. Concurrent publishers prevent collection. Receipts
 under `$LAPLACE_WORK/operations/storage-*.json` list removed paths and drive free space
 before and after; logical hardlink lengths are never reported as reclaimed disk space.
+
+Completed desktop deployment, component, development build/run/verification, database and named-test histories are bounded:
+three successful runs and one failed run per operation and target (database operations
+are grouped by host, database and command). Storage receipts rotate through the same
+collector. Active owners, running processes, runs completed in the last five minutes,
+explicit receipt links from retained runs, and directories containing `.retain` are
+protected. Unfinished or unrecognized output is preserved for ownership review.
+Named tests and database commands collect completed histories on exit; deployment and
+installation collect them through their existing `finally` cleanup. A busy publisher
+defers automatic history collection until the next operation. Cleanup failures are
+reported and fail an otherwise successful command. `laplace-ops clean` uses this same
+policy without rebuilding anything.
 
 Cleanup also invokes the installed Native load-retirement API using the declared
 local database identity. Private staging relations are reclaimed after their
