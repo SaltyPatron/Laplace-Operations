@@ -280,6 +280,25 @@ class PackageReuse(unittest.TestCase):
         self.assertEqual(one.read_bytes(), b'first build')
         self.assertEqual(two.read_bytes(), b'first build')
 
+    def test_runtime_grammar_snapshot_keeps_external_code_and_the_selected_engine_parser(self):
+        prepared, compiled = self.root / 'prepared-grammars', self.root / 'compiled-grammars'
+        prepared.mkdir()
+        compiled.mkdir()
+        (prepared / 'libtree-sitter-c.so').write_bytes(b'prepared C parser')
+        (prepared / 'libtree-sitter-pgn.so').write_bytes(b'another product PGN parser')
+        (compiled / 'libtree-sitter-pgn.so').write_bytes(b'selected Engine PGN parser')
+        target = self.root / 'runtime/grammars'
+        store = self.package.artifacts
+        result = store.snapshot_grammars(prepared, compiled, target)
+        self.assertEqual(result['grammars'], 2)
+        self.assertEqual((target / 'libtree-sitter-pgn.so').read_bytes(), b'selected Engine PGN parser')
+        (compiled / 'libtree-sitter-pgn.so').write_bytes(b'later Engine parser')
+        (prepared / 'libtree-sitter-c.so').write_bytes(b'later C parser')
+        self.assertEqual((target / 'libtree-sitter-pgn.so').read_bytes(), b'selected Engine PGN parser')
+        self.assertEqual((target / 'libtree-sitter-c.so').read_bytes(), b'prepared C parser')
+        with self.assertRaisesRegex(ValueError, 'new absolute'):
+            store.snapshot_grammars(prepared, compiled, target)
+
     def test_foreign_database_reader_is_refused_before_any_acl_write(self):
         config={**self.config, 'socket': 'another-host', 'database_artifact_reader': 'S-1-5-20'}
         with patch.object(self.package, 'run') as invoke, self.assertRaisesRegex(ValueError, 'local database host'):

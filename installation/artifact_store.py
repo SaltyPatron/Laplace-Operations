@@ -126,3 +126,47 @@ def materialize(source, target, store):
     for relative, expected in inventory.items():
         materialize_file(source / relative, target / relative, store, expected)
     return inventory
+
+
+def grammar_inputs(prepared, compiled=None):
+    prepared = Path(prepared)
+    if not prepared.is_dir():
+        raise ValueError('Prepared grammar input directory is absent: ' + str(prepared))
+    selected = {path.name: path for path in sorted(prepared.glob('*.so'))}
+    if compiled is not None:
+        owned = list(Path(compiled).glob('*.so'))
+        if not owned:
+            raise ValueError('The selected Engine produced no recipe grammars')
+        selected.update((path.name, path) for path in owned)
+    if not selected:
+        raise ValueError('No compiled grammars at the declared input roots')
+    return selected
+
+
+def snapshot_grammars(prepared, compiled, target):
+    """Freeze prepared code grammars plus this Engine's packaging grammars."""
+    selected = grammar_inputs(prepared, compiled)
+    target = Path(target)
+    if not target.is_absolute() or target.exists() or any(path.is_symlink() for path in (target, *target.parents)):
+        raise ValueError('Grammar snapshot needs a new absolute, unlinked output directory')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.grammars-', dir=target.parent) as temporary:
+        stage = Path(temporary) / 'runtime'
+        stage.mkdir()
+        for name, source in selected.items():
+            expected = digest(source)
+            shutil.copy2(source, stage / name)
+            if digest(stage / name) != expected:
+                raise ValueError('Grammar input changed during snapshot: ' + str(source))
+        stage.rename(target)
+    return {'grammars': len(selected), 'prepared': str(prepared), 'compiled': str(compiled), 'runtime': str(target)}
+
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description='Freeze a qualification run\'s complete compiled grammar closure')
+    parser.add_argument('--prepared', required=True)
+    parser.add_argument('--compiled', required=True)
+    parser.add_argument('--output', required=True)
+    arguments = parser.parse_args()
+    print(json.dumps(snapshot_grammars(arguments.prepared, arguments.compiled, arguments.output)))
