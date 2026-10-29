@@ -54,8 +54,8 @@ function Set-DesktopUciDatabase {
     $c.database_certificate=[IO.File]::ReadAllText($Development.root_certificate)
     $outputs=[ordered]@{
         $certificate=$c.database_certificate
-        $declaration=($c|ConvertTo-Json -Depth 20)
-        (Join-Path $root 'connector.json')=($c.connector|ConvertTo-Json -Depth 20)
+        $declaration=($c|ConvertTo-Json -Depth 20 -Compress)
+        (Join-Path $root 'connector.json')=($c.connector|ConvertTo-Json -Depth 20 -Compress)
     }
     $changed=@()
     foreach($path in $outputs.Keys){
@@ -67,7 +67,8 @@ function Set-DesktopUciDatabase {
         }
     }
     @{status='configured';database_host=$Iis.database.host;database=$Iis.database.substrate_database
-      database_role=$Iis.database.substrate_role;profiles=@($Development.uci.profiles);changed=$changed}
+      database_role=$Iis.database.substrate_role;profiles=@($Development.uci.profiles);changed=$changed
+      reload=($certificate -in $changed -or (Join-Path $root 'connector.json') -in $changed)}
 }
 
 if($MyInvocation.InvocationName -ne '.'){
@@ -97,9 +98,9 @@ if($MyInvocation.InvocationName -ne '.'){
     $result=Set-DesktopUciDatabase -Development $d -Iis $c -DataRoot $env:LAPLACE_DATA_ROOT
     if($result.status -eq 'configured' -and $package){
         $declaration=Join-Path $env:LAPLACE_DATA_ROOT ('services/'+$d.uci.service+'/agent/installation.json')
-        & (Join-Path $env:LAPLACE_SRC 'Laplace-UCI/setup-iis.ps1') -Installation $declaration -Package $package -VerifyProfile $d.uci.profiles -Reload:([bool]$result.changed.Count)
+        & (Join-Path $env:LAPLACE_SRC 'Laplace-UCI/setup-iis.ps1') -Installation $declaration -Package $package -VerifyProfile $d.uci.profiles -Reload:([bool]$result.reload)
         if($LASTEXITCODE){throw 'Desktop UCI connector publication or serving readback failed.'}
-    }elseif($result.status -eq 'configured' -and $result.changed.Count){
+    }elseif($result.status -eq 'configured' -and $result.reload){
         Add-Type -Path "$env:windir/System32/inetsrv/Microsoft.Web.Administration.dll"
         $manager=[Microsoft.Web.Administration.ServerManager]::new()
         try{

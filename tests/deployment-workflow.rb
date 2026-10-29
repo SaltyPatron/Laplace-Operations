@@ -8,6 +8,7 @@ class DeploymentWorkflow < Minitest::Test
     runtime=YAML.load_file(File.expand_path('../.github/workflows/laplace.yml', __dir__))
     trigger=runtime.fetch('on', runtime[true])
     assert_includes trigger.fetch('push').fetch('paths-ignore'), 'acceptance/**'
+    assert_includes trigger.fetch('push').fetch('paths-ignore'), 'development/installation.json'
     checks=YAML.load_file(File.expand_path('../.github/workflows/deployment-contracts.yml', __dir__))
     command=checks.fetch('jobs').fetch('windows-backup').fetch('steps').filter_map { |step| step['run'] }.join("\n")
     assert_includes command, 'laplace.ps1 test -Check'

@@ -107,15 +107,36 @@ WHERE e.extname='laplace';
         $clients+=$selection
     }
     $ready=$null
+    $uci=@{status='not_declared'}
     if($Scope -ne 'modular'){
         $readyResp=Invoke-WebRequest https://dev.hartonomous.com/health/ready -TimeoutSec 20 -SkipHttpErrorCheck
         $ready=$readyResp.Content|ConvertFrom-Json
         if(-not $ready.substrate_reachable -or -not $ready.perfcache_ready){throw 'Installed desktop IIS substrate or native perfcache is unavailable.'}
+        $developmentPath=if($env:LAPLACE_DEVELOPMENT_INSTALLATION){$env:LAPLACE_DEVELOPMENT_INSTALLATION}else{Join-Path $PSScriptRoot '../development/installation.json'}
+        $development=Get-Content -LiteralPath $developmentPath -Raw|ConvertFrom-Json
+        if($development.uci){
+            $declaration=Join-Path $env:LAPLACE_DATA_ROOT ('services/'+$development.uci.service+'/agent/installation.json')
+            $uci=@{status='not_installed';installation=$declaration}
+            if(Test-Path -LiteralPath $declaration){
+                $installed=Get-Content -LiteralPath $declaration -Raw|ConvertFrom-Json
+                if($installed.host -ine $target.host -or $installed.site -cne $development.uci.service -or $installed.revision -notmatch '^[a-f0-9]{7,64}$'){throw 'UCI installation does not select this host.'}
+                $connector=Join-Path $installed.directory ('releases/'+$installed.revision+'/laplace-uci-connect.exe')
+                $readbacks=@()
+                foreach($profile in $development.uci.profiles){
+                    $output=Invoke-InstalledClient $connector @('verify','--configuration',(Join-Path $installed.directory 'connector.json'),'--profile',$profile,'--endpoint',('wss://'+$installed.hostname+'/uci/'+$profile))
+                    $readback=($output|Where-Object {$_ -notmatch '^info string '}) -join "`n"|ConvertFrom-Json
+                    $identities=@($readback.lines|Where-Object {$_.StartsWith('info string laplace database ')}|ForEach-Object {$_.Substring('info string laplace database '.Length)|ConvertFrom-Json})
+                    if(-not $identities.Count -or @($identities|Where-Object {$_.Cluster -cne $cluster -or $_.Database -cne $development.substrate_database}).Count){throw 'The serving UCI engine opened a different cluster or substrate.'}
+                    $readbacks+=@{profile=$profile;cluster=$cluster;database=$development.substrate_database;move=$readback.lines[-1]}
+                }
+                $uci=@{status='passed';release=$installed.revision;transport='authenticated_websocket';profiles=$readbacks}
+            }
+        }
     }
     [ordered]@{host=$target.host;checked_utc=[DateTime]::UtcNow.ToString('o');service=$services[0].Name;cluster=$cluster;
         data=$target.data;wal=$wal.Target;connections=$connections;clients=$clients;substrates=$substrates;
         scope=$Scope;modular_clients=$(if($Scope -ne 'monorepo'){Get-DesktopClientState -Declaration (Get-DesktopClientDeclaration $ModularInstallation)});
-        iis_ready=$ready.ready;iis_seeded=([bool]$ready.has_entities -and [bool]$ready.has_consensus);passed=$true}|ConvertTo-Json -Depth 10
+        iis_ready=$ready.ready;iis_seeded=([bool]$ready.has_entities -and [bool]$ready.has_consensus);uci=$uci;passed=$true}|ConvertTo-Json -Depth 10
 }finally{
     foreach($name in $saved.Keys){if($null -eq $saved[$name]){Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue}else{[Environment]::SetEnvironmentVariable($name,$saved[$name])}}
 }

@@ -82,6 +82,9 @@ try {
        $configured.connector.profiles.local.variables.LAPLACE_DB -notmatch '(?i)Require Auth=SSPI' -or
        $configured.connector.profiles.remote.knowledge -cne 'external'){throw 'Desktop UCI binding changed the wrong profile or lost authentication.'}
     if((Set-DesktopUciDatabase $devConfig $iis $data).changed.Count){throw 'Unchanged desktop UCI binding rewrote its files.'}
+    $configured.engine='obsolete-metadata';$configured|ConvertTo-Json -Depth 20 -Compress|Set-Content -LiteralPath $installedUci -NoNewline
+    $updated=Set-DesktopUciDatabase $devConfig $iis $data
+    if($updated.changed.Count -ne 1 -or $updated.reload){throw 'Correcting only setup metadata restarted the UCI runtime.'}
     $iis.database.host='different-host';$refused=$false
     try{$null=Set-DesktopUciDatabase $devConfig $iis $data}catch{$refused=$true}
     if(-not $refused){throw 'A remote database silently replaced the declared local UCI binding.'}

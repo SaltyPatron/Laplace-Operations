@@ -32,6 +32,7 @@ on:
       - 'installation/package-windows-client.py'
       - 'installation/artifact_store.py'
       - 'installation/hart-desktop-*.json'
+      - 'development/installation.json'
   repository_dispatch:
     types: [main-merged]
   workflow_dispatch:
