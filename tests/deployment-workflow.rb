@@ -4,6 +4,15 @@ class DeploymentWorkflow < Minitest::Test
   def setup
     @jobs = YAML.load_file(File.expand_path('../.github/workflows/laplace.yml', __dir__)).fetch('jobs')
   end
+  def test_acceptance_changes_run_checks_without_deploying_native_runtime
+    runtime=YAML.load_file(File.expand_path('../.github/workflows/laplace.yml', __dir__))
+    trigger=runtime.fetch('on', runtime[true])
+    assert_includes trigger.fetch('push').fetch('paths-ignore'), 'acceptance/**'
+    checks=YAML.load_file(File.expand_path('../.github/workflows/deployment-contracts.yml', __dir__))
+    command=checks.fetch('jobs').fetch('windows-backup').fetch('steps').filter_map { |step| step['run'] }.join("\n")
+    assert_includes command, 'laplace.ps1 test -Check'
+    assert_includes command, 'acceptance-runner,desktop-storage-retention'
+  end
   def test_cloud_waits_for_staging_runtime_results
     cloud=@jobs.fetch('deploy-cloud')
     assert_equal %w[deploy checks reads cloud-acquire], cloud.fetch('needs')

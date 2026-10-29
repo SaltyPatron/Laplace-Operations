@@ -201,6 +201,61 @@
           "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "production", "-Wait"],
           "timeout_seconds": 900,
           "evidence": "Actual installed production SQL/native verification and retained configuration/revision receipts through the human entry point."
+        },
+        {
+          "id": "acceptance-runner",
+          "platform": "windows",
+          "argv": [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "tests/acceptance-runner.ps1"
+          ],
+          "timeout_seconds": 60,
+          "scratch": true,
+          "evidence": "Actual child exit, timeout, absent executable, evidence preservation and owned scratch cleanup through the registered runner."
+        },
+        {
+          "id": "desktop-storage-retention",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "tests/storage.ps1"],
+          "timeout_seconds": 60,
+          "scratch": true,
+          "evidence": "Canonical storage cleanup preserves installed/runtime references and receipts, protects live test owners and retires expired owned test payloads."
+        },
+        {
+          "id": "desktop-source-interpretation",
+          "platform": "windows",
+          "argv": [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "installation/Verify-DesktopDatabases.ps1",
+            "-Scope",
+            "modular",
+            "-Proof",
+            "source-interpretation"
+          ],
+          "timeout_seconds": 600,
+          "scratch": true,
+          "evidence": "Selected installed Engine and packaged recipes/caches: category alignment, open identifiers, scoped argument usage, committed CLI readback and failed-source publication in a verification database."
+        },
+        {
+          "id": "desktop-sql-foundation",
+          "platform": "windows",
+          "argv": [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "installation/Verify-DesktopDatabases.ps1",
+            "-Scope",
+            "monorepo",
+            "-Proof",
+            "sql-foundation"
+          ],
+          "timeout_seconds": 1200,
+          "scratch": true,
+          "evidence": "Installed monorepo PostgreSQL extension and database configuration: SQL/Native contracts, actual endpoint graph claims, lifecycle and grant replay in a verification database; logs and receipt retained."
         }
       ]
     },

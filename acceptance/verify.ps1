@@ -19,6 +19,7 @@ foreach ($criterion in $registry.criteria) {
     }
     foreach ($item in $criterion.checks) {
         if (-not $item.id -or -not $ids.Add($item.id)) { throw 'Missing or duplicate check ID' }
+        if ($item.id -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]*$') { throw 'Check ID is not a safe evidence directory name.' }
         if ($item.platform -notin 'windows','linux','any') { throw "Invalid platform: $($item.id)" }
         if ($null -ne $item.argv -and (@($item.argv).Count -lt 1 -or -not $item.argv[0] -or $item.timeout_seconds -le 0)) {
             throw "Invalid command: $($item.id)"
@@ -50,6 +51,22 @@ function RunCheck($item) {
     $info.FileName = $item.argv[0]
     foreach ($argument in @($item.argv | Select-Object -Skip 1)) { $info.ArgumentList.Add([string]$argument) }
     $info.WorkingDirectory = $repo
+    # A check's transient payload belongs to its receipt, never an agent's
+    # manually selected audit directory. Child owners still release their own
+    # databases and processes; this runner retires only its own scratch tree.
+    $scratch=$null
+    if ($item.scratch) {
+        if ($item.id -notmatch '^[a-z0-9][a-z0-9_-]*$') { throw 'Scratch check ID is not a directory name.' }
+        $scratch=Join-Path (Split-Path $outputPath -Parent) ($item.id+'-scratch')
+        if (Test-Path -LiteralPath $scratch) { throw "Scratch already exists: $scratch" }
+        [void][IO.Directory]::CreateDirectory($scratch)
+        foreach ($name in 'TMPDIR','TMP','TEMP','LAPLACE_ACCEPTANCE_WORK') { $info.Environment[$name]=$scratch }
+        $info.Environment['LAPLACE_ACCEPTANCE_RESULTS']=Join-Path (Split-Path $outputPath -Parent) $item.id
+        $lease=@{schema='laplace.acceptance-scratch/v1';owner_pid=$PID;child_pid=0;receipt=$outputPath;check=$item.id}
+        $leasePath=Join-Path $scratch '.laplace-scratch.json'
+        [IO.File]::WriteAllText($leasePath+'.next',($lease|ConvertTo-Json))
+        [IO.File]::Move($leasePath+'.next',$leasePath,$true)
+    }
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.RedirectStandardOutput = $true
@@ -60,6 +77,11 @@ function RunCheck($item) {
     $status = 'failed'; $code = $null; $stdout = ''; $stderr = ''
     try {
         [void]$process.Start()
+        if ($scratch) {
+            $lease.child_pid=$process.Id
+            [IO.File]::WriteAllText($leasePath+'.next',($lease|ConvertTo-Json))
+            [IO.File]::Move($leasePath+'.next',$leasePath,$true)
+        }
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit([int]$item.timeout_seconds * 1000)) {
@@ -73,11 +95,21 @@ function RunCheck($item) {
         $stdout = $stdoutTask.GetAwaiter().GetResult()
         $stderr = $stderrTask.GetAwaiter().GetResult()
     } catch { $stderr = $_.Exception.Message }
-    finally { $process.Dispose() }
+    finally {
+        $process.Dispose()
+        if ($scratch -and (Test-Path -LiteralPath $scratch)) {
+            try {
+                . "$repo/installation/storage.ps1"
+                Assert-StorageTree $scratch (Split-Path $outputPath -Parent)
+                Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction Stop
+            } catch { $status='failed'; $stderr+=[Environment]::NewLine+'Scratch cleanup failed: '+$_.Exception.Message }
+        }
+    }
     [ordered]@{
         status = $status; exit_code = $code; started_utc = $began.ToString('o')
         duration_seconds = [math]::Round(([DateTime]::UtcNow - $began).TotalSeconds, 3)
         stdout = $stdout; stderr = $stderr
+        scratch_removed = (-not $scratch -or -not (Test-Path -LiteralPath $scratch))
     }
 }
 
@@ -100,8 +132,15 @@ foreach ($criterion in $registry.criteria) {
             else {
                 $execution = RunCheck $item
                 foreach ($key in $execution.Keys) { $result[$key] = $execution[$key] }
+                $details=Join-Path (Split-Path $outputPath -Parent) $item.id
+                [void][IO.Directory]::CreateDirectory($details)
+                [IO.File]::WriteAllText((Join-Path $details 'stdout.log'),$execution.stdout)
+                [IO.File]::WriteAllText((Join-Path $details 'stderr.log'),$execution.stderr)
+                $result.evidence_directory=$details
+                [IO.File]::WriteAllText((Join-Path $details 'execution.json'),($result|ConvertTo-Json -Depth 15))
             }
             '{0}: {1}' -f $item.id, $result.status
+            if ($result.evidence_directory) { "Evidence: $($result.evidence_directory)" }
         }
         $results += $result
     }

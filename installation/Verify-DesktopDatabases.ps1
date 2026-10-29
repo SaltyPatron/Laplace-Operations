@@ -1,8 +1,10 @@
 #Requires -Version 7
 [CmdletBinding()]
 param([string]$Configuration="$PSScriptRoot/hart-desktop-operator.json", [string]$ModularInstallation,
-    [ValidateSet('all','monorepo','modular')][string]$Scope='all')
+    [ValidateSet('all','monorepo','modular')][string]$Scope='all',
+    [ValidateSet('none','source-interpretation','sql-foundation')][string]$Proof='none')
 $ErrorActionPreference='Stop'
+. "$PSScriptRoot/../laplace.env.ps1"
 . "$PSScriptRoot/desktop-clients.ps1"
 $c=Get-Content -LiteralPath $Configuration -Raw|ConvertFrom-Json
 $target=@($c.targets|Where-Object authentication -EQ sspi)
@@ -15,7 +17,8 @@ if($services.Count -ne 1 -or $services[0].Name -ne $target.postgres_service -or 
 $psql=Join-Path $target.prefix 'bin/psql.exe'
 if($services[0].PathName.Replace('\','/') -notlike ('*'+$target.prefix+'/bin/pg_ctl.exe*')){throw 'The database service uses a different PostgreSQL build.'}
 $saved=@{}
-foreach($name in 'PGPASSWORD','PGPASSFILE','PGSERVICE','PGSERVICEFILE','PGHOSTADDR','PGSSLMODE','PGSSLROOTCERT','PGREQUIREAUTH','PGCONNECT_TIMEOUT'){
+foreach($name in 'PGPASSWORD','PGPASSFILE','PGSERVICE','PGSERVICEFILE','PGHOSTADDR','PGSSLMODE','PGSSLROOTCERT','PGREQUIREAUTH','PGCONNECT_TIMEOUT',
+    'PGHOST','PGPORT','PGUSER','PGOPTIONS','PSQL','LAPLACE_TIER0','LAPLACE_FLAGS','LAPLACE_HIGHWAY','LAPLACE_GRAMMARS'){
     $saved[$name]=[Environment]::GetEnvironmentVariable($name)
     Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
 }
@@ -37,6 +40,30 @@ function Invoke-InstalledClient([string]$Command,[string[]]$Arguments){
 try{
     $env:PGSSLMODE='verify-full';$env:PGSSLROOTCERT=Join-Path $c.state 'hart-desktop-postgresql.crt'
     $env:PGREQUIREAUTH='sspi';$env:PGCONNECT_TIMEOUT='10';$env:PGPASSFILE=Join-Path $c.state 'unused-no-password-file'
+    if ($Proof -ne 'none') {
+        if (-not $env:LAPLACE_ACCEPTANCE_WORK -or -not $env:LAPLACE_ACCEPTANCE_RESULTS) {
+            throw 'Run this proof through laplace-ops test -Check so its workspace and evidence have an owner.'
+        }
+        $env:PGHOST=$target.host;$env:PGPORT=[string]$target.port;$env:PGUSER=$c.role;$env:PSQL=$psql
+        $source=Join-Path $env:LAPLACE_SRC 'Laplace'
+        if ($Proof -eq 'source-interpretation') {
+            $command=Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd'
+            $selection=(Invoke-InstalledClient $command @('--where'))|ConvertFrom-Json
+            if ($selection.database_host -ine $target.host) { throw 'Installed Engine selects another host.' }
+            $installed=Get-Content -LiteralPath $selection.installation -Raw|ConvertFrom-Json
+            $env:LAPLACE_TIER0=$installed.tier0;$env:LAPLACE_FLAGS=$installed.flags
+            $env:LAPLACE_HIGHWAY=$installed.highway;$env:LAPLACE_GRAMMARS=$installed.grammars
+            & py -3 -X utf8 (Join-Path $env:LAPLACE_SRC 'Laplace-Engine/tests/semantic-interpretation.py') $selection.executable --recipes (Join-Path $selection.release 'share/recipes') --database
+        } else {
+            $command=Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace-mono.cmd'
+            $selection=(Invoke-InstalledClient $command @('--where'))|ConvertFrom-Json
+            if ($selection.database_host -ine $target.host) { throw 'Installed monorepo selects another host.' }
+            & py -3 -X utf8 (Join-Path $source 'tests/sql-native-foundation.py') --pgbin (Join-Path $target.prefix 'bin') --source-database $selection.database_name --results $env:LAPLACE_ACCEPTANCE_RESULTS
+        }
+        if ($LASTEXITCODE) { throw "Installed $Proof proof failed with exit $LASTEXITCODE." }
+        @{proof=$Proof;scope=$Scope;selection=$selection;passed=$true}|ConvertTo-Json -Depth 8
+        exit 0
+    }
     $addresses=@([Net.Dns]::GetHostAddresses($target.host)|ForEach-Object IPAddressToString)
     $connections=@()
     foreach($address in $addresses){

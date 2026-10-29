@@ -30,6 +30,8 @@ param(
     [string]$Package,
     [switch]$Force,
     [switch]$Json,
+    [string]$Check,
+    [switch]$List,
     [ValidateSet('status','verify')][string]$ClientOperation = 'status',
     [ValidateSet('status','clean')][string]$StorageOperation = 'status',
     [Alias('h')][switch]$Help,
@@ -83,6 +85,8 @@ LOCAL DESKTOP DEVELOPMENT (http://localhost:5187)
   laplace-ops prepare                 Fetch pinned Unicode/UCD and Tree-sitter grammar inputs
   laplace-ops build                   Build native C/C++ engine, ReadyToRun CLI, .NET solution, and web UI
   laplace-ops test                    Build native engine and run native/runtime interop tests
+  laplace-ops test -List              List registered checks and their owners
+  laplace-ops test -Check <id,...>     Run named checks against existing inputs; retain one receipt
   laplace-ops run                     Run the local desktop API + web UI in the foreground
   laplace-ops start | stop | status   Manage the background local desktop server
   laplace-ops logs                    Tail logs from the active background local desktop server
@@ -147,6 +151,7 @@ $desktopOperations = @('prepare','build','test','run','start','stop','logs','con
 if (-not $PSBoundParameters.ContainsKey('Target')) {
     $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
 }
+if (($Check -or $List) -and ($Operation -ne 'test' -or $Target -ne 'desktop')) { throw '-Check and -List select registered desktop tests; no operation was run.' }
 if($PSBoundParameters.ContainsKey('Components') -and -not($Target -eq 'desktop' -and $Operation -in @('deploy','build'))){
     throw '-Components selects desktop build/deployment components; no operation was run.'
 }
@@ -210,6 +215,17 @@ if ($Operation -eq 'repair-postgres') {
     $repairArgs = @('-NoProfile','-File',"$PSScriptRoot/setup.ps1",'repair-postgres')
     if ($Plan) { $repairArgs += '-Check' }
     & pwsh @repairArgs
+    exit $LASTEXITCODE
+}
+if ($Check -or $List) {
+    . "$PSScriptRoot/laplace.env.ps1"
+    $arguments=@('-NoProfile','-File',"$PSScriptRoot/acceptance/verify.ps1")
+    if ($List) { $arguments+='-List' }
+    else {
+        $run=Join-Path $env:LAPLACE_WORK ('operations/test-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ'))
+        $arguments+=@('-Check',$Check,'-Output',(Join-Path $run 'receipt.json'))
+    }
+    & pwsh @arguments
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'db') {

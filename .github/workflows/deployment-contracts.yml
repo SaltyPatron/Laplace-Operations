@@ -74,13 +74,15 @@ jobs:
         shell: pwsh
         env:
           LAPLACE_ACCEPTANCE_SOURCE: ${{ github.workspace }}/.acceptance/laplace
-        run: pwsh -NoProfile -File acceptance/verify.ps1 -Check config-windows,storage-windows,resource-refusal-windows,backup-copy-windows,desktop-enrollment-storage,platform-access-resolution,operation-targets -Output "$env:RUNNER_TEMP/acceptance-windows.json"
+        run: |
+          $env:LAPLACE_WORK=Join-Path $env:RUNNER_TEMP 'laplace'
+          pwsh -NoProfile -File laplace.ps1 test -Check config-windows,storage-windows,resource-refusal-windows,backup-copy-windows,desktop-enrollment-storage,platform-access-resolution,operation-targets,acceptance-runner,desktop-storage-retention
       - name: Preserve Windows acceptance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: acceptance-windows-${{ github.sha }}
-          path: ${{ runner.temp }}/acceptance-windows.json
+          path: ${{ runner.temp }}/laplace/operations/test-*/
           if-no-files-found: error
   boundaries:
     runs-on: ubuntu-24.04

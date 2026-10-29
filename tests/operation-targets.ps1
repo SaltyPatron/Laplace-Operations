@@ -3,7 +3,7 @@
 $ErrorActionPreference='Stop'
 $entry=(Resolve-Path "$PSScriptRoot/../laplace.ps1").Path
 function Dispatch([string[]]$Arguments) {
-    $quoted=@($Arguments | ForEach-Object { if ($_ -in '-Target','-SourcePath','-Database','-DatabaseOperation','-Yes','-Force') { $_ } else { "'" + $_.Replace("'", "''") + "'" } }) -join ' '
+    $quoted=@($Arguments | ForEach-Object { if ($_ -in '-Target','-SourcePath','-Database','-DatabaseOperation','-Yes','-Force','-Check','-List') { $_ } else { "'" + $_.Replace("'", "''") + "'" } }) -join ' '
     $program=@"
 function gh {
     `$global:LASTEXITCODE=0
@@ -52,6 +52,9 @@ foreach ($required in 'laplace.yml','SaltyPatron/Laplace-Operations','rebuild_ru
     if ($rebuildArgv -notcontains $required) { throw "Native replacement dispatch missing $required" }
 }
 foreach ($arguments in @(
+    @('deploy','-Target','production','-Check','operation-targets'),
+    @('repair-postgres','-List'),
+    @('storage','-List'),
     @('components','-Target','production','-Force'),
     @('components','-Target','cloud','-Force'),
     @('build','-Target','production'),
@@ -67,4 +70,6 @@ foreach ($arguments in @(
     $result=Dispatch $arguments
     if ($result.exit -eq 0 -or $result.output -match 'DISPATCH:') { throw "Invalid target reached dispatch: $($arguments -join ' ')" }
 }
+$listed=Dispatch @('test','-List')
+if ($listed.exit -ne 0 -or $listed.output -notmatch 'operation-targets' -or $listed.output -match 'DISPATCH:') { throw 'Registered tests are not discoverable through laplace-ops.' }
 'Operation targets: dispatch preserves staging/production; invalid local/remote combinations refused.'

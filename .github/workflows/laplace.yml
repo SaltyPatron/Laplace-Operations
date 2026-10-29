@@ -25,6 +25,7 @@ on:
       - '**/*.md'
       - 'tests/**'
       - 'audit/**'
+      - 'acceptance/**'
       - 'verify-admitted-data.py'
       - 'sql/verify-admitted-data.sql'
       - '**/*.ps1'

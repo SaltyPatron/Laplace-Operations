@@ -141,7 +141,7 @@ function Get-StorageProcesses {
             try { $modules = @((Get-Process -Id $process.ProcessId -ErrorAction Stop).Modules | ForEach-Object FileName) }
             catch { $moduleError = $true }
         }
-        $result += [pscustomobject]@{pid=$process.ProcessId;name=$process.Name;executable=$process.ExecutablePath;
+        $result += [pscustomobject]@{pid=$process.ProcessId;parent_pid=$process.ParentProcessId;name=$process.Name;executable=$process.ExecutablePath;
             command=$process.CommandLine;modules=$modules;module_error=$moduleError}
     }
     return $result
@@ -274,6 +274,27 @@ function Get-DesktopStoragePlan {
     if(Test-Path -LiteralPath $operations) {
         foreach($run in Get-ChildItem -LiteralPath $operations -Directory | Where-Object Name -Match '^components-\d{8}T\d{6,13}Z$') {
             $entries+=@(Get-StorageScratch $run.FullName '^published$' 'abandoned_scratch' $protected $Processes)
+        }
+        foreach($run in Get-ChildItem -LiteralPath $operations -Directory | Where-Object Name -Match '^test-\d{8}T\d{6,13}Z$') {
+            foreach($entry in @(Get-StorageScratch $run.FullName '^[a-z0-9][a-z0-9_-]*-scratch$' 'acceptance_scratch' $protected $Processes)) {
+                if ('reparse_point' -in $entry.reasons) { continue }
+                $marker='.laplace-scratch.json'
+                $lease=Read-StorageJson (Join-Path $entry.path $marker)
+                if (-not $lease -or $lease.schema -ne 'laplace.acceptance-scratch/v1' -or
+                    $lease.owner_pid -le 0 -or -not [IO.Path]::IsPathFullyQualified([string]$lease.receipt) -or
+                    [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($lease.receipt)) -ine $run.FullName -or
+                    [IO.Path]::GetFileName($entry.path) -cne ($lease.check+'-scratch')) { continue }
+                $owners=@([int]$lease.owner_pid,[int]$lease.child_pid)
+                # A dead runner can leave a child finishing cleanup. Follow its
+                # descendants too, even when the parent PID has already exited.
+                do {
+                    $children=@($Processes | Where-Object { $_.parent_pid -in $owners -and $_.pid -notin $owners } | ForEach-Object pid)
+                    $owners+=$children
+                } while ($children.Count)
+                if (@($Processes | Where-Object { $_.pid -in $owners }).Count) { $entry.reasons+='live_owner';$entry.retire=$false }
+                $entry.marker=$marker
+                $entries+=$entry
+            }
         }
     }
     [ordered]@{schema='laplace.desktop-storage/v1';checked_utc=[DateTime]::UtcNow.ToString('o');

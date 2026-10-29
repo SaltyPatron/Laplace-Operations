@@ -5,7 +5,21 @@ versioned operational outcomes, responsible repositories, dependencies, required
 The [audit](../docs/2026-10-10-system-audit.md#expanded-installation-delivery-and-resource-audit) explains why they exist.
 These operational criteria do not replace Laplace's product specification.
 
-List the checks with `pwsh -NoProfile -File acceptance/verify.ps1 -List`.
+List the checks with `laplace-ops test -List`. Run selected checks with
+`laplace-ops test -Check <id,...>`. This reuses the registry runner and records
+the run under the declared `LAPLACE_WORK/operations/test-*/receipt.json` without
+rebuilding or deploying components.
+
+The installed-runtime checks are `desktop-source-interpretation` (the selected
+`laplace` binary, its packaged recipes and caches, and committed Native readback)
+and `desktop-sql-foundation` (the installed `laplace-mono` database configuration
+and extension). They use the existing PostgreSQL service and remove their own
+verification databases. The runner owns their transient directories and removes
+them on success, failure and timeout, retaining receipts and SQL logs separately.
+They do not ingest into the operator's corpus.
+Interrupted runs carry a scratch lease: `laplace-ops storage` reports it, and
+`laplace-ops storage clean` retires it only after its owner and child processes
+have exited. Unregistered directories are preserved.
 Run every registered check with an explicit new evidence destination:
 
 ```powershell

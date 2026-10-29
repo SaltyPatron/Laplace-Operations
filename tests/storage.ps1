@@ -78,7 +78,23 @@ try {
     $abandoned=Join-Path $build 'worktrees/wt-retired-0123456789ab'
     $source=Join-Path $build 'worktrees/wt-source-0123456789ab'
     $null=New-Item -ItemType Directory -Path $abandoned,(Join-Path $source '.git') -Force
+    $testRun=Join-Path $work 'operations/test-20261029T0000000000000Z'
+    $testReceipt=Join-Path $testRun 'receipt.json'
+    foreach ($case in @(@{check='expired';owner=424242;child=0},@{check='running';owner=21;child=0},@{check='finishing';owner=424242;child=424243})) {
+        $scratch=Join-Path $testRun ($case.check+'-scratch')
+        $null=New-Item -ItemType Directory -Path $scratch -Force
+        @{schema='laplace.acceptance-scratch/v1';owner_pid=$case.owner;child_pid=$case.child;receipt=$testReceipt;check=$case.check}|ConvertTo-Json|Set-Content (Join-Path $scratch '.laplace-scratch.json')
+    }
+    Set-Content $testReceipt 'retained evidence'
+    $args.Processes+=@([pscustomobject]@{pid=77;parent_pid=424243;name='python.exe';executable='python.exe';command='';modules=@();module_error=$false})
+    $scratchPlan=Get-DesktopStoragePlan @args
+    Require ($scratchPlan.entries | Where-Object {$_.path -eq (Join-Path $testRun 'expired-scratch') -and $_.retire}) 'Expired owned test payload was not selected.'
+    Require (-not ($scratchPlan.entries | Where-Object path -EQ (Join-Path $testRun 'running-scratch')).retire) 'Running test payload was selected.'
     $clean=Invoke-DesktopStorageCleanup @args
+    Require (-not (Test-Path (Join-Path $testRun 'expired-scratch'))) 'Expired test payload survived canonical cleanup.'
+    Require (Test-Path (Join-Path $testRun 'running-scratch')) 'Running test payload was deleted.'
+    Require (Test-Path (Join-Path $testRun 'finishing-scratch')) 'A surviving child lost its payload after its runner exited.'
+    Require (Test-Path $testReceipt) 'Cleanup deleted test evidence.'
     Require ($clean.status -eq 'passed') 'Cleanup did not pass.'
     Require (-not (Test-Path -LiteralPath $old)) 'Unused old release survived collection.'
     Require (-not (Test-Path -LiteralPath $legacy)) 'Incomplete legacy payload survived collection.'
