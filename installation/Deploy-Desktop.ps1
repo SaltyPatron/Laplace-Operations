@@ -41,6 +41,9 @@ if($mono.Count){
         $steps+=@{name='Build selected components, compose and activate IIS';script="$source/deploy/windows/Build-IisPackage.ps1";arguments=$arguments;component_receipt=$true}
     }
 }
+if($selected.Contains('modular')){
+    $steps+=@{name='Migrate the installed modular substrate';command=(Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd');arguments=@('deploy')}
+}
 $steps+=@{name='Verify selected installed components';script="$PSScriptRoot/Verify-DesktopDatabases.ps1";arguments=@('-ModularInstallation',$ModularInstallation,'-Scope',$scope)}
 Write-Host 'Laplace desktop deployment' -ForegroundColor Cyan
 Write-Host "Source: $source"
@@ -49,7 +52,8 @@ Write-Host ('Components: '+(@($selected | Sort-Object) -join ', '))
 if ($Plan) {
     for ($i=0; $i -lt $steps.Count; $i++) {
         Write-Host "[$($i+1)/$($steps.Count)] $($steps[$i].name)"
-        Write-Host ('  pwsh -NoProfile -File "'+$steps[$i].script+'" '+($steps[$i].arguments -join ' '))
+        $invocation=if($steps[$i].command){'"'+$steps[$i].command+'"'}else{'pwsh -NoProfile -File "'+$steps[$i].script+'"'}
+        Write-Host ('  '+$invocation+' '+($steps[$i].arguments -join ' '))
     }
     Write-Host 'Plan only. Installation access and live checks have not run.'
     exit 0
@@ -122,9 +126,11 @@ try {
         Write-Host "`n[$($i+1)/$($steps.Count)] $($step.name)" -ForegroundColor Cyan
         $clock = [Diagnostics.Stopwatch]::StartNew()
         $script = $step.script
+        $executable=if($step.command){$step.command}else{'pwsh'}
         $stepArguments = $step.arguments
         if($step.component_receipt){$stepArguments+=@('-Receipt',(Join-Path $run 'components.json'))}
-        & pwsh -NoProfile -File $script @stepArguments 2>&1 |
+        if(-not $step.command){$stepArguments=@('-NoProfile','-File',$script)+$stepArguments}
+        & $executable @stepArguments 2>&1 |
             ForEach-Object {
                 $line = "$_"
                 if ($line -match '(?i)\bwarning (?:CS|CA)\d+\b|^npm warn\b|^WARNING:') { $null = $warnings.Add($line) }

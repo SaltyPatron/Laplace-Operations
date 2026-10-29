@@ -19,8 +19,8 @@ foreach($name in 'PGPASSWORD','PGPASSFILE','PGSERVICE','PGSERVICEFILE','PGHOSTAD
     $saved[$name]=[Environment]::GetEnvironmentVariable($name)
     Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
 }
-function Query([string]$Sql){
-    $result=& $psql -X -w -h $target.host -p $target.port -U $c.role -d postgres -Atq -v ON_ERROR_STOP=1 -c $Sql 2>&1
+function Query([string]$Sql,[string]$Database='postgres'){
+    $result=& $psql -X -w -h $target.host -p $target.port -U $c.role -d $Database -Atq -v ON_ERROR_STOP=1 -c $Sql 2>&1
     if($LASTEXITCODE){throw ($result -join "`n")}
     ($result -join "`n").Trim()
 }
@@ -49,7 +49,7 @@ try{
     if((Query 'SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL') -ne '0' -or (Query 'SELECT count(*) FROM pg_ident_file_mappings WHERE error IS NOT NULL') -ne '0'){throw 'PostgreSQL reports invalid authentication rules.'}
     $cluster=Query 'SELECT system_identifier FROM pg_control_system()'
     $wal=Get-Item -LiteralPath (Join-Path $target.data 'pg_wal')
-    $clients=@()
+    $clients=@();$substrates=@()
     $env:PGPASSWORD='invalid-ambient-password-must-not-be-used'
     $commands=switch($Scope){'monorepo'{@('laplace-mono')};'modular'{@('laplace')};default{@('laplace-mono','laplace')}}
     foreach($name in $commands){
@@ -57,6 +57,16 @@ try{
         $where=Invoke-InstalledClient $command @('--where')
         $selection=$where|ConvertFrom-Json
         if($selection.database_host -ine $target.host){throw "$name selects another environment."}
+        $database=if($name -eq 'laplace'){$selection.database}else{$selection.database_name}
+        $contract=@'
+SELECT bool_and(to_regprocedure(format('%I.%I(%s)',n.nspname,api.name,api.arguments)) IS NOT NULL)
+FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace
+CROSS JOIN (VALUES ('laplace_stage_own','bigint,regclass[]'),('laplace_stage_retire',''),
+ ('laplace_attest_stage','regclass,regclass'),('laplace_present_stage','regclass,regclass,name,name')) api(name,arguments)
+WHERE e.extname='laplace';
+'@
+        if((Query $contract $database) -ne 't'){throw "$name database '$database' lacks the Native ingestion lifecycle API. The selected client and substrate have not been upgraded together."}
+        $substrates+=@{database=$database;native_ingest_api='passed'}
         if($name -eq 'laplace'){
             $status=Invoke-InstalledClient $command @('status')
             if(@($status|Where-Object {$_ -match "the same as this engine's"}).Count -ne 2){
@@ -75,7 +85,7 @@ try{
         if(-not $ready.substrate_reachable -or -not $ready.perfcache_ready){throw 'Installed desktop IIS substrate or native perfcache is unavailable.'}
     }
     [ordered]@{host=$target.host;checked_utc=[DateTime]::UtcNow.ToString('o');service=$services[0].Name;cluster=$cluster;
-        data=$target.data;wal=$wal.Target;connections=$connections;clients=$clients;
+        data=$target.data;wal=$wal.Target;connections=$connections;clients=$clients;substrates=$substrates;
         scope=$Scope;modular_clients=$(if($Scope -ne 'monorepo'){Get-DesktopClientState -Declaration (Get-DesktopClientDeclaration $ModularInstallation)});
         iis_ready=$ready.ready;iis_seeded=([bool]$ready.has_entities -and [bool]$ready.has_consensus);passed=$true}|ConvertTo-Json -Depth 10
 }finally{
