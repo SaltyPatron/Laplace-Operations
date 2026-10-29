@@ -190,6 +190,14 @@
           "evidence": "Read the installed IIS package and ANCM selection, hash its complete closure, require actual readiness, and execute authenticated SQL, Native storage and UI asset requests without rebuilding, publishing or starting another application."
         },
         {
+          "id": "desktop-browser-runtime",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "installation/Verify-DesktopRuntime.ps1", "-Browser"],
+          "timeout_seconds": 180,
+          "scratch": true,
+          "evidence": "Verify the installed package, then render Argentina and pancake/quark in installed Edge against real authenticated endpoints. Require JSON responses, visible content and no JavaScript, console, HTTP or transport errors; revoke the temporary workload key."
+        },
+        {
           "id": "desktop-runtime",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "desktop"],

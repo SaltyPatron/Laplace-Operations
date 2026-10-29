@@ -9,6 +9,9 @@ These operational criteria do not replace Laplace's product specification.
 `desktop-installed-runtime` check verify the serving IIS release without a build
 or a second application process. `desktop-runtime` and `desktop-lifecycle`
 separately exercise the source-run localhost application and require its build.
+`desktop-browser-runtime` renders the two recorded entity/matchup cases in
+installed Edge using real API responses, captures screenshots and request/error
+evidence, and revokes its temporary verification key. No browser download is run.
 API status and verification return their own result without appending client
 inventory to JSON output. An older external MCP session does not change the API
 check's result; `laplace-ops clients verify` reports its distinct nonzero result
