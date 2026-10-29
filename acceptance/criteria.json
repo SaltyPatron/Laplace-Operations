@@ -9,7 +9,7 @@
       "depends_on": [],
       "outcome": "Every supported shell, IDE, setup, runner and service resolves the same named installation configuration.",
       "acceptance": [
-        "Resolve a non-default Windows machine.env through PowerShell, CMD and MSBuild; compare paths and provenance.",
+        "Resolve a non-default Windows machine.env through PowerShell, CMD, Python and MSBuild; compare paths and provenance for canonical and alternate checkouts.",
         "Separate OS service identity, database identity and credential references; reject missing or conflicting required configuration."
       ],
       "checks": [
@@ -18,7 +18,7 @@
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "tests/windows-configuration.ps1"],
           "timeout_seconds": 120,
-          "evidence": "Execute all three real entry points against one alternate-root fixture."
+          "evidence": "Execute Operations PowerShell, monorepo PowerShell, CMD, Python and MSBuild against the same root declarations and process overrides; verify persistent PostgreSQL roots and consistent canonical/alternate build selection."
         },
         {
           "id": "config-linux",

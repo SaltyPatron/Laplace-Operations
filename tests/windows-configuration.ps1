@@ -6,7 +6,7 @@ if (-not $LaplaceRoot) { . "$ops/laplace.env.ps1"; $LaplaceRoot = [IO.Path]::Com
 $LaplaceRoot = (Resolve-Path -LiteralPath $LaplaceRoot).Path
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('laplace-config-' + [guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path $scratch)
-$keys = @('LAPLACE_SRC','LAPLACE_DATA','LAPLACE_WORK','LAPLACE_BUILD','LAPLACE_BUILD_ROOT','LAPLACE_EXTERNAL','LAPLACE_ENGINE_BUILD','LAPLACE_PGDATA','LAPLACE_PGWAL','LAPLACE_PGUSER','LAPLACE_PG_SERVICE_ACCOUNT','LAPLACE_CONFIG_SOURCE')
+$keys = @('LAPLACE_SRC','LAPLACE_DATA','LAPLACE_DATA_ROOT','LAPLACE_DEPLOY','LAPLACE_WORK','LAPLACE_BUILD','LAPLACE_BUILD_ROOT','LAPLACE_EXTERNAL','LAPLACE_ENGINE_BUILD','LAPLACE_PGDATA','LAPLACE_PGWAL','LAPLACE_PGUSER','LAPLACE_PG_SERVICE_ACCOUNT','LAPLACE_CONFIG_SOURCE')
 function Run([string]$exe, [string[]]$arguments, [hashtable]$extra = @{}) {
     $p = [Diagnostics.ProcessStartInfo]::new($exe)
     $p.UseShellExecute = $false; $p.RedirectStandardInput = $true; $p.RedirectStandardOutput = $true; $p.RedirectStandardError = $true
@@ -35,7 +35,6 @@ LAPLACE_DATA=Y:\corpora
 LAPLACE_WORK=Y:\state\work
 LAPLACE_DATA_ROOT=Y:\state
 LAPLACE_BUILD=X:\build roots
-LAPLACE_PGDATA=Y:\state\pgdata
 LAPLACE_PGWAL=W:\wal
 LAPLACE_ROLE=substrate_login
 LAPLACE_PG_SERVICE_ACCOUNT=NT SERVICE\LaplacePostgres
@@ -55,6 +54,7 @@ if defined PGPASSWORD exit /b 9
             if ($line -match '^(LAPLACE_[^=]+)=(.*)$') { $cmd[$Matches[1]] = $Matches[2] }
         }
         $monoPs = PowershellValues (Join-Path $LaplaceRoot 'scripts/win/laplace-paths.ps1') 'Import-LaplaceEnv' $override
+        $python = Run 'py' @('-3',(Join-Path $LaplaceRoot 'scripts/machine-env.py'),'--paths','--format','json','--checkout',$LaplaceRoot) $override | ConvertFrom-Json
         $properties = (($keys + 'BaseOutputPath','LaplaceBuildWin') -join ',')
         $ms = (Run 'dotnet' @('msbuild', (Join-Path $LaplaceRoot 'app/Laplace.Core/Laplace.Core.csproj'), '-nologo', "-getProperty:$properties") $override | ConvertFrom-Json).Properties
         foreach ($key in $keys) {
@@ -67,7 +67,14 @@ if defined PGPASSWORD exit /b 9
         if (-not $ms.BaseOutputPath.StartsWith($ps.LAPLACE_BUILD_ROOT)) { throw 'Managed outputs escaped the configured build root' }
         $deployed=if($override.ContainsKey('LAPLACE_DEPLOY')){$override.LAPLACE_DEPLOY}else{'Y:\state\deploy'}
         foreach($values in $ps,$cmd,$monoPs){if($values.LAPLACE_DEPLOY -ne $deployed){throw 'Installed PostgreSQL overlay did not select persistent state consistently.'}}
+        foreach($key in @('LAPLACE_BUILD_ROOT','LAPLACE_DATA_ROOT','LAPLACE_DEPLOY','LAPLACE_PGDATA','LAPLACE_PGWAL')){
+            if($python.$key -ne $ps[$key]){throw "Python resolves a different $key`: $($python.$key); expected $($ps[$key])"}
+        }
     }
+    $canonical=@{LAPLACE_SRC=(Split-Path $LaplaceRoot -Parent)}
+    $canonicalPs=PowershellValues (Join-Path $ops 'laplace.env.ps1') '' $canonical
+    $canonicalPython=Run 'py' @('-3',(Join-Path $LaplaceRoot 'scripts/machine-env.py'),'--paths','--format','json','--checkout',$LaplaceRoot) $canonical | ConvertFrom-Json
+    if($canonicalPython.LAPLACE_BUILD_ROOT -ne $canonicalPs.LAPLACE_BUILD_ROOT -or $canonicalPs.LAPLACE_BUILD_ROOT -ne [IO.Path]::Combine($canonicalPs.LAPLACE_BUILD,'Laplace')){throw 'The canonical checkout selected a duplicate Python build tree.'}
     foreach ($bad in @("LAPLACE_BUILD=one`nLAPLACE_BUILD=two", 'this is not a configuration assignment')) {
         Set-Content -LiteralPath (Join-Path $scratch 'machine.env') -Value $bad
         foreach ($entry in @(
