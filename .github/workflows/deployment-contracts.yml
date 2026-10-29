@@ -31,9 +31,9 @@ jobs:
         run: pwsh -NoProfile -File tests/acceptance-runner.ps1
       - name: Verify installed modular client input and cache selection
         run: python tests/modular-client.py
-        - name: Verify runtime audit uses its owner without remote installation
-          shell: pwsh
-          run: pwsh -NoProfile -File tests/application-runtime-verification.ps1
+      - name: Verify runtime audit uses its owner without remote installation
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/application-runtime-verification.ps1
       - name: Verify running client version, ownership and release retention
         shell: pwsh
         run: pwsh -NoProfile -File tests/desktop-clients.ps1
