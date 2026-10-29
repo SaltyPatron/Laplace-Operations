@@ -5,6 +5,8 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/../secrets/process.ps1"
 . "$PSScriptRoot/credentials.ps1"
 $config = Read-DevelopmentConfig $Installation
+$keyRing=Initialize-DevelopmentKeyRing
+Write-Host "Persistent browser key ring: $keyRing"
 if($config.PSObject.Properties['authentication'] -and $config.authentication -eq 'sspi'){
     & "$PSScriptRoot/configure-windows.ps1" -Installation $Installation
     return

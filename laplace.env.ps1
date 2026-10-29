@@ -29,6 +29,7 @@ else { $env:LAPLACE_CONFIG_SOURCE = 'defaults' }
 Set-Default LAPLACE_DATA_ROOT (Join-Path $env:LOCALAPPDATA 'Laplace')
 Set-Default LAPLACE_SRC     (Join-Path $env:USERPROFILE 'source\repos')
 Set-Default LAPLACE_WORK    "$env:LAPLACE_DATA_ROOT\work"
+Set-Default LAPLACE_DEPLOY  "$env:LAPLACE_DATA_ROOT\deploy"
 Set-Default LAPLACE_BUILD   "$env:LAPLACE_WORK\build"
 $checkout = if ($env:LAPLACE_ROOT) { $env:LAPLACE_ROOT } else { [IO.Path]::Combine($env:LAPLACE_SRC, 'Laplace') }
 $checkout = [IO.Path]::GetFullPath($checkout).TrimEnd('\').ToLowerInvariant()

@@ -84,7 +84,7 @@ $env:LAPLACE_BILLING_STORE = 'postgres'
 $env:LAPLACE_API_PORT = [string]$apiPort
 $env:LAPLACE_PUBLIC_BASE_URL = "http://localhost:$apiPort"
 $env:LAPLACE_OPS_LOG_DIR = Join-Path $work 'logs'
-$env:LAPLACE_DATA_PROTECTION_KEYS = Join-Path $env:LAPLACE_WORK 'development/keys'
+$env:LAPLACE_DATA_PROTECTION_KEYS = Initialize-DevelopmentKeyRing
 Remove-Item Env:LAPLACE_AUTH_DEV_PRINCIPAL,Env:LAPLACE_API_KEY -ErrorAction SilentlyContinue
 $receipt = [ordered]@{ source=$SourcePath; revision=(& git -C $SourcePath rev-parse HEAD); dirty_source=[bool]@(& git -C $SourcePath status --porcelain --untracked-files=no);
     build_root=$env:LAPLACE_BUILD_ROOT; base_url=$env:LAPLACE_PUBLIC_BASE_URL; substrate_database=$config.substrate_database;

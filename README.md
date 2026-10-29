@@ -373,6 +373,15 @@ visibility keeps affected releases. Concurrent publishers prevent collection. Re
 under `$LAPLACE_WORK/operations/storage-*.json` list removed paths and drive free space
 before and after; logical hardlink lengths are never reported as reclaimed disk space.
 
+`LAPLACE_WORK` is disposable working data. Installed PostgreSQL extensions and
+their selected perf-caches use `LAPLACE_DEPLOY` (by default
+`$LAPLACE_DATA_ROOT/deploy`); PostgreSQL's own logs use `$LAPLACE_PGDATA/log`.
+Development and IIS share the installation's persistent `state/keys` key ring.
+Development setup/start preserves legacy `work/development/keys` XML, including
+revocations, by a verified merge that refuses conflicting key IDs. Source recovery
+archives belong outside the work tree as well. Recreating work directories must
+not require restoring application secrets or source history.
+
 Completed desktop deployment, component, development build/run/verification, database and named-test histories are bounded:
 three successful runs and one failed run per operation and target (database operations
 are grouped by host, database and command). Storage receipts rotate through the same

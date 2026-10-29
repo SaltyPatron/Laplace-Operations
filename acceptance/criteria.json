@@ -455,7 +455,7 @@
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "tests/development-credentials.ps1"],
           "timeout_seconds": 60,
-          "evidence": "Real Windows DPAPI encryption, preservation of an existing enrollment, wrong-target refusal and corrupt-file refusal. Live policy enforcement is a separate check."
+          "evidence": "Real Windows DPAPI encryption, preservation of existing enrollment, persistent key/revocation migration with key-ID conflict refusal, and wrong-target/corrupt-file refusal. Live policy enforcement is a separate check."
         },
         {
           "id": "platform-access-resolution",

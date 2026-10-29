@@ -33,6 +33,7 @@ try {
 LAPLACE_SRC="Z:\sources & tests"
 LAPLACE_DATA=Y:\corpora
 LAPLACE_WORK=Y:\state\work
+LAPLACE_DATA_ROOT=Y:\state
 LAPLACE_BUILD=X:\build roots
 LAPLACE_PGDATA=Y:\state\pgdata
 LAPLACE_PGWAL=W:\wal
@@ -47,7 +48,7 @@ if errorlevel 1 exit /b 1
 set LAPLACE
 if defined PGPASSWORD exit /b 9
 "@ | Set-Content -LiteralPath $batch
-    foreach ($override in @(@{}, @{ LAPLACE_BUILD_ROOT = 'V:\override build'; LAPLACE_PGUSER = 'operator_login' })) {
+    foreach ($override in @(@{}, @{ LAPLACE_BUILD_ROOT = 'V:\override build'; LAPLACE_PGUSER = 'operator_login'; LAPLACE_DEPLOY = 'V:\installed deployment' })) {
         $ps = PowershellValues (Join-Path $ops 'laplace.env.ps1') '' $override
         $cmd = @{}
         foreach ($line in ((Run 'cmd.exe' @('/d','/c',$batch) $override) -split '\r?\n')) {
@@ -64,6 +65,8 @@ if defined PGPASSWORD exit /b 9
         }
         if ($ms.LaplaceBuildWin -ne $ps.LAPLACE_ENGINE_BUILD) { throw 'MSBuild native copy uses a different engine tree' }
         if (-not $ms.BaseOutputPath.StartsWith($ps.LAPLACE_BUILD_ROOT)) { throw 'Managed outputs escaped the configured build root' }
+        $deployed=if($override.ContainsKey('LAPLACE_DEPLOY')){$override.LAPLACE_DEPLOY}else{'Y:\state\deploy'}
+        foreach($values in $ps,$cmd,$monoPs){if($values.LAPLACE_DEPLOY -ne $deployed){throw 'Installed PostgreSQL overlay did not select persistent state consistently.'}}
     }
     foreach ($bad in @("LAPLACE_BUILD=one`nLAPLACE_BUILD=two", 'this is not a configuration assignment')) {
         Set-Content -LiteralPath (Join-Path $scratch 'machine.env') -Value $bad

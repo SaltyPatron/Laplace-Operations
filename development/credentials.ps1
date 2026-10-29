@@ -19,6 +19,51 @@ function Read-DevelopmentConfig([string]$Installation) {
     $c
 }
 
+function Initialize-DevelopmentKeyRing {
+    param([string]$DataRoot=$env:LAPLACE_DATA_ROOT,[string]$WorkRoot=$env:LAPLACE_WORK,
+          [string]$IisInstallation=$env:LAPLACE_IIS_INSTALLATION)
+    foreach($path in $DataRoot,$WorkRoot){
+        if(-not [IO.Path]::IsPathFullyQualified($path)){throw 'Development data and work roots must be absolute.'}
+    }
+    $service=Join-Path $DataRoot 'services/laplace-mono-api'
+    if($IisInstallation -and (Test-Path -LiteralPath $IisInstallation)){
+        $installed=Get-Content -LiteralPath $IisInstallation -Raw|ConvertFrom-Json
+        if(-not [IO.Path]::IsPathFullyQualified([string]$installed.directory)){throw 'The IIS service directory must be absolute.'}
+        $service=$installed.directory
+    }
+    $destination=[IO.Path]::GetFullPath((Join-Path $service 'state/keys'))
+    $work=[IO.Path]::GetFullPath($WorkRoot).TrimEnd('\','/')
+    if($destination -ieq $work -or $destination.StartsWith($work+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){
+        throw 'Persistent development keys must be outside the disposable work root.'
+    }
+    $legacy=Join-Path $work 'development/keys'
+    foreach($path in $destination,$legacy){
+        for($itemPath=$path;$itemPath;$itemPath=[IO.Path]::GetDirectoryName($itemPath)){
+            if((Test-Path -LiteralPath $itemPath) -and ((Get-Item -LiteralPath $itemPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){
+                throw "Key-ring migration cannot traverse a reparse point: $itemPath"
+            }
+        }
+    }
+    $files=if(Test-Path -LiteralPath $legacy -PathType Container){@(Get-ChildItem -LiteralPath $legacy -Filter '*.xml' -File)}else{@()}
+    # Preflight the entire merge: never replace a serving key or partially
+    # accept an inconsistent key ID. Preserve revocation XML alongside keys.
+    foreach($file in $files){
+        $target=Join-Path $destination $file.Name
+        if(($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+            ((Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target -Force).Attributes -band [IO.FileAttributes]::ReparsePoint))){throw 'Key-ring files must not be reparse points.'}
+        if((Test-Path -LiteralPath $target) -and (Get-FileHash -LiteralPath $target).Hash -ne (Get-FileHash -LiteralPath $file.FullName).Hash){
+            throw "Conflicting persistent key-ring file: $($file.Name)"
+        }
+    }
+    $null=New-Item -ItemType Directory -Path $destination -Force
+    foreach($file in $files){
+        $target=Join-Path $destination $file.Name
+        if(-not (Test-Path -LiteralPath $target)){[IO.File]::Copy($file.FullName,$target,$false)}
+        if((Get-FileHash -LiteralPath $target).Hash -ne (Get-FileHash -LiteralPath $file.FullName).Hash){throw "Key-ring copy verification failed: $($file.Name)"}
+    }
+    return $destination
+}
+
 function Get-DevelopmentCredentialPath($Config) {
     if ($Config.client -notmatch '^[a-z][a-z0-9-]*$') { throw 'Invalid development client name.' }
     if ($env:LAPLACE_DEVELOPMENT_CREDENTIALS) {

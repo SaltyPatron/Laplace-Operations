@@ -200,7 +200,7 @@ function TuneMBs([int64]$kb) { "$(TuneDiv $kb 1024)MB" }
 # Every setting, from the plan. The reasons are tune-pg.sh's.
 function TuneDeclared {
     $p = TunePlan
-    $logs = (Join-Path $env:LAPLACE_WORK 'logs\postgres') -replace '\\', '/'
+    $logs = (Join-Path $env:LAPLACE_PGDATA 'log') -replace '\\', '/'
     # the libraries loaded at start: each declared one only when its DLL is in the server's library directory or one of
     # LAPLACE_PG_LIBDIRS, since a name the server cannot load stops it at its next start; a missing one is said
     $libdirs = @(Join-Path $env:LAPLACE_PG_DIR 'lib') + @($env:LAPLACE_PG_LIBDIRS -split ';' | Where-Object { $_ })
