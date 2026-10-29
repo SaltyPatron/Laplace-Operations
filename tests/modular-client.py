@@ -221,6 +221,32 @@ class PackageReuse(unittest.TestCase):
         self.assertEqual(one.read_bytes(), b'first build')
         self.assertEqual(two.read_bytes(), b'first build')
 
+    def test_foreign_database_reader_is_refused_before_any_acl_write(self):
+        config={**self.config, 'socket': 'another-host', 'database_artifact_reader': 'S-1-5-20'}
+        with patch.object(self.package, 'run') as invoke, self.assertRaisesRegex(ValueError, 'local database host'):
+            self.package.ensure_release_access(config, self.release, 'S-1-5-21-1-2-3-1001')
+        invoke.assert_not_called()
+
+    @unittest.skipUnless(os.name == 'nt', 'NTFS access-control acceptance')
+    def test_database_reader_survives_another_publishers_hardlink_acl(self):
+        sid=self.package.run(['pwsh', '-NoProfile', '-Command', '[Security.Principal.WindowsIdentity]::GetCurrent().User.Value'])
+        config={**self.config, 'socket': socket.gethostname(), 'database_artifact_reader': 'S-1-5-20'}
+        cache=self.release / 'share/prepared/tier0.bin'
+        original=cache.read_bytes()
+        other=self.root / 'another-publisher.bin'
+        os.link(cache, other)
+        self.package.ensure_release_access(config, self.release, sid)
+        # Another path to the same inode re-evaluates its parent inheritance.
+        self.package.run(['icacls.exe', str(other), '/inheritance:r'])
+        path=str(cache).replace("'", "''")
+        explicit=self.package.run(['pwsh', '-NoProfile', '-Command',
+            f"@((Get-Acl -LiteralPath '{path}').GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]) | "
+            "Where-Object {$_.IdentityReference.Value -eq 'S-1-5-20' -and $_.AccessControlType -eq 'Allow' -and ([int]$_.FileSystemRights -band 1)}).Count"])
+        self.assertGreater(int(explicit), 0)
+        self.assertEqual(cache.read_bytes(), original)
+        self.package.ensure_release_access(config, self.release, sid)
+        self.assertTrue(os.path.samefile(cache, other))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -42,6 +42,27 @@ def run(argv):
     return result.stdout.strip()
 
 
+def ensure_release_access(config, release, operator_sid):
+    """Hardlinked cache files need explicit readers, independent of any parent."""
+    if not re.fullmatch(r'S-1-[0-9-]+', operator_sid):
+        raise ValueError('Declare the Windows operator SID')
+    reader = config.get('database_artifact_reader')
+    if reader and (config['socket'].lower() != socket.gethostname().lower()
+                   or not re.fullmatch(r'S-1-[0-9-]+', reader)):
+        raise ValueError('A database artifact reader must select a Windows SID on the local database host')
+    prepared = release / 'share/prepared'
+    caches = [path for path in prepared.iterdir() if path.is_file()]
+    if any(path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()) for path in (release, prepared, *caches)):
+        raise ValueError('Installed cache access may not redirect through a link')
+    run(['icacls.exe', release, '/grant', '*' + operator_sid + ':(OI)(CI)(F)'])
+    if reader:
+        run(['icacls.exe', prepared, '/grant', '*' + reader + ':(OI)(CI)(RX)'])
+        # A publisher setting an ACL through another hardlink can replace
+        # inherited ACEs with its own parent's rules. Explicit grants survive.
+        for path in caches:
+            run(['icacls.exe', path, '/grant', '*' + operator_sid + ':(F)', '*' + reader + ':(R)'])
+
+
 def build_run(argv):
     # Build owners stream their own progress. Capturing an entire grammar build
     # hid minutes of work from the operator and discarded its useful live state.
@@ -199,6 +220,7 @@ def main():
                        *(['-Force'] if args.force else [])])
         reusable = reusable_release(config, revisions) if not args.force else None
         if reusable is not None:
+            ensure_release_access(config, reusable, operator_sid)
             print(json.dumps({'release': str(reusable), 'reused': True, 'copied': 0,
                               'installation': str(config['installed_config']), 'revisions': revisions}))
             return
@@ -251,11 +273,7 @@ def main():
             candidate.rename(release)
         # A private tempfile created while elevated can admit only the elevated
         # token. The operator's ordinary token must also read the published release.
-        run(['icacls.exe', release, '/grant', '*' + operator_sid + ':(OI)(CI)(RX)'])
-        if config.get('database_artifact_reader'):
-            if config['socket'].lower() != socket.gethostname().lower() or not re.fullmatch(r'S-1-[0-9-]+', config['database_artifact_reader']):
-                raise ValueError('A database artifact reader must select a Windows SID on the local database host')
-            run(['icacls.exe', release / 'share/prepared', '/grant', '*' + config['database_artifact_reader'] + ':(OI)(CI)(RX)'])
+        ensure_release_access(config, release, operator_sid)
         installed = {key: config[key] for key in ('schema', 'host', 'prefix', 'state', 'socket', 'port', 'database', 'threads', 'batch_mb', 'ucd')}
         installed.update(release=str(release), tier0=str(release / 'share/prepared/tier0.bin'),
                          flags=str(release / 'share/prepared/tier0.flags'), highway=str(release / 'share/prepared/tier0.highway'),
