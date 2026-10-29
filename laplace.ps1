@@ -152,6 +152,9 @@ if (-not $PSBoundParameters.ContainsKey('Target')) {
     $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
 }
 if (($Check -or $List) -and ($Operation -ne 'test' -or $Target -ne 'desktop')) { throw '-Check and -List select registered desktop tests; no operation was run.' }
+if ($PSBoundParameters.ContainsKey('Check') -and -not @($Check.Split(',')|Where-Object {$_.Trim()}).Count) { throw '-Check requires at least one registered check ID; no build or test was run.' }
+if (($Check -or $List) -and ($SourcePath -or $Installation)) { throw 'Registered checks declare their targets and use installed client selections; SourcePath and Installation do not override them.' }
+if ($Check -and $List) { throw 'Select -List or -Check, not both.' }
 if($PSBoundParameters.ContainsKey('Components') -and -not($Target -eq 'desktop' -and $Operation -in @('deploy','build'))){
     throw '-Components selects desktop build/deployment components; no operation was run.'
 }

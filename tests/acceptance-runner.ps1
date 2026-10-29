@@ -39,6 +39,8 @@ $hash = (Get-FileHash $existing).Hash
 Assert ($LASTEXITCODE -ne 0 -and (Get-FileHash $existing).Hash -eq $hash) 'Existing evidence was replaced'
 & pwsh -NoProfile -File $verifier -Manifest $manifest -Check unknown -Output (Join-Path $work 'unknown.json') *> $null
 Assert ($LASTEXITCODE -ne 0) 'Unknown check accepted'
+& pwsh -NoProfile -File $verifier -Manifest $manifest -Check ',' -Output (Join-Path $work 'empty.json') *> $null
+Assert ($LASTEXITCODE -ne 0 -and -not (Test-Path (Join-Path $work 'empty.json'))) 'An empty named selection ran every check'
 'Acceptance receipt failure boundaries and owned scratch cleanup: passed'
 } finally {
     . "$PSScriptRoot/../installation/storage.ps1"

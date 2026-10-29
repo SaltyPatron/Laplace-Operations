@@ -43,7 +43,8 @@ if ($List) {
 if (-not $Output) { throw '-Output is required so every run has a persistent receipt' }
 $outputPath = [IO.Path]::GetFullPath($Output)
 if (Test-Path -LiteralPath $outputPath) { throw "Refusing to replace an existing receipt: $outputPath" }
-$selectedIds = @($Check | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
+$selectedIds = @($Check | ForEach-Object { $_ -split ',' } | ForEach-Object {$_.Trim()} | Where-Object { $_ })
+if ($PSBoundParameters.ContainsKey('Check') -and -not $selectedIds.Count) { throw '-Check requires at least one registered check ID.' }
 foreach ($id in $selectedIds) { if (-not $ids.Contains($id)) { throw "Unknown check: $id" } }
 
 function RunCheck($item) {
