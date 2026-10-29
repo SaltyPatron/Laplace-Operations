@@ -32,6 +32,7 @@ param(
     [switch]$Json,
     [string]$Check,
     [switch]$List,
+    [switch]$Installed,
     [ValidateSet('status','verify')][string]$ClientOperation = 'status',
     [ValidateSet('status','clean')][string]$StorageOperation = 'status',
     [Alias('h')][switch]$Help,
@@ -91,6 +92,7 @@ LOCAL DESKTOP DEVELOPMENT (http://localhost:5187)
   laplace-ops start | stop | status   Manage the background local desktop server
   laplace-ops logs                    Tail logs from the active background local desktop server
   laplace-ops verify desktop          Verify the local desktop server (reuses running instance or cold-starts)
+  laplace-ops verify desktop -Installed  Verify the installed IIS package, readiness, authenticated SQL, Native and UI assets without a build
 
 LOCAL DESKTOP IIS & DATABASE MAINTENANCE (https://dev.hartonomous.com)
   laplace-ops deploy desktop          Package modular CLI/MCP, publish IIS, migrate, and verify installed and running releases
@@ -162,6 +164,7 @@ if($Force -and -not(($Target -eq 'desktop' -and $Operation -in @('deploy','build
     throw '-Force rebuilds desktop components or explicitly replaces staging native releases; no operation was run.'
 }
 if($Package -and -not($Target -eq 'desktop' -and $Operation -eq 'deploy')){throw '-Package selects a prepared desktop deployment; no operation was run.'}
+if($Installed -and -not($Target -eq 'desktop' -and $Operation -eq 'verify')){throw '-Installed selects desktop runtime verification; no operation was run.'}
 if ($Plan -and -not ($Operation -in 'deploy','repair-postgres' -and $Target -eq 'desktop')) {
     throw '-Plan is supported by deploy and repair-postgres on desktop; no operation was run.'
 }
@@ -388,7 +391,12 @@ if ($SourcePath -and $Target -ne 'desktop') {
 }
 if ($Operation -in 'start','stop','logs' -or ($Operation -in 'status','verify' -and $Target -eq 'desktop')) {
     if ($PSBoundParameters.ContainsKey('Target') -and $Target -ne 'desktop') { throw "$Operation is a desktop lifecycle operation; use the deployment operator for another target." }
-    $localArgs=@('-NoProfile','-File',"$PSScriptRoot/development/control.ps1",'-Operation',$Operation)
+    if($Installed){
+        if($Operation -ne 'verify'){throw '-Installed selects desktop verification.'}
+        $localArgs=@('-NoProfile','-File',"$PSScriptRoot/installation/Verify-DesktopRuntime.ps1")
+    }else{
+        $localArgs=@('-NoProfile','-File',"$PSScriptRoot/development/control.ps1",'-Operation',$Operation)
+    }
     if ($SourcePath) { $localArgs+=@('-SourcePath',$SourcePath) }
     & pwsh @localArgs
     $code=$LASTEXITCODE

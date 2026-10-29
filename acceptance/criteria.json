@@ -182,6 +182,14 @@
           "evidence": "Actual configured desktop source build: native libraries, monorepo-owned ReadyToRun CLI publication and execution without developer environment variables, managed solution, web assets and native/runtime tests. Installed IIS and database behavior are verified separately."
         },
         {
+          "id": "desktop-installed-runtime",
+          "platform": "windows",
+          "argv": ["pwsh", "-NoProfile", "-File", "installation/Verify-DesktopRuntime.ps1"],
+          "timeout_seconds": 180,
+          "scratch": true,
+          "evidence": "Read the installed IIS package and ANCM selection, hash its complete closure, require actual readiness, and execute authenticated SQL, Native storage and UI asset requests without rebuilding, publishing or starting another application."
+        },
+        {
           "id": "desktop-runtime",
           "platform": "windows",
           "argv": ["pwsh", "-NoProfile", "-File", "laplace.ps1", "verify", "-Target", "desktop"],

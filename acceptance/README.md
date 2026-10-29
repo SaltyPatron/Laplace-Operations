@@ -5,6 +5,11 @@ versioned operational outcomes, responsible repositories, dependencies, required
 The [audit](../docs/2026-10-10-system-audit.md#expanded-installation-delivery-and-resource-audit) explains why they exist.
 These operational criteria do not replace Laplace's product specification.
 
+`laplace-ops verify desktop -Installed` and the registered
+`desktop-installed-runtime` check verify the serving IIS release without a build
+or a second application process. `desktop-runtime` and `desktop-lifecycle`
+separately exercise the source-run localhost application and require its build.
+
 List the checks with `laplace-ops test -List`. Run selected checks with
 `laplace-ops test -Check <id,...>`. This reuses the registry runner and records
 the run under the declared `LAPLACE_WORK/operations/test-*/receipt.json` without
