@@ -90,6 +90,13 @@ def select_manifest():
     return None
 
 
+def installed_configuration(config):
+    live = config_load(config['installed_config'])
+    if any(config[key] != live[key] for key in config if key not in ('source', 'operator_client')):
+        raise ValueError('Installation configuration changed; run setup before deployment')
+    return live
+
+
 def atomic(path, text, mode=0o644):
     path = Path(path)
     if any(p.is_symlink() for p in (path, *path.parents)):
@@ -631,9 +638,12 @@ def main():
     parser.add_argument('config', nargs='?', help='Installed declaration for converge; a checkout run selects the host declaration')
     parser.add_argument('--manifest')
     parser.add_argument('--source')
+    parser.add_argument('--database', help='For select: return the declaration only when its database matches')
     parser.add_argument('--rebuild', action='store_true',
                         help='Clean-build, verify and replace prior native releases; reconnect old clients')
     args = parser.parse_args()
+    if args.database is not None and args.operation != 'select':
+        parser.error('--database applies only to select')
     if args.rebuild and (args.operation != 'deploy' or os.environ.get('GITHUB_ACTIONS') != 'true'):
         raise ValueError('Native release replacement is an explicit CI deployment operation')
     # The installed helper is a root-owned copy of this file. It converges the declaration path
@@ -643,6 +653,8 @@ def main():
         return
     manifest = Path(args.manifest) if args.manifest else select_manifest()
     if args.operation == 'select':
+        if manifest and args.database and config_load(manifest)['database'] != args.database:
+            return
         print(manifest or '')
         return
     if manifest is None:
@@ -665,9 +677,7 @@ def main():
             prepare(config)
             provision_token(config)
         else:
-            live = config_load(config['installed_config'])
-            if any(config[k] != live[k] for k in config if k not in ('source', 'operator_client')):
-                raise ValueError('Installation configuration changed; run setup before deployment')
+            installed_configuration(config)
             if not all(path.is_file() for path in (UNITS / UNIT, Path(config['environment_file']),
                     UNITS / 'laplace-modular-mcp-restart.path')):
                 raise ValueError('Modular installation is incomplete; run sudo ./setup.sh before deployment')

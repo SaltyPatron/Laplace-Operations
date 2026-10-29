@@ -93,7 +93,7 @@ if [ -n "${LAPLACE_PREPARED_INPUTS:-}" ]; then
 fi
 [ -n "$(ls "$LAPLACE_GRAMMARS" 2>/dev/null)" ] || step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"   # compiled grammar dependencies; no resource admission
 step highway-fingerprint laplace highway --fingerprint
-modular_manifest=$(python3 "$here/installation/modular.py" select)
+modular_manifest=$(python3 "$here/installation/modular.py" select --database "$db")
 if [ -n "$modular_manifest" ]; then
   # The modular installer binds PostgreSQL to its immutable release and rolls
   # that selection back with failed activation. A build must not replace those
@@ -102,8 +102,8 @@ if [ -n "$modular_manifest" ]; then
 else
   step deploy   laplace deploy --configure-server-cache
 fi
-if [ -f /etc/laplace/modular.json ] && [ "${db:-laplace}" = laplace ]; then
-  step modular-grants python3 -c 'import importlib.util,json; spec=importlib.util.spec_from_file_location("m","'"$here"'/installation/modular.py"); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); cfg=m.config_load("/etc/laplace/modular.json"); m.sql(cfg, m.grants(cfg))'
+if [ -n "$modular_manifest" ]; then
+  step modular-grants python3 -c 'import importlib.util,sys; from pathlib import Path; spec=importlib.util.spec_from_file_location("m",Path(sys.argv[1])/"installation/modular.py"); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); cfg=m.installed_configuration(m.config_load(sys.argv[2])); m.sql(cfg,m.grants(cfg))' "$here" "$modular_manifest"
 fi
 step status     laplace status
 ss -ltn 2>/dev/null | grep -q "0.0.0.0:5432\|\*:5432" || echo "
