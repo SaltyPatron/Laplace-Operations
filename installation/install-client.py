@@ -56,7 +56,7 @@ def main():
                 raise ValueError('Installed recipe resources failed: ' + verification.stderr.strip())
             if operation == ['status'] and verification.stdout.count("the same as this engine's") != 2:
                 raise ValueError('Installed modular database must match both Engine artifact fingerprints: ' + verification.stdout.strip())
-        mcp_verification = (client.verify_mcp(executable, client.process_environment(environment))
+        mcp_verification = (client.verify_mcp(executable, client.process_environment(environment), database=description['database'])
                             if 'Laplace-MCP' in description['revisions'] else {'status': 'not_packaged'})
         if args.configuration.exists() and json.loads(args.configuration.read_text()).get('schema') != profile['schema']:
             raise ValueError('Refusing to replace a configuration belonging to another application')

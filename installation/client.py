@@ -94,8 +94,8 @@ def selected(configuration):
         'work': str(work), 'data': str(data), 'inputs': inputs, 'revisions': package['revisions']}
 
 
-def verify_mcp(executable, environment):
-    """Exercise the installed native stdio server, including a real tool call."""
+def verify_mcp(executable, environment, *, database):
+    """Verify composition and SQL readback through the installed native server."""
     mcp = executable.with_name('lpm.exe' if os.name == 'nt' else 'lpm')
     if not mcp.is_file():
         raise ValueError('Installed modular MCP is missing: ' + str(mcp))
@@ -107,14 +107,16 @@ def verify_mcp(executable, environment):
         {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
         {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
          'params': {'name': 'text', 'arguments': {'input': 'Laplace'}}},
+        {'jsonrpc': '2.0', 'id': 4, 'method': 'tools/call',
+         'params': {'name': 'ingest_status', 'arguments': {'source': '__laplace_installation_readback__'}}},
     ]
     result = subprocess.run([str(mcp), 'mcp'], input=''.join(json.dumps(message) + '\n' for message in messages),
                             env=environment, capture_output=True, text=True, timeout=30)
     if result.returncode:
         raise ValueError('Installed modular MCP failed: ' + result.stderr.strip())
     replies = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
-    if len(replies) != 3 or [reply.get('id') for reply in replies] != [1, 2, 3] or any('error' in reply for reply in replies):
-        raise ValueError('Installed modular MCP did not complete initialization, discovery and text')
+    if len(replies) != 4 or [reply.get('id') for reply in replies] != [1, 2, 3, 4] or any('error' in reply for reply in replies):
+        raise ValueError('Installed modular MCP did not complete initialization, discovery, text and database readback')
     if replies[0].get('result', {}).get('serverInfo', {}).get('name') != 'laplace':
         raise ValueError('Installed modular MCP identified another server')
     tools = {tool['name'] for tool in replies[1].get('result', {}).get('tools', [])}
@@ -122,7 +124,18 @@ def verify_mcp(executable, environment):
     text = [item.get('text', '') for item in call.get('content', []) if item.get('type') == 'text']
     if not {'text', 'ingest_status', 'recipe_plan'}.issubset(tools) or call.get('isError') or not any(value.strip() for value in text):
         raise ValueError('Installed modular MCP discovery or text tool failed')
-    return {'initialize': 'passed', 'tools': len(tools), 'text': 'passed', 'executable': str(mcp)}
+    readback = replies[3].get('result', {})
+    try:
+        values = [json.loads(item['text']) for item in readback.get('content', []) if item.get('type') == 'text']
+    except (ValueError, KeyError, TypeError) as error:
+        raise ValueError('Installed modular MCP database readback is invalid') from error
+    if (readback.get('isError') or len(values) != 1 or not isinstance(values[0], dict)
+            or values[0].get('error') or values[0].get('database') != database
+            or not isinstance(values[0].get('sources'), list)
+            or not isinstance(values[0].get('activity'), list)):
+        raise ValueError('Installed modular MCP could not read the selected database: ' + database)
+    return {'initialize': 'passed', 'tools': len(tools), 'text': 'passed',
+            'database_readback': 'passed', 'database': database, 'executable': str(mcp)}
 
 
 def process_environment(environment):

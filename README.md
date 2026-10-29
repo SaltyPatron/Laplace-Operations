@@ -331,7 +331,9 @@ It reports each stage, retains its full output, and writes a combined receipt un
 declared modular Native/Engine/MCP stack using the same installer as `components desktop`
 and `setup.ps1 client`. Before selecting a modular release, acceptance exercises native
 composition, database/cache agreement, recipe discovery, MCP initialization, tool discovery
-and an actual MCP `text` call. Success is printed after these checks,
+and actual MCP `text` and `ingest_status` calls. MCP readback must report the selected
+database; connection, schema and tool errors fail acceptance. This read-only probe
+does not require a populated corpus or establish code-search coverage. Success is printed after these checks,
 both database migrations, publication and desktop verification pass. Migrations use
 the staged package's runtime before IIS selects its new application binary. A failed stage
 returns a nonzero exit code with its log path; compiler/npm warnings remain visible

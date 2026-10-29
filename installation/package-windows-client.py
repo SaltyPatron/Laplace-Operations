@@ -295,7 +295,7 @@ def main():
             # The candidate MCP must initialize and execute a native tool before
             # changing the installed selection used by future client connections.
             if has_mcp:
-                client.verify_mcp(executable, environment)
+                client.verify_mcp(executable, environment, database=config['database'])
             os.replace(pending, destination)
         finally:
             client_candidate.unlink(missing_ok=True)

@@ -101,25 +101,41 @@ class ClientInputs(unittest.TestCase):
         for file in destination.iterdir():
             self.assertEqual(file.read_bytes(), (source / file.name).read_bytes())
 
-    def test_mcp_installation_requires_initialization_discovery_and_successful_tool(self):
+    def test_mcp_installation_requires_composition_and_selected_database_readback(self):
         executable, environment, _ = self.select()
         executable.with_name('lpm.exe' if os.name == 'nt' else 'lpm').touch()
         replies = [
             {'id': 1, 'result': {'serverInfo': {'name': 'laplace'}}},
             {'id': 2, 'result': {'tools': [{'name': name} for name in ('text', 'ingest_status', 'recipe_plan')]}},
             {'id': 3, 'result': {'content': [{'type': 'text', 'text': 'real composition'}]}},
+            {'id': 4, 'result': {'content': [{'type': 'text', 'text': json.dumps({
+                'database': 'selected', 'sources': [], 'activity': []})}]}},
         ]
         def response(values):
             return SimpleNamespace(returncode=0, stderr='', stdout='\n'.join(json.dumps(value) for value in values))
         with patch.object(client.subprocess, 'run', return_value=response(replies)) as invoke:
-            self.assertEqual(client.verify_mcp(executable, environment)['text'], 'passed')
+            checked = client.verify_mcp(executable, environment, database='selected')
+            self.assertEqual(checked['text'], 'passed')
+            self.assertEqual(checked['database_readback'], 'passed')
             request = [json.loads(line) for line in invoke.call_args.kwargs['input'].splitlines()]
-            self.assertEqual(request[-1]['params'], {'name': 'text', 'arguments': {'input': 'Laplace'}})
-        for invalid in (replies[:2], [*replies[:2], {'id': 3, 'result': {'isError': True, 'content': [{'type': 'text', 'text': 'failed'}]}}],
-                        [*replies[:2], {'id': 3, 'result': {'content': [{'type': 'text', 'text': ''}]}}]):
+            self.assertEqual(request[-2]['params'], {'name': 'text', 'arguments': {'input': 'Laplace'}})
+            self.assertEqual(request[-1]['params']['name'], 'ingest_status')
+        for invalid in (replies[:3],
+                        [*replies[:2], {'id': 3, 'result': {'isError': True}}, replies[3]],
+                        [*replies[:2], {'id': 3, 'result': {'content': [{'type': 'text', 'text': ''}]}}, replies[3]],
+                        [*replies[:3], {'id': 4, 'error': {'code': -32603, 'message': 'SQL failed'}}],
+                        [*replies[:3], {'id': 4, 'result': {'isError': True}}]):
             with self.subTest(invalid=invalid), patch.object(client.subprocess, 'run', return_value=response(invalid)):
                 with self.assertRaisesRegex(ValueError, 'Installed modular MCP'):
-                    client.verify_mcp(executable, environment)
+                    client.verify_mcp(executable, environment, database='selected')
+        for value in ({'database': 'another', 'sources': [], 'activity': []},
+                      {'database': 'selected', 'error': 'missing witness relation', 'sources': [], 'activity': []},
+                      {'database': 'selected', 'sources': []}, [], 'not JSON'):
+            payload = value if value == 'not JSON' else json.dumps(value)
+            invalid = [*replies[:3], {'id': 4, 'result': {'content': [{'type': 'text', 'text': payload}]}}]
+            with self.subTest(readback=value), patch.object(client.subprocess, 'run', return_value=response(invalid)):
+                with self.assertRaisesRegex(ValueError, 'Installed modular MCP'):
+                    client.verify_mcp(executable, environment, database='selected')
 
 
 class PackageReuse(unittest.TestCase):
