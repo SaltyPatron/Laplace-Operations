@@ -70,6 +70,8 @@ class Storage(unittest.TestCase):
         os.link(shared, self.active / 'grammar.so')
         os.link(shared, self.old / 'grammar.so')
         os.link(expired, self.old / 'highway.bin')
+        # Adding the payload changes directory mtime; this remains the oldest release.
+        os.utime(self.old, (1, 1))
         with (store / '.build.lock').open('a+b') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             storage.collect(self.plan())
