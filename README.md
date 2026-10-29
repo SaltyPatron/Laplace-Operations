@@ -10,7 +10,7 @@ Start with the [installation map](docs/installation-map.md): repositories, envir
 locations and known broken entry points. It distinguishes observed installations from intended behavior.
 
 For the current monorepo application's staging-to-production delivery and installed-runtime checks, use
-[Operating Laplace](docs/operating-laplace.md). The commands below describe the older split-repository deployment.
+[Operating Laplace](docs/operating-laplace.md). The commands below describe the active modular stack.
 
 The modular MCP is a separate installed service: `laplace-modular-mcp.service`,
 with its matching Engine packaged beside it. `sudo ./setup.sh` includes it when
@@ -24,7 +24,10 @@ candidate verification. It does not ingest sources.
 After installation, `python3 installation/modular.py deploy` builds, packages,
 activates and verifies it without sudo. The Operations pipeline invokes the same
 command with immutable MCP/Native/Engine revisions. Failed activation restores the
-previous release. Receipts go to the declared `receipts` directory. Inspect the
+previous release and PostgreSQL's exact prior cache settings. PostgreSQL selects
+the immutable release's `share/prepared` files; build inputs do not replace those
+database bindings. Receipts include the selected paths and go to the declared
+`receipts` directory. Inspect the
 service with `systemctl status laplace-modular-mcp` and its logs with
 `journalctl -u laplace-modular-mcp`. This service is distinct from the monorepo's
 `laplace-mcp` and from Refactor; its acceptance does not establish either of those.
@@ -202,17 +205,27 @@ When an idle registered runner still uses work/build directories under its home,
 
 hart-server is the staging target for deployment rehearsal: build/install, schema changes, service operation and failure handling before production. A push to
 this repository's main, and a `repository_dispatch` (`main-merged`) that Laplace-Native, Laplace-postgres and
-Laplace-Engine send from their own `laplace.yml` once their CI passes on main, run `laplace.yml` here with every
-repository at its main, one deployment at a time (the concurrency group `hart-server-laplace`, which `ingest.yml` shares):
+Laplace-Engine send from their own `laplace.yml` once their CI passes on main, run `laplace.yml` here with a frozen
+component revision set. A component dispatch retains its exact triggering commit;
+other components select main. Engine CI and the verified Native cache artifact
+must qualify that selection. Deployments run one at a time (the concurrency group
+`hart-server-laplace`, which `ingest.yml` shares).
+
+Manual dispatch accepts `engine_revision` to retain an already qualified Engine
+while delivering an independent infrastructure repair. It requires a full commit
+in Engine's main history and the same real CI qualification as automatic delivery.
+An empty input selects latest main. `rebuild_runtime` remains an explicit request
+to discard reusable build outputs; ordinary delivery reuses them.
 
 | job | what |
 |---|---|
 | deploy | `seed-stamp.sh decide`, then `deploy.sh`, or `deploy.sh drop` when the database is reseeded |
 | checks | `verify.sh deployment`: extension version/tables and Engine/PostgreSQL artifact compatibility, with observed binary/artifact hashes |
 | ingest | only for an explicit reseed request: `ingest.sh` (every source of `LAPLACE_SOURCES`), then `seed-stamp.sh seeded` |
-| reads | `verify.sh reads`: `laplace status`, and `text`, `hop` and `translate` through the indexes |
+| reads | `verify.sh reads`, followed by modular packaging, activation and real authenticated MCP/Engine database verification |
 
-Production additionally waits for successful staging runtime reads. Missing cross-machine qualification records are still incomplete evidence, but are not a substitute for this infrastructure deployment gate.
+The modular workflow targets staging and optional cloud qualification. Production
+application promotion belongs to the monorepo delivery workflow.
 
 Each job writes what it found to the run's summary.
 
