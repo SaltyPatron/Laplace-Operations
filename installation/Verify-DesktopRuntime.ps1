@@ -19,16 +19,14 @@ try{
     $env:LAPLACE_OPERATOR_TOKEN=(Invoke-DevelopmentBao $config GET $path $token).data.data.operator_token
     if(-not $env:LAPLACE_OPERATOR_TOKEN){throw 'The enrolled verification credential is missing.'}
     Remove-Item Env:LAPLACE_API_KEY -ErrorAction SilentlyContinue
-    & $verifier -Installation $Installation -ReceiptDirectory $env:LAPLACE_ACCEPTANCE_RESULTS
     if($Browser){
         if(-not [IO.Path]::IsPathFullyQualified($env:LAPLACE_ACCEPTANCE_RESULTS)){throw 'The browser check requires a registered acceptance result directory.'}
         $base=$iis.origin.TrimEnd('/')
         $issued=Invoke-RestMethod "$base/v1/billing/operator/keys" -Method Post -ContentType application/json -Body '{"tenant":"deployment-verification","label":"installed-browser-verification"}' -Headers @{'X-Laplace-Operator-Token'=$env:LAPLACE_OPERATOR_TOKEN} -NoProxy -TimeoutSec 20
         if(-not $issued.key_prefix -or $issued.api_key -notlike 'sk-laplace-*'){throw 'Browser verification key issuance failed.'}
         $env:LAPLACE_API_KEY=$issued.api_key
-        & node (Join-Path $SourcePath 'web/scripts/verify-live-runtime.mjs') --base $base --output $env:LAPLACE_ACCEPTANCE_RESULTS --channel msedge
-        if($LASTEXITCODE -ne 0){throw 'Installed browser verification failed; see browser.json in the acceptance results.'}
     }
+    & $verifier -Installation $Installation -ReceiptDirectory $env:LAPLACE_ACCEPTANCE_RESULTS -Browser:$Browser
 }finally{
     try{
         if($issued -and $issued.key_prefix){
