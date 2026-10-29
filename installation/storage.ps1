@@ -365,6 +365,12 @@ function Assert-StorageTree([string]$Path, [string]$Root) {
     }
 }
 
+function Invoke-StorageDatabaseCleanup {
+    $databaseOutput=& py -3 "$PSScriptRoot/database-storage.py" --windows-config "$PSScriptRoot/hart-desktop-operator.json"
+    if($LASTEXITCODE){throw 'Native stage cleanup failed; inspect the database error above.'}
+    return @(($databaseOutput -join "`n") | ConvertFrom-Json)
+}
+
 function Invoke-DesktopStorageCleanup {
     param([Parameter(Mandatory)][string]$WorkRoot,[Parameter(Mandatory)][string]$BuildRoot,
           [Parameter(Mandatory)]$Modular,[Parameter(Mandatory)]$Iis,
@@ -392,6 +398,7 @@ function Invoke-DesktopStorageCleanup {
         $references = if ($PSBoundParameters.ContainsKey('DatabaseReferences')) { $DatabaseReferences } else { @(Get-StorageDatabaseReferences) }
         $buildReferences = if ($PSBoundParameters.ContainsKey('BuildReferences')) { $BuildReferences } else { @(Get-StorageBuildReferences $BuildRoot) }
         $plan = Get-DesktopStoragePlan -WorkRoot $WorkRoot -BuildRoot $BuildRoot -Modular $Modular -Iis $Iis -Processes $processes -Rollback $Rollback -DatabaseReferences $references -BuildReferences $buildReferences
+        $plan.database_cleanup=@(Invoke-StorageDatabaseCleanup)
         foreach ($entry in $plan.entries | Where-Object retire) {
             Assert-StorageTree $entry.path $entry.root
             if ($entry.marker -and -not (Read-StorageJson (Join-Path $entry.path $entry.marker))) { throw "Retirement marker changed: $($entry.path)" }

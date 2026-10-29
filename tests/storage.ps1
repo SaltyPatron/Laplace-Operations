@@ -2,6 +2,7 @@
 $ErrorActionPreference='Stop'
 $initialOwner=$env:LAPLACE_STORAGE_OWNER_PID
 . "$PSScriptRoot/../installation/storage.ps1"
+function Invoke-StorageDatabaseCleanup { return @([pscustomobject]@{database='fixture';status='passed';loads=@()}) }
 $root=Join-Path ([IO.Path]::GetTempPath()) ('laplace-storage-'+[guid]::NewGuid().ToString('N'))
 $null=New-Item -ItemType Directory -Path $root
 function Require($Value,[string]$Message) { if(-not $Value){throw $Message} }

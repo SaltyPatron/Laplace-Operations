@@ -19,6 +19,13 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def database_cleanup(config):
+    spec = importlib.util.spec_from_file_location('database_storage', ROOT / 'installation/database-storage.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.collect_declared(config)
+
+
 def foreign_job_active(owner):
     if not owner:
         return False
@@ -374,6 +381,7 @@ def cleanup_native(config, receipt, replace_unselected=False):
     state['opaque_processes'] = opaque
     state['notes'].extend(notes)
     try:
+        state['database_cleanup'] = database_cleanup(config)
         collect(state)
     except Exception as error:
         state.update(status='failed', error=str(error))
@@ -442,6 +450,8 @@ def main():
         state['notes'].extend(notes)
         try:
             if args.operation == 'clean':
+                if config:
+                    state['database_cleanup'] = database_cleanup(config)
                 collect(state)
                 if state['recovery_pending'] or state['delivery_held'] or (site / 'stage').exists() or (site / 'bundle').exists():
                     state['managed_application'] = 'preserved_delivery_or_recovery'
@@ -462,6 +472,7 @@ def main():
             temporary.write_text(json.dumps(state, indent=2) + '\n')
             temporary.replace(receipt)
     print(json.dumps(dict(status=state['status'], receipt=str(receipt), removed=len(state.get('removed', [])),
+                          native_relations=sum(load['relations'] for db in state.get('database_cleanup', []) for load in db['loads']),
                           retained=sum(not entry['retire'] for entry in state['entries']))))
 
 

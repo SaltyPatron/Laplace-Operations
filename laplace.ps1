@@ -187,6 +187,8 @@ if ($Operation -eq 'storage') {
         if ($StorageOperation -eq 'clean') {
             $delta=($state.drives | ForEach-Object {$_.free_bytes_after-$_.free_bytes_before} | Measure-Object -Sum).Sum
             Write-Host "Cleanup: $($state.removed.Count) unused outputs removed; $([math]::Round($delta/1GB,2)) GiB free-space increase across declared drives."
+            $stageRelations=(@($state.database_cleanup | ForEach-Object loads | ForEach-Object relations) | Measure-Object -Sum).Sum
+            Write-Host "Native staging: $([long]$stageRelations) disconnected-load relations retired."
         }
         else { $state.entries | Select-Object kind,retire,path,@{n='reason';e={$_.reasons -join ','}} | Format-Table -AutoSize }
         if ($state.receipt) { Write-Host "Storage receipt: $($state.receipt)" }

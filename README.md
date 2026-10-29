@@ -361,11 +361,19 @@ They do not define a historical package repository.
 
 `clean` also removes obsolete generated worktree builds and abandoned publisher scratch.
 Declared incremental profiles and builds belonging to registered Git worktrees are kept;
-source checkouts, database storage, corpora, perf-caches, indexes and diagnostic receipts
+source checkouts, canonical database content, corpora, perf-caches, indexes and diagnostic receipts
 are outside its deletion policy. Paths with junctions are rejected. Incomplete process
 visibility keeps affected releases. Concurrent publishers prevent collection. Receipts
 under `$LAPLACE_WORK/operations/storage-*.json` list removed paths and drive free space
 before and after; logical hardlink lengths are never reported as reclaimed disk space.
+
+Cleanup also invokes the installed Native load-retirement API using the declared
+local database identity. Private staging relations are reclaimed after their
+owning session disconnects; an idle live ingest retains its lease. The same
+operation runs after desktop and native deployment and at the next ingest
+startup. Unmarked staging tables and canonical content are preserved. Database
+results, including retired relation counts and allocations, appear in the
+cleanup receipt alongside the filesystem results.
 
 On the Ubuntu laptop, `bash setup.sh operator` registers `~/.local/bin/laplace-ops`.
 `laplace-ops clean` and `bash setup.sh clean` use its declared Linux work/build roots;
