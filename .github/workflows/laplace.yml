@@ -31,6 +31,7 @@ on:
       - '**/*.ps1'
       - 'installation/package-windows-client.py'
       - 'installation/artifact_store.py'
+      - 'installation/host-locks.py'
       - 'installation/hart-desktop-*.json'
       - 'development/installation.json'
   repository_dispatch:
