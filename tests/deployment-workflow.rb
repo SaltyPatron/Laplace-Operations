@@ -20,6 +20,18 @@ class DeploymentWorkflow < Minitest::Test
     %w[deploy checks reads].each { |job| assert_includes cloud.fetch('if'), "needs.#{job}.result == 'success'" }
     assert_includes cloud.fetch('if'), 'inputs.cloud == true'
   end
+  def test_trusted_deployment_orchestration_uses_the_existing_host_without_replacing_sibling_checkouts
+    runtime = YAML.load_file(File.expand_path('../.github/workflows/laplace.yml', __dir__))
+    refute runtime.fetch('on', runtime[true]).key?('pull_request')
+    %w[resolve qualify-engine].each do |name|
+      job = @jobs.fetch(name)
+      assert_equal %w[self-hosted laplace Laplace-Operations staging], job.fetch('runs-on')
+      assert_equal 'Laplace-Operations', job.fetch('defaults').fetch('run').fetch('working-directory')
+      checkout = job.fetch('steps').find { |step| step['uses']&.start_with?('actions/checkout@') }
+      assert_equal 'Laplace-Operations', checkout.fetch('with').fetch('path')
+      assert_equal false, checkout.fetch('with').fetch('persist-credentials')
+    end
+  end
   def test_both_targets_use_deployment_readback
     %w[checks checks-cloud].each do |name|
       steps=@jobs.fetch(name).fetch('steps')

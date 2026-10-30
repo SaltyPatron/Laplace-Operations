@@ -74,8 +74,13 @@ permissions:
   id-token: write
 jobs:
   resolve:
-    runs-on: ubuntu-24.04
+    # Only trusted main pushes, repository dispatches and explicit operations
+    # enter this workflow. Orchestration uses the existing delivery runner.
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: Laplace-Operations
     outputs:
       native: ${{ steps.refs.outputs.native }}
       native_run: ${{ steps.refs.outputs.native_run }}
@@ -86,6 +91,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          path: Laplace-Operations
       - name: Verify immutable revision and prepared input selection
         run: python3 tests/dependency-revisions.py
       - name: Resolve immutable dependency revisions
@@ -95,12 +101,16 @@ jobs:
         run: python3 .github/scripts/resolve-dependencies.py
   qualify-engine:
     needs: resolve
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: Laplace-Operations
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          path: Laplace-Operations
       - name: Require the selected Engine revision to build and pass its tests
         env:
           GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
