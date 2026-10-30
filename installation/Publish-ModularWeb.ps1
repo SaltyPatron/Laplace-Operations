@@ -54,6 +54,22 @@ if($LASTEXITCODE){throw 'Modular browser build failed.'}
 $null=New-Item -ItemType Directory -Path (Join-Path $publish 'native') -Force
 Copy-Item -LiteralPath $c.native.binary -Destination (Join-Path $publish 'native/lpm.exe')
 $nativeConfig=Join-Path $root 'state/native.json'
+# Qualify the application with a fresh Highway from the declared Native owner,
+# using the exact Tier-0 generation selected by this reader installation.
+# The artifact travels in the immutable release alongside its native consumer.
+$nativeInstallation=Get-Content -LiteralPath $nativeConfig -Raw|ConvertFrom-Json
+if(-not (Test-Path -LiteralPath $c.native.generator) -or -not (Test-Path -LiteralPath $c.native.manifest)){throw 'Build the declared native cache generator and provide its frozen manifest.'}
+$selectedPrepared=Join-Path $nativeInstallation.release 'share/prepared'
+$highway=Join-Path $publish 'native/tier0.highway'
+$cacheEnvironment=@{LAPLACE_TIER0=(Join-Path $selectedPrepared 'tier0.bin');LAPLACE_FLAGS=(Join-Path $selectedPrepared 'tier0.flags');LAPLACE_HIGHWAY=(Join-Path $selectedPrepared 'tier0.highway');LAPLACE_MANIFEST=$c.native.manifest;PATH=((Join-Path $nativeInstallation.release 'bin')+[IO.Path]::PathSeparator+$env:PATH)}
+$previousCacheEnvironment=@{}
+try{
+    foreach($key in $cacheEnvironment.Keys){$previousCacheEnvironment[$key]=[Environment]::GetEnvironmentVariable($key,'Process');[Environment]::SetEnvironmentVariable($key,$cacheEnvironment[$key],'Process')}
+    $cacheOutput=& $c.native.generator highway -o $highway 2>&1
+    $cacheOutput|Set-Content -LiteralPath (Join-Path $build 'native-cache-generation.log') -Encoding utf8NoBOM
+    if($LASTEXITCODE -ne 0){throw 'Native Highway generation failed; see native-cache-generation.log.'}
+}finally{foreach($key in $previousCacheEnvironment.Keys){[Environment]::SetEnvironmentVariable($key,$previousCacheEnvironment[$key],'Process')}}
+$cacheInputs=[ordered]@{tier0_sha256=(Get-FileHash -LiteralPath (Join-Path $selectedPrepared 'tier0.bin') -Algorithm SHA256).Hash.ToLowerInvariant();generator_sha256=(Get-FileHash -LiteralPath $c.native.generator -Algorithm SHA256).Hash.ToLowerInvariant();highway_sha256=(Get-FileHash -LiteralPath $highway -Algorithm SHA256).Hash.ToLowerInvariant()}
 # A Core sub-application inherits the parent's ANCM handler and selects its own process.
 $logs=Join-Path $root 'state/logs/iis'
 $webConfig=@"
@@ -144,6 +160,10 @@ try{
     if($catalog.database -cne $c.native.database -or $catalog.read_only -ne $true){throw 'Native reader is not connected read-only to the declared modular database.'}
     $lookup=Invoke-RestMethod ($base+'api/lookup?q=Laplace') -TimeoutSec 60
     if($lookup.database -cne $c.native.database -or $lookup.id -notmatch '^[a-f0-9]{32}$'){throw 'Live native lookup verification failed.'}
+    $cacheProbe=Invoke-RestMethod ($base+'api/lookup?q=NOUN') -TimeoutSec 60
+    if($cacheProbe.cache_tier -ne 2 -or $cacheProbe.canonical_tier -ne 2){throw 'The installed Highway and native text modality rules disagree.'}
+    $nativeSchema=Invoke-RestMethod ($base+'api/schema') -TimeoutSec 60
+    $cacheInputs['fingerprint']=$nativeSchema.highway
     $mono=Invoke-WebRequest ($origin.GetLeftPart([UriPartial]::Authority)+'/health') -TimeoutSec 15
     $m=[Microsoft.Web.Administration.ServerManager]::new()
     try{
@@ -158,7 +178,7 @@ try{
         [ordered]@{repository=$repository;revision=(& git -C $checkout rev-parse HEAD).Trim();working_changes=@(& git -C $checkout status --porcelain)}
     })
     $nativeInstallation=Get-Content -LiteralPath $nativeConfig -Raw|ConvertFrom-Json
-    $receipt=[ordered]@{status='verified';host=$env:COMPUTERNAME;utc=[DateTime]::UtcNow.ToString('o');origin=$base;release=$release;source_revision=$sourceRevision;source_changes=$sourceChanges;components=$components;directory=$destination;site=$c.site;application=$c.application;pool=$c.pool;bindings=$binding;identity='existing same-origin /v1/auth';data='native-live';database=$catalog.database;read_only=$catalog.read_only;native_resources=$nativeInstallation.release;native_binary_sha256=(Get-FileHash -LiteralPath $c.native.binary -Algorithm SHA256).Hash.ToLowerInvariant();mono_status=$mono.StatusCode;mono_directory=$monoPath;previous=$previous}
+    $receipt=[ordered]@{status='verified';host=$env:COMPUTERNAME;utc=[DateTime]::UtcNow.ToString('o');origin=$base;release=$release;source_revision=$sourceRevision;source_changes=$sourceChanges;components=$components;directory=$destination;site=$c.site;application=$c.application;pool=$c.pool;bindings=$binding;identity='existing same-origin /v1/auth';data='native-live';database=$catalog.database;read_only=$catalog.read_only;native_resources=$nativeInstallation.release;native_binary_sha256=(Get-FileHash -LiteralPath $c.native.binary -Algorithm SHA256).Hash.ToLowerInvariant();native_cache=$cacheInputs;mono_status=$mono.StatusCode;mono_directory=$monoPath;previous=$previous}
     $receiptFile=Join-Path $c.receipts ('deploy-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')+'.json')
     $receipt|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $receiptFile -Encoding utf8NoBOM
     $receipt|ConvertTo-Json -Depth 8|Set-Content -LiteralPath (Join-Path $root 'active.json') -Encoding utf8NoBOM
