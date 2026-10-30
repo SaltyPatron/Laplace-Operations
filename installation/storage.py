@@ -297,7 +297,7 @@ def plan(work, build, source, site, modular=None, references=None, unknown=False
 
 
 @contextmanager
-def host_lock(path):
+def host_lock(path, if_idle=False):
     import fcntl
     path = absolute(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -308,14 +308,21 @@ def host_lock(path):
     except (OSError, FileNotFoundError):
         same = False
     if same:
+        if os.environ.get('LAPLACE_HOST_LOCK_MODE') == 'shared':
+            if if_idle:
+                yield False
+                return
+            raise ValueError('Cleanup requires an exclusive host reservation; the inherited reservation is shared')
         fcntl.flock(8, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        yield
+        yield True
         return
     if path.is_symlink() or path.with_name(path.name + '.turnstile').is_symlink():
         raise ValueError('Host lock may not be a symlink')
     wait = os.environ.get('LAPLACE_HOST_LOCK_WAIT_SECONDS', '0') or '0'
     if wait != 'wait' and not wait.isdigit():
         raise ValueError('Invalid host lock deadline')
+    if if_idle:
+        wait = '0'
     deadline = None if wait == 'wait' else time.monotonic() + int(wait)
 
     def acquire(stream):
@@ -329,10 +336,16 @@ def host_lock(path):
                 time.sleep(.1)
 
     with path.with_name(path.name + '.turnstile').open('a') as turnstile, path.open('a') as lock:
-        acquire(turnstile)
-        acquire(lock)
+        try:
+            acquire(turnstile)
+            acquire(lock)
+        except BlockingIOError:
+            if not if_idle:
+                raise
+            yield False
+            return
         fcntl.flock(turnstile, fcntl.LOCK_UN)
-        yield
+        yield True
 
 
 def collect(state):
@@ -436,13 +449,23 @@ def cleanup_managed(source):
     return 'passed'
 
 
+def write_receipt(receipt, state):
+    receipt.parent.mkdir(parents=True, exist_ok=True)
+    temporary = receipt.with_name(receipt.name + '.tmp')
+    temporary.write_text(json.dumps(state, indent=2) + '\n')
+    temporary.replace(receipt)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('operation', choices=('begin', 'status', 'clean'))
     parser.add_argument('--finish-job', action='store_true', help='Retire completed/failed delivery staging, after all consumers')
+    parser.add_argument('--if-idle', action='store_true', help='Defer CI cleanup with a receipt when another operation holds the host')
     parser.add_argument('--receipt', type=Path)
     parser.add_argument('--modular-config', type=Path, default=Path('/etc/laplace/modular.json'))
     args = parser.parse_args()
+    if args.if_idle and args.operation != 'clean':
+        parser.error('--if-idle applies only to cleanup, never delivery ownership or auditing')
     work = absolute(os.environ.get('LAPLACE_WORK', '/repos/work'))
     build = absolute(os.environ.get('LAPLACE_BUILD', '/repos/build'))
     source = absolute(os.environ.get('LAPLACE_SRC', '/repos/src'))
@@ -454,7 +477,13 @@ def main():
         raise ValueError('Hosted cleanup runs through the storage GitHub Actions workflow; local cleanup is for developer machines')
     receipt = args.receipt or work / 'operations' / ('storage-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ') + '.json')
     lock = os.environ.get('LAPLACE_HOST_LOCK', os.environ.get('LAPLACE_LOCKS', str(work / 'locks')) + '/host-resource.lock')
-    with host_lock(lock):
+    with host_lock(lock, if_idle=args.if_idle) as acquired:
+        if not acquired:
+            state = dict(status='deferred', reason='host_reservation_busy', removed=[],
+                         host=socket.gethostname(), operation=args.operation, finish_job=args.finish_job)
+            write_receipt(receipt, state)
+            print(json.dumps(dict(status='deferred', reason=state['reason'], receipt=str(receipt), removed=0)))
+            return
         if args.operation == 'begin':
             if not contains(work, site) or site.is_symlink():
                 raise ValueError('Delivery work must use the declared work root')
@@ -494,10 +523,7 @@ def main():
             state.update(status='failed', error=str(error))
             raise
         finally:
-            receipt.parent.mkdir(parents=True, exist_ok=True)
-            temporary = receipt.with_name(receipt.name + '.tmp')
-            temporary.write_text(json.dumps(state, indent=2) + '\n')
-            temporary.replace(receipt)
+            write_receipt(receipt, state)
     print(json.dumps(dict(status=state['status'], receipt=str(receipt), removed=len(state.get('removed', [])),
                           native_relations=sum(load['relations'] for db in state.get('database_cleanup', []) for load in db['loads']),
                           retained=sum(not entry['retire'] for entry in state['entries']))))

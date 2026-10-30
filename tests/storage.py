@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -178,6 +179,56 @@ class Storage(unittest.TestCase):
             with self.assertRaises(BlockingIOError):
                 with storage.host_lock(self.work / 'locks/host-resource.lock'):
                     self.fail('competing cleanup acquired a held lock')
+
+    def test_ci_cleanup_defers_without_mutation_and_collects_when_idle(self):
+        stage = self.site / 'stage'
+        stage.mkdir()
+        (stage / 'payload').write_text('keep while busy')
+        lock = self.work / 'locks/host-resource.lock'
+        receipt = self.root / 'receipt.json'
+        environment = dict(os.environ, LAPLACE_WORK=str(self.work), LAPLACE_BUILD=str(self.build),
+                           LAPLACE_SRC=str(self.source), LAPLACE_SITE_WORK=str(self.site),
+                           LAPLACE_HOST_LOCK=str(lock), LAPLACE_HOST_LOCK_WAIT_SECONDS='wait',
+                           LAPLACE_APP_DIR=str(self.root / 'absent-app'), GITHUB_ACTIONS='true')
+        command = [sys.executable, storage.__file__, 'clean', '--if-idle', '--finish-job',
+                   '--receipt', str(receipt), '--modular-config', str(self.root / 'absent.json')]
+        with storage.host_lock(lock):
+            result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            state = json.loads(receipt.read_text())
+            self.assertEqual(state['status'], 'deferred')
+            self.assertEqual(state['removed'], [])
+            self.assertTrue((stage / 'payload').is_file())
+        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(json.loads(receipt.read_text())['status'], 'deferred')
+        self.assertFalse(stage.exists())
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux inherited flock descriptor metadata')
+    def test_inherited_shared_reservation_is_never_upgraded_or_dropped(self):
+        script = '''
+import fcntl, importlib.util, os, pathlib, sys
+spec = importlib.util.spec_from_file_location('storage', sys.argv[1])
+storage = importlib.util.module_from_spec(spec); spec.loader.exec_module(storage)
+path = pathlib.Path(sys.argv[2]); path.parent.mkdir(parents=True, exist_ok=True)
+descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+if descriptor != 8:
+    os.dup2(descriptor, 8); os.close(descriptor)
+fcntl.flock(8, fcntl.LOCK_SH)
+os.environ['LAPLACE_HOST_LOCK_MODE'] = 'shared'
+with storage.host_lock(path, if_idle=True) as acquired:
+    assert acquired is False
+try:
+    with storage.host_lock(path):
+        raise AssertionError('Mutable cleanup borrowed a reader reservation')
+except ValueError:
+    pass
+assert ' READ ' in pathlib.Path('/proc/self/fdinfo/8').read_text()
+'''
+        result = subprocess.run([sys.executable, '-c', script, storage.__file__,
+                                 str(self.work / 'locks/host-resource.lock')],
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_another_ci_run_owns_its_staging_between_steps(self):
         (self.site / 'stage').mkdir()

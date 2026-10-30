@@ -439,6 +439,11 @@ defers automatic history collection until the next operation. Cleanup failures a
 reported and fail an otherwise successful command. `laplace-ops clean` uses this same
 policy without rebuilding anything.
 
+Linux CI end-of-job collection uses `clean --if-idle`. A busy host produces a
+`deferred` receipt with zero removals; the next idle collection reclaims the
+retained outputs. Foreground cleanup retains its full host reservation. Cleanup
+never upgrades or releases an inherited reader reservation.
+
 Cleanup also invokes the installed Native load-retirement API using the declared
 local database identity. Private staging relations are reclaimed after their
 owning session disconnects; an idle live ingest retains its lease. The same
