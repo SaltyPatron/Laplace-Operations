@@ -1,0 +1,13 @@
+{
+  "schema": "laplace.modular-web-installation/v1",
+  "source": "E:/Repositories/Laplace/Laplace-MCP/web",
+  "build": "D:/Libraries/build/Laplace/Laplace-MCP/web",
+  "directory": "E:/Data/Laplace/services/laplace-modular-web",
+  "receipts": "E:/Data/Laplace/work/operations/modular-web",
+  "site": "laplace-mono",
+  "application": "/modular",
+  "pool": "laplace-modular-web",
+  "origin": "https://dev.hartonomous.com",
+  "identity_path": "/v1/auth",
+  "operator_declaration": "hart-desktop-operator.json"
+}

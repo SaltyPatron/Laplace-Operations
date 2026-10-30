@@ -1,5 +1,13 @@
 # Existing host repair
 
+The desktop modular browser has its own IIS publication declaration:
+`hart-desktop-modular-web.json`. From an elevated desktop operator shell, run
+`pwsh -File installation/Publish-ModularWeb.ps1` to build, activate and verify
+`https://dev.hartonomous.com/modular/` without switching the mono release.
+Receipts live under `E:/Data/Laplace/work/operations/modular-web`. The application
+uses the installed same-origin identity service; its current substrate screens
+are explicitly labelled captured data. See `Laplace-MCP/web/README.md`.
+
 From the updated Operations checkout on hart-server:
 
 ```sh
