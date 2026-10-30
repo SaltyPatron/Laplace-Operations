@@ -45,7 +45,8 @@ def inspect(lock, proc=Path('/proc')):
     keys = [f'{os.major(device):02x}:{os.minor(device):02x}:{inode}' for device, inode in targets]
     kernel = [line for line in (proc / 'locks').read_text().splitlines() if any(key in line.split() for key in keys)]
     return {'host': socket.gethostname(), 'observer_uid': os.geteuid(), 'locks': list(targets.values()),
-            'kernel_locks': kernel, 'descriptor_owners': owners, 'unobservable_processes': unobservable}
+            'kernel_locks': kernel, 'descriptor_owners': owners, 'unobservable_processes': unobservable,
+            'ownership_complete': unobservable == 0}
 
 
 def main():
