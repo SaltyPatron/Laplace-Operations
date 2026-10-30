@@ -23,7 +23,9 @@ def inspect(lock, proc=Path('/proc')):
                     stat = descriptor.stat()
                     target = targets.get((stat.st_dev, stat.st_ino))
                     if target:
-                        descriptors.append({'fd': int(descriptor.name), 'path': target})
+                        records = [line for line in (process / 'fdinfo' / descriptor.name).read_text().splitlines()
+                                   if line.startswith('lock:')]
+                        descriptors.append({'fd': int(descriptor.name), 'path': target, 'lock_records': records})
                 except FileNotFoundError:
                     pass
             if not descriptors:

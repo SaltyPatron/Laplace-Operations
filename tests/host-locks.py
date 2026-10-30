@@ -37,6 +37,7 @@ with open(sys.argv[1], 'r+') as lock:
                 self.assertEqual(owner['parent_pid'], os.getpid())
                 self.assertEqual(owner['job']['GITHUB_RUN_ID'], 'lock-owner-test')
                 self.assertTrue(any(item['path'] == str(lock) for item in owner['descriptors']))
+                self.assertTrue(any(item['lock_records'] for item in owner['descriptors']))
                 self.assertTrue(report['kernel_locks'])
                 self.assertEqual(report['ownership_complete'], report['unobservable_processes'] == 0)
                 serialized = json.dumps(report)
@@ -45,6 +46,11 @@ with open(sys.argv[1], 'r+') as lock:
             finally:
                 child.communicate(timeout=10)
             self.assertFalse(host_locks.inspect(lock)['kernel_locks'])
+            with lock.open() as unlocked:
+                report = host_locks.inspect(lock)
+                owner = next(item for item in report['descriptor_owners'] if item['pid'] == os.getpid())
+                descriptor = next(item for item in owner['descriptors'] if item['fd'] == unlocked.fileno())
+                self.assertEqual(descriptor['lock_records'], [], 'An open descriptor alone is not a held lock')
 
 
 if __name__ == '__main__':
