@@ -44,7 +44,7 @@
     "role": "ahart",
     "data": "E:/Data/Ingest",
     "source": "E:/Repositories/Laplace",
-    "models": "E:/Data/Laplace/models",
+    "models": "E:/Models",
     "work": "E:/Data/Laplace/work/clients/ahart/laplace",
     "configuration": "E:/Data/Laplace/clients/laplace/client.json",
     "connection": {
