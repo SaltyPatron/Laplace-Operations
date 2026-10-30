@@ -9,5 +9,14 @@
   "pool": "laplace-modular-web",
   "origin": "https://dev.hartonomous.com",
   "identity_path": "/v1/auth",
-  "operator_declaration": "hart-desktop-operator.json"
+  "operator_declaration": "hart-desktop-operator.json",
+  "native": {
+    "binary": "D:/Libraries/build/Laplace/Laplace-MCP/icx-release/lpm.exe",
+    "client_installation": "E:/Data/Laplace/clients/laplace/installation.json",
+    "database": "laplace",
+    "role": "laplace_modular_web",
+    "certificate": "E:/Data/Laplace/clients/laplace/postgresql-desktop-ca.pem",
+    "postgres_data": "E:/Data/Laplace/pgdata",
+    "psql": "D:/Libraries/postgresql/18.6/bin/psql.exe"
+  }
 }
