@@ -98,10 +98,10 @@ def validate_tree(path, root):
             raise ValueError('Cleanup may not cross a mounted filesystem: ' + directory)
 
 
-def process_references(prefix, opaque=None):
+def process_references(prefix, opaque=None, proc=Path('/proc')):
     """Use process identity, never a substring search of shell source text."""
     references, unknown = set(), False
-    for process in Path('/proc').iterdir():
+    for process in proc.iterdir():
         if not process.name.isdigit():
             continue
         name = 'unreadable'
@@ -122,7 +122,7 @@ def process_references(prefix, opaque=None):
                 unknown = unknown or executable is None
                 if executable is None and opaque is not None:
                     opaque.append(dict(pid=int(process.name), name=name, reason='executable_not_readable'))
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             continue  # process exited during the snapshot
         except PermissionError:
             unknown = True

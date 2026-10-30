@@ -56,6 +56,33 @@ class Storage(unittest.TestCase):
     def test_unknown_visibility_retains_native_releases(self):
         self.assertFalse(any(entry['retire'] for entry in self.plan(unknown=True)['entries']))
 
+    def test_process_snapshot_exit_races_and_unobservable_live_processes(self):
+        proc = self.root / 'proc'
+        target = self.active / 'test'
+        for pid in ('100', '200'):
+            process = proc / pid
+            process.mkdir(parents=True)
+            (process / 'comm').write_text('lpm')
+            (process / 'exe').symlink_to(target)
+            (process / 'cmdline').write_bytes(os.fsencode(target) + b'\0')
+        original = Path.read_bytes
+        for failure in (FileNotFoundError, ProcessLookupError, PermissionError):
+            with self.subTest(failure=failure):
+                def read(path):
+                    if path == proc / '100/cmdline':
+                        raise failure('process snapshot boundary')
+                    return original(path)
+                opaque = []
+                with patch.object(Path, 'read_bytes', read):
+                    references, unknown = storage.process_references(self.prefix, opaque, proc)
+                self.assertIn(target, references, 'The live consumer must remain protected')
+                self.assertEqual(unknown, failure is PermissionError)
+                self.assertEqual([entry['pid'] for entry in opaque], [100] if unknown else [])
+        # Only process disappearance is ignorable; actual I/O failures still fail collection.
+        with patch.object(Path, 'read_bytes', side_effect=OSError('I/O failure')):
+            with self.assertRaisesRegex(OSError, 'I/O failure'):
+                storage.process_references(self.prefix, proc=proc)
+
     def test_native_resources_share_immutable_blobs_and_orphans_follow_release_retirement(self):
         import hashlib
         import fcntl
