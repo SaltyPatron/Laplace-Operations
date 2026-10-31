@@ -33,6 +33,8 @@ jobs:
       - name: Verify Windows installer native argument boundaries
         shell: pwsh
         run: pwsh -NoProfile -File tests/windows-client-arguments.ps1
+      - name: Verify staged artifacts retain inherited operator access
+        run: python tests/artifact-access.py
       - name: Verify runtime audit uses its owner without remote installation
         shell: pwsh
         run: pwsh -NoProfile -File tests/application-runtime-verification.ps1
