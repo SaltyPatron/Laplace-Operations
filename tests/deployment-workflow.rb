@@ -40,12 +40,19 @@ class DeploymentWorkflow < Minitest::Test
       refute steps.any? { |step| step['continue-on-error'] }
     end
   end
-  def test_runtime_packaging_job_has_its_own_pinned_grammar_compiler
-    steps=@jobs.fetch('reads').fetch('steps')
-    toolchain=steps.index { |step| step['uses']&.start_with?('dtolnay/rust-toolchain@') }
-    package=steps.index { |step| step['name']=='Deploy and verify the installed modular runtime' }
-    assert toolchain && package && toolchain < package
-    assert_equal '1.90.0', steps.fetch(toolchain).fetch('with').fetch('toolchain')
+  def test_runtime_activation_precedes_required_compatibility_readback
+    [['deploy', 'checks'], ['deploy-cloud', 'checks-cloud']].each do |delivery, readback|
+      steps=@jobs.fetch(delivery).fetch('steps')
+      toolchain=steps.index { |step| step['uses']&.start_with?('dtolnay/rust-toolchain@') }
+      infrastructure=steps.index { |step| step['name']=='build/install prepared artifacts and deploy database infrastructure' }
+      activation=steps.index { |step| step['name']=='Deploy and verify the installed modular runtime' }
+      assert toolchain && infrastructure && activation && toolchain < infrastructure && infrastructure < activation
+      assert_equal '1.90.0', steps.fetch(toolchain).fetch('with').fetch('toolchain')
+      refute steps.fetch(activation)['continue-on-error']
+      assert_includes steps.fetch(activation).fetch('run'), 'installation/modular.py deploy'
+      assert_includes @jobs.fetch(readback).fetch('needs'), delivery
+    end
+    refute @jobs.fetch('reads').fetch('steps').any? { |step| step['run']&.include?('modular.py deploy') }
   end
   def test_explicit_ingestion_requires_successful_readback
     assert_includes @jobs.fetch('ingest').fetch('if'), "needs.checks.result == 'success'"
