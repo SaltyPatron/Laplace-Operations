@@ -50,6 +50,24 @@ read_state() {
   done <<< "$state"
 }
 verify_runtime() { "${verify[@]}" --release "$release" --output "$receipt/runtime.json"; }
+check_environment() {
+  # Resource paths are pinned again by the immutable executable launchers. Older
+  # installations legitimately retain their original fallback values here.
+  local line key value
+  declare -A installed=()
+  while IFS= read -r line || [[ -n $line ]]; do
+    [[ -z $line || $line == \#* ]] && continue
+    [[ $line =~ ^([A-Z_][A-Z_0-9]*)=(.*)$ ]] || fail 'Unsupported installed environment assignment'
+    installed[${BASH_REMATCH[1]}]=${BASH_REMATCH[2]}
+  done < "$environment"
+  while IFS='=' read -r key value; do
+    case $key in
+      PATH|LANG|LAPLACE_TIER0|LAPLACE_FLAGS|LAPLACE_HIGHWAY|LAPLACE_GRAMMARS|LAPLACE_ENGINE|LAPLACE_RECIPES|LAPLACE_MANIFEST|LAPLACE_FIRMWARE) continue ;;
+    esac
+    [[ -n ${installed[$key]+x} && ${installed[$key]} == "$value" ]] || fail "Installed service environment differs for $key"
+  done < "$expected_environment"
+}
+configuration_identity() { stat -c '%d:%i:%z' -- "$unit_file" "$environment" "$credential"; }
 check_configuration() {
   [[ $(hash_file "$unit_file") == "$unit_hash" &&
      $(hash_file "$environment") == "$environment_hash" &&
@@ -58,10 +76,11 @@ check_configuration() {
 write_record() {
   jq -n --arg release "$release" --arg link "$(link_identity)" --arg unit "$unit_hash" \
     --arg environment "$environment_hash" --arg credential "$credential_hash" \
+    --arg configuration "$(configuration_identity)" \
     --arg invocation "$invocation" --arg action "$1" --arg utc "$(date -u +%FT%TZ)" \
     '{schema:"laplace.modular-activation/v1",result:"passed",release:$release,link:$link,
       unit_sha256:$unit,environment_sha256:$environment,credential_sha256:$credential,
-      invocation:$invocation,action:$action,checked_utc:$utc}' > "$receipt/activation.json"
+      configuration:$configuration,invocation:$invocation,action:$action,checked_utc:$utc}' > "$receipt/activation.json"
 }
 
 [[ -d $release && ! -L $release ]] || fail 'Selected release must be a real directory'
@@ -74,7 +93,7 @@ selected=$(realpath -e -- "$current")
 [[ $(dirname "$selected") == "$releases" ]] || fail 'Current release is outside its installation'
 [[ ! -L $signal && ! -L $record ]] || fail 'Activation state must not redirect through a symlink'
 cmp -s -- "$unit_expected" "$unit_file" || fail 'Installed service unit differs from its declaration'
-cmp -s -- "$expected_environment" "$environment" || fail 'Installed service environment differs from its declaration'
+check_environment
 unit_hash=$(hash_file "$unit_file")
 environment_hash=$(hash_file "$environment")
 credential_hash=$(hash_file "$credential")
@@ -87,8 +106,10 @@ if [[ -f $record ]]; then
   if [[ $selected == "$release" && $active == active && -n $invocation && ! -e $signal ]] &&
      jq -e --arg release "$release" --arg link "$identity" --arg unit "$unit_hash" \
        --arg environment "$environment_hash" --arg credential "$credential_hash" \
+       --arg invocation "$invocation" --arg configuration "$(configuration_identity)" \
        '.release == $release and .link == $link and .unit_sha256 == $unit and
-        .environment_sha256 == $environment and .credential_sha256 == $credential' "$record" > /dev/null; then
+        .environment_sha256 == $environment and .credential_sha256 == $credential and
+        (.invocation == $invocation or .configuration == $configuration)' "$record" > /dev/null; then
     if verify_runtime; then
       read_state
       [[ $active == active && $invocation == "$before" && $(link_identity) == "$identity" && ! -e $signal ]] ||

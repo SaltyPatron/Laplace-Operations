@@ -10,8 +10,9 @@ mkdir -p "$work/bin" "$work/install with spaces/releases/old" "$work/install wit
 prefix="$work/install with spaces"
 ln -s releases/old "$prefix/current"
 printf 'declared unit\n' > "$work/unit"
-printf 'declared environment\n' > "$work/runtime/environment"
-cp "$work/runtime/environment" "$work/environment.expected"
+printf 'OMP_NUM_THREADS="4"\nLAPLACE_TIER0="/original/fallback/tier0.bin"\n' > "$work/runtime/environment"
+cp "$work/runtime/environment" "$work/environment.original"
+printf 'OMP_NUM_THREADS="4"\nLAPLACE_TIER0="/packaged/immutable/tier0.bin"\nLANG="C.UTF-8"\n' > "$work/environment.expected"
 printf 'fixture credential one\n' > "$work/runtime/secrets/modular-mcp.env"
 jq --arg prefix "$prefix" --arg environment "$work/runtime/environment" --arg signal "$work/restart" \
   '.prefix=$prefix | .environment_file=$environment | .restart_signal=$signal' \
@@ -106,9 +107,9 @@ stat -c '%d:%i:%z' "$prefix/current" > "$work/before-refusal"
 printf 'unexpected unit\n' > "$work/unit"
 if activate old unit-drift > "$work/unit-drift.log" 2>&1; then echo 'FAIL unit drift accepted' >&2; exit 1; fi
 cp "$work/expected-unit" "$work/unit"
-printf 'unexpected environment\n' > "$work/runtime/environment"
+printf 'OMP_NUM_THREADS="5"\n' > "$work/runtime/environment"
 if activate old environment-drift > "$work/environment-drift.log" 2>&1; then echo 'FAIL environment drift accepted' >&2; exit 1; fi
-cp "$work/environment.expected" "$work/runtime/environment"
+cp "$work/environment.original" "$work/runtime/environment"
 stat -c '%d:%i:%z' "$prefix/current" > "$work/after-refusal"
 diff -u "$work/before-refusal" "$work/after-refusal"
 test "$(cat "$work/restarts")" = "$count"
