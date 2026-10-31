@@ -1,0 +1,40 @@
+{
+  "checked_utc": "2026-10-31T10:52:24.6128826Z",
+  "scope": "Existing desktop runtime baseline; new prepared release not activated",
+  "origin": "https://dev.hartonomous.com",
+  "liveness": "ok",
+  "ready_http_status": 200,
+  "readiness": {
+    "ready": true,
+    "substrate_reachable": true,
+    "entities": 0,
+    "consensus_relations": 0,
+    "perfcache_ready": true,
+    "chess_perfcache": {
+      "process_id": 9000,
+      "observed_utc": "2026-10-31T05:52:23.2146926-05:00",
+      "counter_scope": "process-lifetime completed managed lookups; counters include earlier mappings",
+      "initialization_completed": true,
+      "position": {
+        "is_loaded": true,
+        "record_count": 232320,
+        "lookup_hits": 0,
+        "lookup_misses": 0
+      },
+      "transition": {
+        "is_loaded": true,
+        "record_count": 0,
+        "novel_count": 0,
+        "persistent_hits": 0,
+        "novel_hits": 0,
+        "lookup_misses": 0
+      },
+      "ready": false
+    },
+    "counts_are_estimates": true,
+    "has_entities": true,
+    "has_consensus": true,
+    "logging_ready": true,
+    "logging_failure_count": 0
+  }
+}

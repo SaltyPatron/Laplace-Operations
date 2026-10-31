@@ -1,0 +1,33 @@
+{
+  "status": "build_passed_activation_pending",
+  "checked_utc": "2026-10-31T08:30:17.261668+00:00",
+  "operations_main": "8e4e47bf2f04936a72c8126f66896dbe941578b9",
+  "package_sequence_pr": 154,
+  "windows_tests": {
+    "run": 25,
+    "passed": 24,
+    "expected_skip": 1
+  },
+  "linux_tests": {
+    "run": 25,
+    "passed": 24,
+    "expected_skip": 1
+  },
+  "binaries": [
+    {
+      "path": "D:\\Libraries\\build\\Laplace\\Laplace-MCP\\icx-release\\engine\\laplace.exe",
+      "bytes": 2877440,
+      "sha256": "05515dab3cd07dad7bafc16076d3c73ddc1b067d64dc33684bdaadc99cd30ee4"
+    },
+    {
+      "path": "D:\\Libraries\\build\\Laplace\\Laplace-MCP\\icx-release\\lpm.exe",
+      "bytes": 1522176,
+      "sha256": "969433649a72d050a94388cbea42028445a1b1908752b422d1b542ad2f7f964e"
+    },
+    {
+      "path": "D:\\Libraries\\build\\Laplace\\Laplace-MCP\\icx-release\\lpm.dll",
+      "bytes": 1673728,
+      "sha256": "e9327953fdab3683aeb7d32e499814889fa7ea1fcf373c91dbade84ecf413d22"
+    }
+  ]
+}

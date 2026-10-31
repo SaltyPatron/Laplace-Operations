@@ -1,0 +1,164 @@
+[
+  {
+    "artifact": "storage-production-41183030049",
+    "receipt": {
+      "schema": "laplace.storage/v1",
+      "host": "hart-prod",
+      "run": "41183030049",
+      "checked_utc": "2026-10-31T08:15:22.946355+00:00",
+      "entries": [
+        {
+          "path": "/var/lib/agents/laplace-runner/Laplace/work/mono-site/stage",
+          "root": "/var/lib/agents/laplace-runner/Laplace/work/mono-site",
+          "kind": "delivery_work",
+          "reasons": [],
+          "retire": true
+        },
+        {
+          "path": "/var/lib/agents/laplace-runner/Laplace/work/mono-site/bundle",
+          "root": "/var/lib/agents/laplace-runner/Laplace/work/mono-site",
+          "kind": "delivery_work",
+          "reasons": [],
+          "retire": true
+        }
+      ],
+      "notes": [],
+      "recovery_pending": false,
+      "delivery_held": false,
+      "native_asset_store": null,
+      "policy": {
+        "rollback_releases": 1,
+        "explicit_native_replacement": false,
+        "source_data_archives": "preserved",
+        "incremental_profiles": "preserved",
+        "recovery": "preserved"
+      },
+      "opaque_processes": [],
+      "removed": [
+        "/var/lib/agents/laplace-runner/Laplace/work/mono-site/stage",
+        "/var/lib/agents/laplace-runner/Laplace/work/mono-site/bundle"
+      ],
+      "devices": {
+        "2049": {
+          "path": "/var/lib/agents/laplace-runner/Laplace/work/mono-site",
+          "before": 14032875520,
+          "after": 17380671488
+        }
+      },
+      "status": "passed",
+      "managed_application": "passed"
+    }
+  },
+  {
+    "artifact": "storage-staging-41183030049",
+    "receipt": {
+      "schema": "laplace.storage/v1",
+      "host": "hart-server",
+      "run": "41183030049",
+      "checked_utc": "2026-10-31T08:13:04.375813+00:00",
+      "entries": [
+        {
+          "path": "/repos/work/agents/Laplace/mono-site/stage",
+          "root": "/repos/work/agents/Laplace/mono-site",
+          "kind": "delivery_work",
+          "reasons": [],
+          "retire": true
+        },
+        {
+          "path": "/repos/work/agents/Laplace/mono-site/bundle",
+          "root": "/repos/work/agents/Laplace/mono-site",
+          "kind": "delivery_work",
+          "reasons": [],
+          "retire": true
+        },
+        {
+          "path": "/hosting/laplace/modular/releases/f4613beabb208b8434ca2e846d5d1de2b8aaed30b0412a9ded89d42c95566e97",
+          "root": "/hosting/laplace/modular/releases",
+          "kind": "native_release",
+          "reasons": [
+            "live_runtime_lease",
+            "live_reference"
+          ],
+          "retire": false
+        },
+        {
+          "path": "/hosting/laplace/modular/releases/3314ebc989981b0cae12baf22b8f18e5dc576810e1cde033e2b8464a9712c235",
+          "root": "/hosting/laplace/modular/releases",
+          "kind": "native_release",
+          "reasons": [
+            "live_runtime_lease",
+            "live_reference"
+          ],
+          "retire": false
+        },
+        {
+          "path": "/hosting/laplace/modular/releases/8ae527204ae74873d37069841dea182520850d4fea86999cdf5d695e51e44da4",
+          "root": "/hosting/laplace/modular/releases",
+          "kind": "native_release",
+          "reasons": [
+            "rollback"
+          ],
+          "retire": false
+        }
+      ],
+      "notes": [],
+      "recovery_pending": false,
+      "delivery_held": false,
+      "native_asset_store": "/hosting/laplace/modular/assets",
+      "policy": {
+        "rollback_releases": 1,
+        "explicit_native_replacement": false,
+        "source_data_archives": "preserved",
+        "incremental_profiles": "preserved",
+        "recovery": "preserved"
+      },
+      "opaque_processes": [
+        {
+          "pid": 364204,
+          "name": "lpm",
+          "reason": "executable_not_readable"
+        },
+        {
+          "pid": 398561,
+          "name": "lpm",
+          "reason": "executable_not_readable"
+        },
+        {
+          "pid": 816381,
+          "name": "lpm",
+          "reason": "executable_not_readable"
+        }
+      ],
+      "database_cleanup": [
+        {
+          "database": "laplace",
+          "status": "passed",
+          "loads": []
+        },
+        {
+          "database": "laplace-mono",
+          "status": "passed",
+          "loads": []
+        },
+        {
+          "database": "postgres",
+          "status": "not_installed",
+          "loads": []
+        }
+      ],
+      "removed": [
+        "/repos/work/agents/Laplace/mono-site/stage",
+        "/repos/work/agents/Laplace/mono-site/bundle"
+      ],
+      "devices": {
+        "64774": {
+          "path": "/repos/work/agents/Laplace/mono-site",
+          "before": 144421445632,
+          "after": 153382281216
+        }
+      },
+      "status": "passed",
+      "managed_application": "passed"
+    }
+  }
+]

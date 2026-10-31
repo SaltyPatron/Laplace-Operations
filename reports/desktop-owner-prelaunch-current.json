@@ -1,0 +1,12 @@
+{
+  "checked_utc": "2026-10-31T14:30:08.9432113Z",
+  "status": "preflight-passed",
+  "identity": "HART-DESKTOP\\ahart",
+  "administrator_token": false,
+  "package": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages\\f8ffc7d5e404b80cf2200e58eea4b04be83308b79e97d3db15584e6ad09f1d76",
+  "release": "60f039aa16ac23c060901d1a9bb056838cc8dd660f9d1556ece77c89e899c863",
+  "manifest_sha256": "0945170449cd018b3db9049af1a8bda690521e704908f08edb7c4bd115947255",
+  "verified_files": 5031,
+  "runtime_source_matches_main": true,
+  "administrator_operation_launched": false
+}

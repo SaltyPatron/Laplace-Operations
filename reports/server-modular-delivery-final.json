@@ -1,0 +1,160 @@
+{
+  "host": "hart-server",
+  "acceptance_path": "/repos/work/logs/modular/20261031T082601Z-12576bb6/acceptance.json",
+  "acceptance": {
+    "scope": "modular MCP installed runtime",
+    "host": "hart-server",
+    "release": "/hosting/laplace/modular/releases/1e9ba7e4e568bb5b1ccae4a0376314a2f46a3bbe9b040eec27e55cea35fb0095",
+    "unit": "laplace-modular-mcp.service",
+    "runtime_user": "laplace-modular",
+    "database_role": "laplace_modular_runtime",
+    "result": "passed",
+    "database_prepared_paths": {
+      "laplace.tier0": "/hosting/laplace/modular/releases/1e9ba7e4e568bb5b1ccae4a0376314a2f46a3bbe9b040eec27e55cea35fb0095/share/prepared/tier0.bin",
+      "laplace.flags": "/hosting/laplace/modular/releases/1e9ba7e4e568bb5b1ccae4a0376314a2f46a3bbe9b040eec27e55cea35fb0095/share/prepared/tier0.flags",
+      "laplace.highway": "/hosting/laplace/modular/releases/1e9ba7e4e568bb5b1ccae4a0376314a2f46a3bbe9b040eec27e55cea35fb0095/share/prepared/tier0.highway"
+    },
+    "runtime_evidence": "/repos/work/logs/modular/20261031T082601Z-12576bb6/runtime.json"
+  },
+  "runtime": {
+    "surface": "passed",
+    "database_search": {
+      "physicality": 1,
+      "claims": 3,
+      "occurrences": 16,
+      "attestations": 3,
+      "constituents": 3
+    },
+    "mcp_initialize": "passed",
+    "unauthenticated": "refused",
+    "engine_operations": {
+      "text": {
+        "exit": 0,
+        "output_bytes": 743
+      },
+      "hop": {
+        "exit": 0,
+        "output_bytes": 499
+      },
+      "translate": {
+        "exit": 0,
+        "output_bytes": 108
+      },
+      "degrees": {
+        "exit": 0,
+        "output_bytes": 684
+      },
+      "pull": {
+        "exit": 0,
+        "output_bytes": 1551
+      }
+    },
+    "scope": "Installed protocol, Engine operations and selected native/database readback; no ingestion or whole-product capability claim"
+  },
+  "cleanup": {
+    "schema": "laplace.storage/v1",
+    "host": "hart-server",
+    "run": "41184514444",
+    "checked_utc": "2026-10-31T08:26:34.967806+00:00",
+    "entries": [
+      {
+        "path": "/hosting/laplace/modular/releases/1e9ba7e4e568bb5b1ccae4a0376314a2f46a3bbe9b040eec27e55cea35fb0095",
+        "root": "/hosting/laplace/modular/releases",
+        "kind": "native_release",
+        "reasons": [
+          "live_runtime_lease",
+          "live_reference"
+        ],
+        "retire": false
+      },
+      {
+        "path": "/hosting/laplace/modular/releases/f4613beabb208b8434ca2e846d5d1de2b8aaed30b0412a9ded89d42c95566e97",
+        "root": "/hosting/laplace/modular/releases",
+        "kind": "native_release",
+        "reasons": [
+          "rollback"
+        ],
+        "retire": false
+      },
+      {
+        "path": "/hosting/laplace/modular/releases/3314ebc989981b0cae12baf22b8f18e5dc576810e1cde033e2b8464a9712c235",
+        "root": "/hosting/laplace/modular/releases",
+        "kind": "native_release",
+        "reasons": [
+          "live_runtime_lease",
+          "live_reference"
+        ],
+        "retire": false
+      },
+      {
+        "path": "/hosting/laplace/modular/releases/8ae527204ae74873d37069841dea182520850d4fea86999cdf5d695e51e44da4",
+        "root": "/hosting/laplace/modular/releases",
+        "kind": "native_release",
+        "reasons": [],
+        "retire": true
+      }
+    ],
+    "notes": [],
+    "recovery_pending": false,
+    "delivery_held": false,
+    "native_asset_store": "/hosting/laplace/modular/assets",
+    "policy": {
+      "rollback_releases": 1,
+      "explicit_native_replacement": false,
+      "source_data_archives": "preserved",
+      "incremental_profiles": "preserved",
+      "recovery": "preserved"
+    },
+    "opaque_processes": [
+      {
+        "pid": 364204,
+        "name": "lpm",
+        "reason": "executable_not_readable"
+      },
+      {
+        "pid": 398561,
+        "name": "lpm",
+        "reason": "executable_not_readable"
+      },
+      {
+        "pid": 856122,
+        "name": "lpm",
+        "reason": "executable_not_readable"
+      }
+    ],
+    "database_cleanup": [
+      {
+        "database": "laplace",
+        "status": "passed",
+        "loads": []
+      },
+      {
+        "database": "laplace-mono",
+        "status": "passed",
+        "loads": []
+      },
+      {
+        "database": "postgres",
+        "status": "not_installed",
+        "loads": []
+      }
+    ],
+    "removed": [
+      "/hosting/laplace/modular/releases/8ae527204ae74873d37069841dea182520850d4fea86999cdf5d695e51e44da4"
+    ],
+    "devices": {
+      "64770": {
+        "path": "/hosting/laplace/modular/releases",
+        "before": 225043259392,
+        "after": 225060810752
+      }
+    },
+    "status": "passed"
+  },
+  "source_revisions": {
+    "Laplace-MCP": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006",
+    "Laplace-Engine": "697cc84a44829b461dc158d4676781f039fee45b",
+    "Laplace-Native": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+    "Laplace-Operations": "8e4e47bf2f04936a72c8126f66896dbe941578b9"
+  }
+}
