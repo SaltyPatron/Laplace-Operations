@@ -98,7 +98,7 @@ if [ -n "$modular_manifest" ]; then
   # The modular installer binds PostgreSQL to its immutable release and rolls
   # that selection back with failed activation. A build must not replace those
   # server paths with its temporary prepared-input locations.
-  step deploy   laplace deploy
+  step deploy   laplace deploy --prepare
 else
   step deploy   laplace deploy --configure-server-cache
 fi

@@ -29,7 +29,7 @@ done
 cat > "$work/bin/laplace" <<'STUB'
 #!/bin/sh
 printf 'laplace %s\n' "$*" >> "$CALL_LOG"
-case "$*" in 'highway --fingerprint'|'deploy --configure-server-cache'|deploy|status) exit 0;; *) exit 90;; esac
+case "$*" in 'highway --fingerprint'|'deploy --configure-server-cache'|'deploy --prepare'|status) exit 0;; *) exit 90;; esac
 STUB
 cat > "$work/bin/psql" <<'STUB'
 #!/bin/sh
@@ -60,7 +60,7 @@ config.update(host=socket.gethostname().lower(), database='fixture', pgbin=str(r
 PY
 : > "$CALL_LOG"
 FIXTURE_MANIFEST="$work/installation/selected.json" ALLOW_GRANTS=1 bash "$work/deploy.sh" as-is > "$work/output" 2>&1 || { cat "$work/output"; exit 1; }
-sed -e 's/laplace deploy --configure-server-cache/laplace deploy\nmodular grants/' -e '/^laplace status$/d' "$work/expected" > "$work/expected-modular"
+sed -e 's/laplace deploy --configure-server-cache/laplace deploy --prepare\nmodular grants/' -e '/^laplace status$/d' "$work/expected" > "$work/expected-modular"
 diff -u "$work/expected-modular" "$CALL_LOG"
 grep -q 'modular activation and compatibility readback are required next' "$work/output"
 echo 'PASS modular infrastructure preserves cache bindings and defers comparison until owner activation'

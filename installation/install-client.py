@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import socket
 import sys
 import tempfile
 
@@ -33,6 +34,20 @@ client['run_client'](configuration,release)
 '''.replace('CONFIGURATION', repr(str(configuration)), 1)
 
 
+def verify_engine(executable, environment, configure_database=False):
+    operations = ([['deploy', '--configure-server-cache']] if configure_database else [])
+    operations += [['text', 'Laplace'], ['status'], ['sources']]
+    for operation in operations:
+        verification = subprocess.run([str(executable), *operation], env=environment,
+                                      capture_output=True, text=True, timeout=60)
+        if verification.returncode:
+            raise ValueError('Installed modular Engine ' + operation[0] + ' failed: ' + verification.stderr.strip())
+        if operation == ['sources'] and verification.stderr.strip():
+            raise ValueError('Installed recipe resources failed: ' + verification.stderr.strip())
+        if operation == ['status'] and verification.stdout.count("the same as this engine's") != 2:
+            raise ValueError('Installed modular database must match both Engine artifact fingerprints: ' + verification.stdout.strip())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--installation', type=Path, required=True)
@@ -43,6 +58,7 @@ def main():
     parser.add_argument('--models', type=Path, help='Local model estate read by tokenizer recipes; no download')
     parser.add_argument('--command', type=Path, required=True)
     parser.add_argument('--connection', type=Path, help='JSON with non-secret libpq TLS/address options; credentials remain in the user store')
+    parser.add_argument('--configure-database', action='store_true', help='Host deployment only: select installed server caches before compatibility verification')
     parser.add_argument('--configuration', type=Path,
                         default=Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config') / 'laplace/client.json')
     args = parser.parse_args()
@@ -69,16 +85,10 @@ def main():
     pending = None
     try:
         executable, environment, description = client.selected(candidate)
+        if args.configure_database and description['database_host'].lower() != socket.gethostname().lower():
+            raise ValueError('Only a host-local deployment can select server cache paths')
         # Native composition and selected-database readback precede command replacement.
-        for operation in (['text', 'Laplace'], ['status'], ['sources']):
-            verification = subprocess.run([str(executable), *operation],
-                                          env=client.process_environment(environment), capture_output=True, text=True, timeout=60)
-            if verification.returncode:
-                raise ValueError('Installed modular Engine ' + operation[0] + ' failed: ' + verification.stderr.strip())
-            if operation == ['sources'] and verification.stderr.strip():
-                raise ValueError('Installed recipe resources failed: ' + verification.stderr.strip())
-            if operation == ['status'] and verification.stdout.count("the same as this engine's") != 2:
-                raise ValueError('Installed modular database must match both Engine artifact fingerprints: ' + verification.stdout.strip())
+        verify_engine(executable, client.process_environment(environment), args.configure_database)
         mcp_verification = (client.verify_mcp(executable, client.process_environment(environment), database=description['database'])
                             if 'Laplace-MCP' in description['revisions'] else {'status': 'not_packaged'})
         if args.configuration.exists() and json.loads(args.configuration.read_text()).get('schema') != profile['schema']:

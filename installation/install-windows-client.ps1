@@ -1,5 +1,5 @@
 #Requires -Version 7
-param([Parameter(Mandatory)][string]$Installation, [switch]$SkipPackage,[switch]$Force)
+param([Parameter(Mandatory)][string]$Installation, [switch]$SkipPackage,[switch]$Force,[switch]$ConfigureDatabase)
 $ErrorActionPreference = 'Stop'
 $declaration = [IO.Path]::GetFullPath($Installation)
 $config = [IO.File]::ReadAllText($declaration) | ConvertFrom-Json
@@ -25,6 +25,7 @@ try {
     # Capture input locations at installation. The normal launcher must not
     # depend on a developer shell or inherit another client's LAPLACE_* values.
     $inputArgs = @()
+    if($ConfigureDatabase){$inputArgs+='--configure-database'}
     foreach ($root in @(@{Key='source'; Variable='LAPLACE_SRC'}, @{Key='models'; Variable='LAPLACE_MODELS'})) {
         $value = if ($client.($root.Key)) { $client.($root.Key) } else { [Environment]::GetEnvironmentVariable($root.Variable) }
         if ($value) {
