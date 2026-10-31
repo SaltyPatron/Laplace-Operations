@@ -1,7 +1,0 @@
-{
-  "LAPLACE_GCP_PROJECT": "project-f5812b96-f924-41a4-94c",
-  "LAPLACE_CLOUD_INSTANCE": "hart-cloud",
-  "LAPLACE_CLOUD_ZONE": "us-east1-b",
-  "LAPLACE_GCP_WIF_PROVIDER": "projects/398413378767/locations/global/workloadIdentityPools/github/providers/github-actions",
-  "LAPLACE_GCP_SERVICE_ACCOUNT": "laplace-pipeline@project-f5812b96-f924-41a4-94c.iam.gserviceaccount.com"
-}
