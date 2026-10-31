@@ -12,7 +12,8 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw 'The 
 $storageOperation=Enter-DesktopStorageOperation
 try {
 if (-not $SkipPackage) {
-    $options=if($Force){@('--force')}else{@()}
+    [string[]]$options=@()
+    if($Force){$options+='--force'}
     if($ConfigureDatabase){$options+='--configure-database'}
     & $python "$PSScriptRoot/package-windows-client.py" --installation $declaration @options
     if ($LASTEXITCODE -ne 0) { throw 'Modular client packaging failed; command selection was not changed.' }
