@@ -35,8 +35,12 @@ if($all -notmatch 'desktop-uci.ps1.*-Publish' -or $web -match 'desktop-uci.ps1')
     throw 'UCI connector publication must follow UCI component selection and leave web-only delivery independent.'
 }
 if($all.IndexOf('Migrate the installed modular substrate') -le $all.IndexOf('Build selected components, compose and activate IIS') -or
+   $all.IndexOf('Package modular Native, Engine and MCP') -le $all.IndexOf('Build selected components, compose and activate IIS') -or
    $all.IndexOf('Verify selected installed components') -le $all.IndexOf('Migrate the installed modular substrate')){
     throw 'Modular database update must follow extension installation and precede installed verification.'
+}
+if($modular -notmatch 'install-windows-client.*-ConfigureDatabase' -or $all -notmatch 'install-windows-client.*-ConfigureDatabase'){
+    throw 'The host deployment must select server-local caches before client compatibility verification.'
 }
 $prepared=Plan all -Package (Join-Path ([IO.Path]::GetTempPath()) 'prepared-package')
 if($prepared -notmatch 'Publish-IisRuntime.ps1' -or $prepared -match 'Build-IisPackage|tune-pg|install-windows-client'){

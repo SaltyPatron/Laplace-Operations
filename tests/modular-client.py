@@ -22,6 +22,33 @@ deploy_client = importlib.util.module_from_spec(deploy_spec)
 with patch.dict(sys.modules, {'client': client}):
     deploy_spec.loader.exec_module(deploy_client)
 
+install_spec = importlib.util.spec_from_file_location('install_client', ROOT / 'installation/install-client.py')
+installer = importlib.util.module_from_spec(install_spec)
+install_spec.loader.exec_module(installer)
+
+
+class InstallationReadback(unittest.TestCase):
+    def test_host_preparation_precedes_mandatory_compatibility_readback(self):
+        def run(arguments, **kwargs):
+            return SimpleNamespace(returncode=0, stderr='', stdout="the same as this engine's\nthe same as this engine's\n")
+        with patch.object(installer.subprocess, 'run', side_effect=run) as execute:
+            installer.verify_engine(Path('laplace'), {}, configure_database=True)
+        self.assertEqual([call.args[0][1:] for call in execute.call_args_list],
+                         [['deploy', '--configure-server-cache'], ['text', 'Laplace'], ['status'], ['sources']])
+
+    def test_ordinary_client_installation_does_not_mutate_server_selection(self):
+        result = SimpleNamespace(returncode=0, stderr='', stdout="the same as this engine's\nthe same as this engine's\n")
+        with patch.object(installer.subprocess, 'run', return_value=result) as execute:
+            installer.verify_engine(Path('laplace'), {})
+        self.assertEqual([call.args[0][1:] for call in execute.call_args_list],
+                         [['text', 'Laplace'], ['status'], ['sources']])
+
+    def test_failed_host_preparation_stops_before_readback(self):
+        with patch.object(installer.subprocess, 'run', return_value=SimpleNamespace(returncode=1, stderr='prepare refused')) as execute:
+            with self.assertRaisesRegex(ValueError, 'deploy failed: prepare refused'):
+                installer.verify_engine(Path('laplace'), {}, configure_database=True)
+        self.assertEqual(execute.call_count, 1)
+
 
 class ClientInputs(unittest.TestCase):
     def setUp(self):

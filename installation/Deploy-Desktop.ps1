@@ -28,10 +28,6 @@ $modular=if($selected.Contains('modular')){Get-DesktopClientDeclaration $Modular
 $scope=if($selected.Contains('modular')){if($mono.Count){'all'}else{'modular'}}else{'monorepo'}
 $steps=@()
 if($selected.Contains('postgres')){$steps+=@{name='Apply and verify PostgreSQL tuning';script="$operations/tune-pg.ps1";arguments=@()}}
-if($selected.Contains('modular')){
-    $arguments=@('-Installation',$ModularInstallation);if($Force){$arguments+='-Force'}
-    $steps+=@{name='Package modular Native, Engine and MCP; update installed client';script="$PSScriptRoot/install-windows-client.ps1";arguments=$arguments}
-}
 if($mono.Count){
     if($Package){
         $steps+=@{name='Activate verified prepared IIS package';script="$source/deploy/windows/Publish-IisRuntime.ps1";arguments=@('-Package',$Package)}
@@ -40,6 +36,10 @@ if($mono.Count){
         if($Force){$arguments+='-Force'}
         $steps+=@{name='Build selected components, compose and activate IIS';script="$source/deploy/windows/Build-IisPackage.ps1";arguments=$arguments;component_receipt=$true}
     }
+}
+if($selected.Contains('modular')){
+    $arguments=@('-Installation',$ModularInstallation,'-ConfigureDatabase');if($Force){$arguments+='-Force'}
+    $steps+=@{name='Package modular Native, Engine and MCP; update installed client';script="$PSScriptRoot/install-windows-client.ps1";arguments=$arguments}
 }
 if($selected.Contains('modular')){
     $steps+=@{name='Migrate the installed modular substrate and select server-local caches';command=(Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd');arguments=@('deploy','--configure-server-cache')}
