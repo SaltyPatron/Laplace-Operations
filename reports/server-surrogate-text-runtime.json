@@ -1,0 +1,57 @@
+{
+  "release": "/hosting/laplace/modular/releases/f4613beabb208b8434ca2e846d5d1de2b8aaed30b0412a9ded89d42c95566e97",
+  "command": "laplace text <canonical generalized-UTF8 bytes>",
+  "probes": [
+    {
+      "codepoints": [
+        "0xd800"
+      ],
+      "input_hex": "eda080",
+      "exit": 0,
+      "verified": true,
+      "stdout": "entity     dff435ed8113f31233474261aa854f0f   tier 0   (-0.054678, -0.931108, 0.175319, 0.315137)   hilbert 274a71197f93455b   depth 0.000000\nwall       inside\nparts      1\n  [0]      dff435ed8113f31233474261aa854f0f   tier 0   (-0.054678, -0.931108, 0.175319, 0.315137)   hilbert 274a71197f93455b   depth 0.000000\ntier 0     ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984\ncomputed in 475.02 ms, mapping tier 0 included; no database\n",
+      "stderr": ""
+    },
+    {
+      "codepoints": [
+        "0xdbff"
+      ],
+      "input_hex": "edafbf",
+      "exit": 0,
+      "verified": true,
+      "stdout": "entity     fa5a060c1e71a595d3f2595f8783c6ed   tier 0   (-0.117027, -0.890339, 0.336900, 0.283017)   hilbert 275b08086a943014   depth 0.000000\nwall       inside\nparts      1\n  [0]      fa5a060c1e71a595d3f2595f8783c6ed   tier 0   (-0.117027, -0.890339, 0.336900, 0.283017)   hilbert 275b08086a943014   depth 0.000000\ntier 0     ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984\ncomputed in 440.85 ms, mapping tier 0 included; no database\n",
+      "stderr": ""
+    },
+    {
+      "codepoints": [
+        "0xdc00"
+      ],
+      "input_hex": "edb080",
+      "exit": 0,
+      "verified": true,
+      "stdout": "entity     ccb958508a431b01ad9484e67d820e09   tier 0   (-0.099707, -0.890993, 0.322193, 0.303944)   hilbert 275b08a1c26945e1   depth 0.000000\nwall       inside\nparts      1\n  [0]      ccb958508a431b01ad9484e67d820e09   tier 0   (-0.099707, -0.890993, 0.322193, 0.303944)   hilbert 275b08a1c26945e1   depth 0.000000\ntier 0     ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984\ncomputed in 459.46 ms, mapping tier 0 included; no database\n",
+      "stderr": ""
+    },
+    {
+      "codepoints": [
+        "0xdfff"
+      ],
+      "input_hex": "edbfbf",
+      "exit": 0,
+      "verified": true,
+      "stdout": "entity     12501a6725d76de9a6d1c78f69fd2517   tier 0   (-0.042949, -0.899725, 0.434208, 0.010686)   hilbert 27aa8cce5c6191d1   depth 0.000000\nwall       inside\nparts      1\n  [0]      12501a6725d76de9a6d1c78f69fd2517   tier 0   (-0.042949, -0.899725, 0.434208, 0.010686)   hilbert 27aa8cce5c6191d1   depth 0.000000\ntier 0     ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984\ncomputed in 468.20 ms, mapping tier 0 included; no database\n",
+      "stderr": ""
+    },
+    {
+      "codepoints": [
+        "0xd800",
+        "0xdc00"
+      ],
+      "input_hex": "eda080edb080",
+      "exit": 0,
+      "verified": true,
+      "stdout": "entity     a98e6e3c23c8375abc95a726bf3a58b3   tier 3   (-0.077192, -0.911050, 0.248756, 0.309541)   hilbert 274ae3a92ef5a564   depth 0.003172\nwall       inside\nparts      2\n  [0]      dff435ed8113f31233474261aa854f0f   tier 0   (-0.054678, -0.931108, 0.175319, 0.315137)   hilbert 274a71197f93455b   depth 0.000000\n  [1]      ccb958508a431b01ad9484e67d820e09   tier 0   (-0.099707, -0.890993, 0.322193, 0.303944)   hilbert 275b08a1c26945e1   depth 0.000000\ntier 0     ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984\ncomputed in 472.58 ms, mapping tier 0 included; no database\n",
+      "stderr": ""
+    }
+  ]
+}

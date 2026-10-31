@@ -1,0 +1,391 @@
+{
+  "verified_utc": "2026-10-31T05:19:42.099727+00:00",
+  "repositories": [
+    {
+      "repository": "code-search",
+      "path": "E:\\Repositories\\Laplace\\code-search",
+      "head": "384225428f850dbbdcba1334f16f60a9e89659a9",
+      "remote_main": "384225428f850dbbdcba1334f16f60a9e89659a9",
+      "status": "# branch.oid 384225428f850dbbdcba1334f16f60a9e89659a9\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/code-search\nHEAD 384225428f850dbbdcba1334f16f60a9e89659a9\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": [
+        {
+          "ref": "refs/remotes/origin/configurable-roots",
+          "oid": "e0629b3213f0555eb9e0bf928fad36fc2783644f",
+          "upstream": "",
+          "commits_only_on_main": 18,
+          "commits_only_on_branch": 0,
+          "patches_not_on_main": 0,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "code-search: roots, labels and collections from the environment"
+        },
+        {
+          "ref": "refs/remotes/origin/describe-every-root",
+          "oid": "783b15a5b36bbb45364fa923648a884519cfec45",
+          "upstream": "",
+          "commits_only_on_main": 15,
+          "commits_only_on_branch": 0,
+          "patches_not_on_main": 0,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "server: the description names every repository the roots hold, the earlier iterations included"
+        },
+        {
+          "ref": "refs/remotes/origin/desktop-static-ip",
+          "oid": "9483940e6a010ce73c92389f410744c5528be377",
+          "upstream": "",
+          "commits_only_on_main": 13,
+          "commits_only_on_branch": 0,
+          "patches_not_on_main": 0,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Point the embedding host at hart-desktop's static address"
+        },
+        {
+          "ref": "refs/remotes/origin/fix/5-key-required",
+          "oid": "184663016e2a360ff43d17e70a4ec05e61899ba9",
+          "upstream": "",
+          "commits_only_on_main": 2,
+          "commits_only_on_branch": 0,
+          "patches_not_on_main": 0,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Merge remote-tracking branch 'origin/main' into fix/5-key-required"
+        }
+      ]
+    },
+    {
+      "repository": "Laplace",
+      "path": "E:\\Repositories\\Laplace\\Laplace",
+      "head": "879b00d5120e5f76e8ae1d70a6f8848e150c224b",
+      "remote_main": "879b00d5120e5f76e8ae1d70a6f8848e150c224b",
+      "status": "# branch.oid 879b00d5120e5f76e8ae1d70a6f8848e150c224b\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace\nHEAD 879b00d5120e5f76e8ae1d70a6f8848e150c224b\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": [
+        {
+          "ref": "refs/heads/pending/desktop-mcp-and-devcontainer",
+          "oid": "20b255d18bf022463b825078c198570b1bae273b",
+          "upstream": "origin/pending/desktop-mcp-and-devcontainer",
+          "commits_only_on_main": 189,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Consolidate unfinished desktop MCP and development environment changes"
+        },
+        {
+          "ref": "refs/heads/pending/product-quality",
+          "oid": "59b411ed966a6d5e78a950f9de61c010c956aa36",
+          "upstream": "origin/pending/product-quality",
+          "commits_only_on_main": 673,
+          "commits_only_on_branch": 4,
+          "patches_not_on_main": 3,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Merge remote-tracking branch 'origin/main' into fix/product-quality"
+        },
+        {
+          "ref": "refs/heads/pending/workspace-account-recovery",
+          "oid": "3c10a9ab17605e486cb99e78a3ac061e4a877b22",
+          "upstream": "origin/pending/workspace-account-recovery",
+          "commits_only_on_main": 668,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Recover workspace changes and preserve account secrets in settings"
+        },
+        {
+          "ref": "refs/heads/recovery/foundry-stash-20261022",
+          "oid": "863dd3999c19b08d06f859221ab118735a3d33e1",
+          "upstream": "origin/recovery/foundry-stash-20261022",
+          "commits_only_on_main": 392,
+          "commits_only_on_branch": 3,
+          "patches_not_on_main": 2,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "On main: Laplace export work before current Native integration 2026-10-22"
+        },
+        {
+          "ref": "refs/remotes/origin/pending/desktop-mcp-and-devcontainer",
+          "oid": "20b255d18bf022463b825078c198570b1bae273b",
+          "upstream": "",
+          "commits_only_on_main": 189,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Consolidate unfinished desktop MCP and development environment changes"
+        },
+        {
+          "ref": "refs/remotes/origin/pending/product-quality",
+          "oid": "59b411ed966a6d5e78a950f9de61c010c956aa36",
+          "upstream": "",
+          "commits_only_on_main": 673,
+          "commits_only_on_branch": 4,
+          "patches_not_on_main": 3,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Merge remote-tracking branch 'origin/main' into fix/product-quality"
+        },
+        {
+          "ref": "refs/remotes/origin/pending/workspace-account-recovery",
+          "oid": "3c10a9ab17605e486cb99e78a3ac061e4a877b22",
+          "upstream": "",
+          "commits_only_on_main": 668,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Recover workspace changes and preserve account secrets in settings"
+        },
+        {
+          "ref": "refs/remotes/origin/recovery/foundry-stash-20261022",
+          "oid": "863dd3999c19b08d06f859221ab118735a3d33e1",
+          "upstream": "",
+          "commits_only_on_main": 392,
+          "commits_only_on_branch": 3,
+          "patches_not_on_main": 2,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "On main: Laplace export work before current Native integration 2026-10-22"
+        }
+      ]
+    },
+    {
+      "repository": "Laplace-Conventional",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Conventional",
+      "head": "0fc78df75122843c96abe356e7c6f7e6e3323bf6",
+      "remote_main": "0fc78df75122843c96abe356e7c6f7e6e3323bf6",
+      "status": "# branch.oid 0fc78df75122843c96abe356e7c6f7e6e3323bf6\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace-Conventional\nHEAD 0fc78df75122843c96abe356e7c6f7e6e3323bf6\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": []
+    },
+    {
+      "repository": "Laplace-Engine",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Engine",
+      "head": "ad2330548a021ee07f8c6ef96e7baad793df129a",
+      "remote_main": "ad2330548a021ee07f8c6ef96e7baad793df129a",
+      "status": "# branch.oid ad2330548a021ee07f8c6ef96e7baad793df129a\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace-Engine\nHEAD ad2330548a021ee07f8c6ef96e7baad793df129a\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": [
+        {
+          "ref": "refs/heads/fix/primary-operations-20261027",
+          "oid": "677089b5a7db4421fde4036dbd8a6b4dbd001049",
+          "upstream": "origin/fix/primary-operations-20261027",
+          "commits_only_on_main": 124,
+          "commits_only_on_branch": 3,
+          "patches_not_on_main": 2,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Read recorded contexts along the ordered Native metadata tail"
+        },
+        {
+          "ref": "refs/heads/pending/ingestion-admission-and-window-maintenance-20261030",
+          "oid": "f95ad3d448f7264c379310655a95df18bf128dd9",
+          "upstream": "origin/pending/ingestion-admission-and-window-maintenance-20261030",
+          "commits_only_on_main": 0,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "wip: preserve ingestion admission and window maintenance changes"
+        },
+        {
+          "ref": "refs/remotes/origin/fix/primary-operations-20261027",
+          "oid": "677089b5a7db4421fde4036dbd8a6b4dbd001049",
+          "upstream": "",
+          "commits_only_on_main": 124,
+          "commits_only_on_branch": 3,
+          "patches_not_on_main": 2,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Read recorded contexts along the ordered Native metadata tail"
+        },
+        {
+          "ref": "refs/remotes/origin/pending/ingestion-admission-and-window-maintenance-20261030",
+          "oid": "f95ad3d448f7264c379310655a95df18bf128dd9",
+          "upstream": "",
+          "commits_only_on_main": 0,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "wip: preserve ingestion admission and window maintenance changes"
+        }
+      ]
+    },
+    {
+      "repository": "Laplace-MCP",
+      "path": "E:\\Repositories\\Laplace\\Laplace-MCP",
+      "head": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006",
+      "remote_main": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006",
+      "status": "# branch.oid b4bd89be403523b5c6a45fda4c4d5b97c8dfe006\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace-MCP\nHEAD b4bd89be403523b5c6a45fda4c4d5b97c8dfe006\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": []
+    },
+    {
+      "repository": "Laplace-Native",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Native",
+      "head": "437b9f21ff499a45715e505aa6fdd36ec176f893",
+      "remote_main": "437b9f21ff499a45715e505aa6fdd36ec176f893",
+      "status": "# branch.oid 437b9f21ff499a45715e505aa6fdd36ec176f893\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace-Native\nHEAD 437b9f21ff499a45715e505aa6fdd36ec176f893\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": [
+        {
+          "ref": "refs/remotes/origin/fix/preserve-tier0-projection-population",
+          "oid": "7edabd6cfa8d27d989453fa5bde0cf381ef7d508",
+          "upstream": "",
+          "commits_only_on_main": 20,
+          "commits_only_on_branch": 2,
+          "patches_not_on_main": 2,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Record the actual database generation reconciliation preflight"
+        }
+      ]
+    },
+    {
+      "repository": "Laplace-Operations",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Operations",
+      "head": "ba59b5a4b6b4f9d267b171831161b442d1ef6c2d",
+      "remote_main": "ba59b5a4b6b4f9d267b171831161b442d1ef6c2d",
+      "status": "# branch.oid ba59b5a4b6b4f9d267b171831161b442d1ef6c2d\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace-Operations\nHEAD ba59b5a4b6b4f9d267b171831161b442d1ef6c2d\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": [
+        {
+          "ref": "refs/heads/pending/desktop-client-and-devcontainer",
+          "oid": "f5e28ce2b768279d065c76f469045cb94b7ef359",
+          "upstream": "origin/pending/desktop-client-and-devcontainer",
+          "commits_only_on_main": 107,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Consolidate unfinished desktop client and development environment changes"
+        },
+        {
+          "ref": "refs/heads/pending/recovered-modular-delivery",
+          "oid": "bc0bb0a2c7104606e1b1afa39ddc020b1f0ed0e1",
+          "upstream": "origin/pending/recovered-modular-delivery",
+          "commits_only_on_main": 234,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 0,
+          "equivalent_patches_on_main": 1,
+          "tip_subject": "Recover unfinished modular-delivery installation work"
+        },
+        {
+          "ref": "refs/heads/pending/recovered-runtime-rerun",
+          "oid": "25435ffeaa144e606ca566cf3f9031bf60533445",
+          "upstream": "origin/pending/recovered-runtime-rerun",
+          "commits_only_on_main": 230,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Recover unfinished runtime-rerun installation work"
+        },
+        {
+          "ref": "refs/remotes/origin/fingerprints",
+          "oid": "2933fc281c57cd1934a26f7de450f67d45f16187",
+          "upstream": "",
+          "commits_only_on_main": 521,
+          "commits_only_on_branch": 37,
+          "patches_not_on_main": 37,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "1b9367c8055c-7459129e79c8: hart-server"
+        },
+        {
+          "ref": "refs/remotes/origin/pending/desktop-client-and-devcontainer",
+          "oid": "f5e28ce2b768279d065c76f469045cb94b7ef359",
+          "upstream": "",
+          "commits_only_on_main": 107,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Consolidate unfinished desktop client and development environment changes"
+        },
+        {
+          "ref": "refs/remotes/origin/pending/recovered-modular-delivery",
+          "oid": "bc0bb0a2c7104606e1b1afa39ddc020b1f0ed0e1",
+          "upstream": "",
+          "commits_only_on_main": 234,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 0,
+          "equivalent_patches_on_main": 1,
+          "tip_subject": "Recover unfinished modular-delivery installation work"
+        },
+        {
+          "ref": "refs/remotes/origin/pending/recovered-runtime-rerun",
+          "oid": "25435ffeaa144e606ca566cf3f9031bf60533445",
+          "upstream": "",
+          "commits_only_on_main": 230,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Recover unfinished runtime-rerun installation work"
+        }
+      ]
+    },
+    {
+      "repository": "Laplace-postgres",
+      "path": "E:\\Repositories\\Laplace\\Laplace-postgres",
+      "head": "f70a8a8444fce436c67ad7a9c25057a4222ee129",
+      "remote_main": "f70a8a8444fce436c67ad7a9c25057a4222ee129",
+      "status": "# branch.oid f70a8a8444fce436c67ad7a9c25057a4222ee129\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace-postgres\nHEAD f70a8a8444fce436c67ad7a9c25057a4222ee129\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": [
+        {
+          "ref": "refs/heads/fix/native-paths-query-surface",
+          "oid": "a4f4dbf208c021a06ddca7ee3e0a67b2f7bf04ff",
+          "upstream": "origin/fix/native-paths-query-surface",
+          "commits_only_on_main": 55,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Use Native path frontiers and expose ordered packed endpoints"
+        },
+        {
+          "ref": "refs/remotes/origin/fix/native-paths-query-surface",
+          "oid": "a4f4dbf208c021a06ddca7ee3e0a67b2f7bf04ff",
+          "upstream": "",
+          "commits_only_on_main": 55,
+          "commits_only_on_branch": 1,
+          "patches_not_on_main": 1,
+          "equivalent_patches_on_main": 0,
+          "tip_subject": "Use Native path frontiers and expose ordered packed endpoints"
+        }
+      ]
+    },
+    {
+      "repository": "Laplace-Prototype",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Prototype",
+      "head": "768d40384fecee268bc7fe6681dcb7b0a38ce432",
+      "remote_main": "768d40384fecee268bc7fe6681dcb7b0a38ce432",
+      "status": "# branch.oid 768d40384fecee268bc7fe6681dcb7b0a38ce432\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace-Prototype\nHEAD 768d40384fecee268bc7fe6681dcb7b0a38ce432\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": []
+    },
+    {
+      "repository": "Laplace-Refactor",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Refactor",
+      "head": "f33c3711b9b8cfce9a9b128850c49f9cc29cf408",
+      "remote_main": "f33c3711b9b8cfce9a9b128850c49f9cc29cf408",
+      "status": "# branch.oid f33c3711b9b8cfce9a9b128850c49f9cc29cf408\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace-Refactor\nHEAD f33c3711b9b8cfce9a9b128850c49f9cc29cf408\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": []
+    },
+    {
+      "repository": "Laplace-UCI",
+      "path": "E:\\Repositories\\Laplace\\Laplace-UCI",
+      "head": "d5c7d513b8ed9f63decba9e169ff8cb4e39954af",
+      "remote_main": "d5c7d513b8ed9f63decba9e169ff8cb4e39954af",
+      "status": "# branch.oid d5c7d513b8ed9f63decba9e169ff8cb4e39954af\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace-UCI\nHEAD d5c7d513b8ed9f63decba9e169ff8cb4e39954af\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": []
+    },
+    {
+      "repository": "Laplace-Wiki",
+      "path": "E:\\Repositories\\Laplace\\Laplace-Wiki",
+      "head": "5f2d1488cb99030e1a006d2e867a4335ab9d5492",
+      "remote_main": "5f2d1488cb99030e1a006d2e867a4335ab9d5492",
+      "status": "# branch.oid 5f2d1488cb99030e1a006d2e867a4335ab9d5492\n# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0",
+      "worktrees": "worktree E:/Repositories/Laplace/Laplace-Wiki\nHEAD 5f2d1488cb99030e1a006d2e867a4335ab9d5492\nbranch refs/heads/main",
+      "stashes": "",
+      "branches": []
+    }
+  ]
+}
