@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 $declaration = [IO.Path]::GetFullPath($Installation)
 $config = [IO.File]::ReadAllText($declaration) | ConvertFrom-Json
 if ($config.host -ne $env:COMPUTERNAME) { throw 'The modular client declaration belongs to another host.' }
+. "$PSScriptRoot/../laplace.env.ps1"
 . "$PSScriptRoot/../toolchain/windows/devshell.ps1"
 $python = & python -c 'import sys; print(sys.executable)'
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw 'The configured toolchain must provide an installed Python interpreter.' }
