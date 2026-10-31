@@ -24,9 +24,13 @@ jobs:
           ruby -rpsych -e 'ARGV.each { |path| Psych.parse_file(path) }' .github/workflows/*.yml
           python3 -m py_compile verify-admitted-data.py .github/scripts/resolve-dependencies.py
           bash -n deploy.sh ingest.sh operation-lock.sh workspace-code.sh
-      - name: Verify unchanged prepared inputs preserve incremental builds
+      - name: Verify deployment reuse and Native input boundaries
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
           bash tests/prepared-artifacts-incremental.sh
           bash tests/deployment-artifacts.sh
+          bash tests/modular-activation.sh
+          bash tests/native-inputs.sh
+          python3 tests/modular-installation.py
+          python3 tests/dependency-revisions.py

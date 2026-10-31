@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -41,22 +42,8 @@ def resolve(owner, event_name, event, request):
 
 
 def verified_native_run(owner, revision, request):
-    repository = f'/repos/{owner}/Laplace-Native'
-    runs = request(repository + f'/actions/runs?head_sha={revision}&per_page=100')['workflow_runs']
-    required = {'native (icx-release)', 'native (gcc-release)', 'isa'}
-    for run in runs:
-        if (run.get('head_sha') != revision or run.get('head_branch') != 'main'
-                or run.get('path') != '.github/workflows/laplace.yml'
-                or run.get('event') not in ('push', 'workflow_dispatch')):
-            continue
-        jobs = request(repository + f'/actions/runs/{run["id"]}/jobs?per_page=100')['jobs']
-        passed = {job['name'] for job in jobs if job.get('conclusion') == 'success'}
-        if not required.issubset(passed):
-            continue
-        artifacts = request(repository + f'/actions/runs/{run["id"]}/artifacts?per_page=100')['artifacts']
-        if any(a['name'] == 'native-prepared-inputs' and not a.get('expired', True) for a in artifacts):
-            return run['id']
-    raise ValueError('No verified Native cache artifact for revision ' + revision)
+    return int(subprocess.check_output(['bash', Path(__file__).resolve().parents[2] / 'native-inputs.sh',
+                                       'resolve', owner, revision], text=True).strip())
 
 
 def qualify_engine(owner, revision, request, mutate, sleep=time.sleep, attempts=180):
