@@ -105,7 +105,11 @@ fi
 if [ -n "$modular_manifest" ]; then
   step modular-grants python3 -c 'import importlib.util,sys; from pathlib import Path; spec=importlib.util.spec_from_file_location("m",Path(sys.argv[1])/"installation/modular.py"); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); cfg=m.installed_configuration(m.config_load(sys.argv[2])); m.sql(cfg,m.grants(cfg))' "$here" "$modular_manifest"
 fi
-step status     laplace status
+if [ -n "$modular_manifest" ]; then
+  echo 'Database infrastructure prepared; modular activation and compatibility readback are required next.'
+else
+  step status laplace status
+fi
 ss -ltn 2>/dev/null | grep -q "0.0.0.0:5432\|\*:5432" || echo "
 The server listens on localhost only: sudo ./setup.sh declares the machine, this among it (the one step that needs root)."
 echo; echo "=== done   $(date -u +%H:%M:%S)   $log"

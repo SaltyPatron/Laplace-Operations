@@ -60,9 +60,10 @@ config.update(host=socket.gethostname().lower(), database='fixture', pgbin=str(r
 PY
 : > "$CALL_LOG"
 FIXTURE_MANIFEST="$work/installation/selected.json" ALLOW_GRANTS=1 bash "$work/deploy.sh" as-is > "$work/output" 2>&1 || { cat "$work/output"; exit 1; }
-sed 's/laplace deploy --configure-server-cache/laplace deploy\nmodular grants/' "$work/expected" > "$work/expected-modular"
+sed -e 's/laplace deploy --configure-server-cache/laplace deploy\nmodular grants/' -e '/^laplace status$/d' "$work/expected" > "$work/expected-modular"
 diff -u "$work/expected-modular" "$CALL_LOG"
-echo 'PASS declared modular database preserves its cache bindings and uses its selected installation for grants'
+grep -q 'modular activation and compatibility readback are required next' "$work/output"
+echo 'PASS modular infrastructure preserves cache bindings and defers comparison until owner activation'
 for artifact in "${artifacts[@]}"; do
   mv "$work/$artifact" "$work/held"
   : > "$CALL_LOG"

@@ -4,7 +4,7 @@
 # machine is deployed with every repository at its main. The jobs, on the one runner, one deployment at a time:
 #   deploy   the reseed policy (seed-stamp.sh decide), then deploy.sh, or deploy.sh drop when the database is reseeded:
 #            build/install against prepared artifacts, database schema/settings and status (no admission)
-#   checks   installed extension version/tables and Engine/PostgreSQL artifact compatibility; no generation or admission
+#   checks   mandatory installed extension and Engine/PostgreSQL compatibility after modular activation; no admission
 #   ingest   only when run by hand with `reseed`: ingest.sh, every source of $LAPLACE_SOURCES (laplace.env), and the
 #            stamp written. Deployments on a push or main-merged dispatch never ingest;
 #            the run summary reports the seed-stamp policy.
@@ -189,6 +189,13 @@ jobs:
       - name: a database dropped for a reseed carries the stamp it is being seeded to
         if: steps.policy.outputs.drop == 'true' && steps.policy.outputs.ingest == 'true'
         run: ./Laplace-Operations/seed-stamp.sh pending
+      - name: Deploy and verify the installed modular runtime
+        env:
+          REBUILD_RUNTIME: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_runtime == true }}
+        run: |
+          arguments=()
+          if [[ "$REBUILD_RUNTIME" == true ]]; then arguments+=(--rebuild); fi
+          python3 ./Laplace-Operations/installation/modular.py deploy --source "$GITHUB_WORKSPACE" "${arguments[@]}"
       - name: Clean owned modular deployment outputs
         if: always()
         uses: ./Laplace-Operations/storage
@@ -234,17 +241,6 @@ jobs:
         with: { persist-credentials: false, path: Laplace-Operations, clean: false }
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
-      - name: Provide the pinned Rust compiler for recipe grammar generation
-        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
-        with:
-          toolchain: 1.90.0
-      - name: Deploy and verify the installed modular runtime
-        env:
-          REBUILD_RUNTIME: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_runtime == true }}
-        run: |
-          arguments=()
-          if [[ "$REBUILD_RUNTIME" == true ]]; then arguments+=(--rebuild); fi
-          python3 ./Laplace-Operations/installation/modular.py deploy --source "$GITHUB_WORKSPACE" "${arguments[@]}"
   # Cloud verification uses the exact dependency revisions captured in staging. It runs only
   # after deployment readback AND staging runtime reads pass, on explicit cloud dispatch.
   cloud-acquire:
@@ -297,6 +293,13 @@ jobs:
           { echo "## hart-cloud: the deployment"; echo; echo "- $(lscpu | sed -n 's/^Model name: *//p')"
             echo '- `'"$(grep -o -wE 'avx2|avx_vnni|avx512f|avx512_vnni|avx512_bf16|amx_tile' /proc/cpuinfo | sort -u | tr '\n' ' ')"'`'; echo; } >> "$GITHUB_STEP_SUMMARY"
           ./Laplace-Operations/deploy.sh
+      - name: Deploy and verify the installed modular runtime
+        env:
+          REBUILD_RUNTIME: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_runtime == true }}
+        run: |
+          arguments=()
+          if [[ "$REBUILD_RUNTIME" == true ]]; then arguments+=(--rebuild); fi
+          python3 ./Laplace-Operations/installation/modular.py deploy --source "$GITHUB_WORKSPACE" "${arguments[@]}"
       - name: Clean cloud outputs while the lease is held
         if: always()
         uses: ./Laplace-Operations/storage
