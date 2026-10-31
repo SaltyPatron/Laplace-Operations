@@ -3,13 +3,41 @@ name: Deployment failure boundaries
 # an explicit operator choice; ordinary edits do not allocate hosted runners.
 on:
   workflow_dispatch:
+    inputs:
+      logging_only:
+        description: "Check Linux logging declarations and rotation fixtures on the staging runner, without applying host setup."
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
   group: operations-deployment-contracts-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  logging:
+    if: inputs.logging_only
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          path: Laplace-Operations
+      - name: Verify logging declarations without changing host configuration
+        working-directory: Laplace-Operations
+        run: |
+          set -euo pipefail
+          bash -n setup.sh
+          TMPDIR="$RUNNER_TEMP" bash tests/syslog-rotation.sh
+          unit_root=$(mktemp -d "$RUNNER_TEMP/logging-units.XXXXXXXX")
+          trap 'rm -rf -- "$unit_root"' EXIT
+          mkdir "$unit_root/rsyslog.service.d"
+          cp network/rsyslog-boot.conf "$unit_root/rsyslog.service.d/laplace-network.conf"
+          printf '[Unit]\nDefaultDependencies=no\n[Service]\nExecStart=/usr/bin/true\n' > "$unit_root/rsyslog.service"
+          printf '[Unit]\nDefaultDependencies=no\n' > "$unit_root/network-online.target"
+          SYSTEMD_UNIT_PATH="$unit_root" systemd-analyze verify --man=no "$unit_root/rsyslog.service"
   configuration-index:
+    if: ${{ !inputs.logging_only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -22,6 +50,7 @@ jobs:
       - name: Verify source indexing and credential suppression
         run: node audit/test-configuration-index.mjs
   windows-backup:
+    if: ${{ !inputs.logging_only }}
     runs-on: windows-2025
     timeout-minutes: 5
     steps:
@@ -92,6 +121,7 @@ jobs:
           path: ${{ runner.temp }}/laplace/operations/test-*/
           if-no-files-found: error
   boundaries:
+    if: ${{ !inputs.logging_only }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
