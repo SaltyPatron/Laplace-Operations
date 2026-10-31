@@ -6,8 +6,8 @@
 #            build/install against prepared artifacts, database schema/settings and status (no admission)
 #   checks   installed extension version/tables and Engine/PostgreSQL artifact compatibility; no generation or admission
 #   ingest   only when run by hand with `reseed`: ingest.sh, every source of $LAPLACE_SOURCES (laplace.env), and the
-#            stamp written. A deployment on a push or a main-merged dispatch never ingests (the inventor, 2026-10-09:
-#            a build is not an ingest); the policy still says what the stamp calls for, in the run's summary
+#            stamp written. Deployments on a push or main-merged dispatch never ingest;
+#            the run summary reports the seed-stamp policy.
 #   reads    verify.sh reads: laplace status and reads through the indexes
 # The reseed policy: a database carries the stamp of the code it was seeded from (seed-stamp.sh); when Laplace-Native,
 # Laplace-Engine's source or recipes, Laplace-postgres or Operations' floating-point contract change, the stamp
