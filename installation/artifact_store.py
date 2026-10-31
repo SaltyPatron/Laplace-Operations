@@ -45,6 +45,30 @@ def files(root):
     return result
 
 
+def inherit_access(path):
+    """Give a new, unshared staging object its destination parent's Windows ACL."""
+    if os.name != 'nt':
+        return
+    path = Path(path)
+    if path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()):
+        raise ValueError('Staging access must not follow a link: ' + str(path))
+    result = subprocess.run(['icacls.exe', str(path), '/reset', '/Q'],
+                            capture_output=True, text=True)
+    if result.returncode:
+        raise PermissionError('Cannot inherit artifact-store access for ' + str(path) + ': ' +
+                              (result.stderr or result.stdout).strip())
+
+
+def staging_directory(store, prefix):
+    directory = Path(tempfile.mkdtemp(prefix=prefix, dir=store))
+    try:
+        inherit_access(directory)
+    except BaseException:
+        directory.rmdir()
+        raise
+    return directory
+
+
 def atomic(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -53,6 +77,7 @@ def atomic(path, value):
         with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
             json.dump(value, stream, indent=2, sort_keys=True)
             stream.write('\n')
+        inherit_access(temporary)
         os.replace(temporary, path)
     finally:
         Path(temporary).unlink(missing_ok=True)
@@ -111,6 +136,7 @@ def materialize_file(source, target, store, expected=None):
             shutil.copy2(source, temporary)
             if digest(temporary) != expected:
                 raise ValueError('Component output changed while packaging: ' + str(source))
+            inherit_access(temporary)
             os.replace(temporary, blob)
         finally:
             Path(temporary).unlink(missing_ok=True)
