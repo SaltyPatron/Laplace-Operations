@@ -217,6 +217,15 @@ locks(){
   say "locks" "$LAPLACE_LOCKS, group $LAPLACE_GROUP, at every boot"
 }
 logging(){ part logging
+  # LAN receivers bind an installation address. Starting before DHCP completes
+  # leaves rsyslog active with its TCP listener missing until the next restart.
+  local syslog_override=/etc/systemd/system/rsyslog.service.d/laplace-network.conf
+  local syslog_changed=0
+  if ! cmp -s "$here/network/rsyslog-boot.conf" "$syslog_override"; then
+    install -d -o root -g root -m 755 /etc/systemd/system/rsyslog.service.d
+    install -o root -g root -m 644 "$here/network/rsyslog-boot.conf" "$syslog_override"
+    syslog_changed=1
+  fi
   # Give syslog its own size-triggered policy; keep the distribution's policies
   # for other logs. Check often enough that a burst does not wait a whole week.
   sed -i '\|^[[:space:]]*/var/log/syslog[[:space:]]*$|d' /etc/logrotate.d/rsyslog
@@ -225,6 +234,7 @@ logging(){ part logging
   install -o root -g root -m 644 "$here/installation/logrotate.timer.conf" /etc/systemd/system/logrotate.timer.d/laplace.conf
   logrotate --debug /etc/logrotate.conf
   systemctl daemon-reload
+  if ((syslog_changed)); then systemctl try-restart rsyslog.service; fi
   systemctl restart logrotate.timer
   systemctl reset-failed logrotate.service
   say 'syslog rotation' '64M threshold, checked every five minutes, seven rotated files'
