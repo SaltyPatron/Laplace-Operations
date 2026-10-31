@@ -73,6 +73,28 @@ step(){ name=$1; shift; echo; echo "=== $name   $(date -u +%H:%M:%S)"
         { "$@" 2>&1; echo $? > "$log/$name.exit"; } | grep --line-buffered -v "^OMP: " | tee "$log/$name.log"
         [ "$(cat "$log/$name.exit" 2>/dev/null)" = 0 ] || { echo "=== $name did not finish; what it said is in $log/$name.log"; exit 1; }; }
 
+install_prepared_inputs() (
+  prepared=$1
+  flags=${LAPLACE_FLAGS:-${LAPLACE_TIER0%.bin}.flags}
+  fresh=
+  trap '[ -z "$fresh" ] || rm -f -- "$fresh"' EXIT
+  for mapping in "tier0.bin|$LAPLACE_TIER0" "tier0.flags|$flags" "tier0.flags.layout|$flags.layout" "tier0.highway|$LAPLACE_HIGHWAY"; do
+    name=${mapping%%|*}; target=${mapping#*|}
+    mkdir -p "$(dirname "$target")" || return
+    # Preserve the installed inode and timestamp only after checking bytes and
+    # the deployment's existing mode. Changed artifacts still replace by rename.
+    if [ -f "$target" ] && [ ! -L "$target" ] &&
+       [ "$(stat -c '%a' -- "$target")" = 664 ] && cmp -s -- "$prepared/$name" "$target"; then
+      continue
+    fi
+    fresh=$(mktemp "$target.XXXXXX") || return
+    cp -- "$prepared/$name" "$fresh" || return
+    chmod 664 "$fresh" || return
+    mv -f -- "$fresh" "$target" || return
+    fresh=
+  done
+)
+
 step tune-pg    bash "$here/tune-pg.sh"                          # the server's settings: apply, reload, check. a drift fails the deploy
 step build      "$here/build.sh" install
 
@@ -82,14 +104,7 @@ if [ -n "${LAPLACE_PREPARED_INPUTS:-}" ]; then
   flags=${LAPLACE_FLAGS:-${LAPLACE_TIER0%.bin}.flags}
   step prepared-tier0 env LAPLACE_TIER0="$LAPLACE_PREPARED_INPUTS/tier0.bin" LAPLACE_FLAGS="$LAPLACE_PREPARED_INPUTS/tier0.flags" LAPLACE_HIGHWAY="$LAPLACE_PREPARED_INPUTS/tier0.highway" laplace text a
   step prepared-highway env LAPLACE_TIER0="$LAPLACE_PREPARED_INPUTS/tier0.bin" LAPLACE_FLAGS="$LAPLACE_PREPARED_INPUTS/tier0.flags" LAPLACE_HIGHWAY="$LAPLACE_PREPARED_INPUTS/tier0.highway" laplace highway --fingerprint
-  for mapping in "tier0.bin|$LAPLACE_TIER0" "tier0.flags|$flags" "tier0.flags.layout|$flags.layout" "tier0.highway|$LAPLACE_HIGHWAY"; do
-    name=${mapping%%|*}; target=${mapping#*|}
-    mkdir -p "$(dirname "$target")"
-    fresh=$(mktemp "$target.XXXXXX")
-    cp "$LAPLACE_PREPARED_INPUTS/$name" "$fresh"
-    chmod 664 "$fresh"
-    mv -f "$fresh" "$target"
-  done
+  install_prepared_inputs "$LAPLACE_PREPARED_INPUTS"
 fi
 [ -n "$(ls "$LAPLACE_GRAMMARS" 2>/dev/null)" ] || step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"   # compiled grammar dependencies; no resource admission
 step highway-fingerprint laplace highway --fingerprint
