@@ -61,13 +61,9 @@ sync_sibling_repos() {
     local ws_dir="${ws_root}/${repo}"
     local src_link="${LAPLACE_SRC}/${repo}"
     if [[ ! -d "${ws_dir}/.git" && ! -d "${src_link}/.git" ]]; then
-      if gh auth status >/dev/null 2>&1; then
-        echo "=== Cloning sibling repository ${LAPLACE_GITHUB}/${repo} into ${ws_dir}"
-        gh repo clone "${LAPLACE_GITHUB}/${repo}" "${ws_dir}" -- --depth 1 || true
-      elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        echo "=== Cloning sibling repository ${LAPLACE_GITHUB}/${repo} via GITHUB_TOKEN"
-        git clone -q --depth 1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${LAPLACE_GITHUB}/${repo}.git" "${ws_dir}" || true
-      fi
+      echo "=== Cloning sibling repository ${LAPLACE_GITHUB}/${repo} into ${ws_dir}"
+      # gh uses its credential store or GH_TOKEN/GITHUB_TOKEN without writing a token into .git/config.
+      gh repo clone "${LAPLACE_GITHUB}/${repo}" "${ws_dir}" -- --depth 1
     fi
     if [[ -d "${ws_dir}/.git" ]]; then
       sudo ln -sfn "${ws_dir}" "${src_link}"
@@ -169,9 +165,13 @@ case "${MODE}" in
     ensure_runtime_dirs
     start_pg_cluster
     ;;
-  all|*)
+  all)
     ensure_runtime_dirs
     sync_sibling_repos
     start_pg_cluster
+    ;;
+  *)
+    echo "Unknown bootstrap mode: ${MODE}; expected create, start, or all" >&2
+    exit 2
     ;;
 esac
