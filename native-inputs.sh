@@ -44,6 +44,17 @@ emit() {
   printf 'LAPLACE_TIER0=%s/tier0.bin\nLAPLACE_FLAGS=%s/tier0.flags\nLAPLACE_HIGHWAY=%s/tier0.highway\n' \
     "$directory" "$directory" "$directory" >> "$GITHUB_ENV"
 }
+publish_readers() {
+  # These owned copies contain public prepared inputs. PostgreSQL reads them as
+  # its own OS account; mktemp's private entry mode must not block that reader.
+  local directory=$1 name mode
+  mode=$(stat -c %a -- "$directory")
+  (( (8#$mode & 0555) == 0555 )) || chmod a+rx -- "$directory"
+  for name in manifest.json tier0.bin tier0.flags tier0.flags.layout tier0.highway .laplace-prepared-cache; do
+    mode=$(stat -c %a -- "$directory/$name")
+    (( (8#$mode & 0444) == 0444 )) || chmod a+r -- "$directory/$name"
+  done
+}
 prepare() (
   [[ ${GITHUB_ACTIONS:-} == true ]] || fail 'Prepared input selection is a CI operation'
   : "${LAPLACE_BUILD:?}" "${GITHUB_ENV:?}" "${RUNNER_TEMP:?}" "${GITHUB_REPOSITORY_OWNER:?}"
@@ -52,7 +63,7 @@ prepare() (
   [[ -z $(git -C "$native" status --porcelain --untracked-files=no) ]] || fail 'Selected Native sources have uncommitted changes'
   [[ $LAPLACE_BUILD == /* && $LAPLACE_BUILD != / && $LAPLACE_BUILD != *$'\n'* && $LAPLACE_BUILD != *$'\r'* ]] || fail 'Expected an absolute CI build root'
   base=$LAPLACE_BUILD/Laplace-Native
-  IFS=/ read -r -a components <<< "$base"
+  IFS=/ read -r -a components <<< "$base/prepared"
   for component in "${components[@]}"; do
     [[ -n $component ]] || continue
     [[ $component != . && $component != .. ]] || fail 'CI build root must be normalized'
@@ -79,6 +90,7 @@ prepare() (
         expected=$(jq -er '.manifest_sha256' "$selection")
         [[ $(digest "$cache/manifest.json") == "$expected" ]] || fail 'Selected prepared manifest differs'
         verify "$cache"
+        publish_readers "$cache"
         touch -- "$marker"
         emit "$cache"
         echo "Reused verified Native inputs: $revision"
@@ -92,6 +104,7 @@ prepare() (
   verify "$temporary"
   cache=$(LAPLACE_TIER0="$temporary/tier0.bin" bash "$native/scripts/ci-prepared-inputs.sh")
   verify "$cache"
+  publish_readers "$cache"
   fresh=$(mktemp "$base/.selected-inputs.XXXXXXXX")
   jq -n --arg native "$revision" --arg cache "$cache" --arg manifest "$(digest "$cache/manifest.json")" --argjson run "$run" \
     '{schema:"laplace.native-input-selection/v1",native:$native,cache:$cache,manifest_sha256:$manifest,qualified_run:$run}' > "$fresh"

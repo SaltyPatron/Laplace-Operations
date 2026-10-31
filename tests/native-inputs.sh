@@ -43,6 +43,7 @@ key=$(printf '%064d' 1)
 cache=$LAPLACE_BUILD/Laplace-Native/prepared/$key
 if [[ ! -d $cache ]]; then
   mkdir -p "$cache"
+  chmod 2700 "$cache"
   cp -a "${LAPLACE_TIER0%/*}/." "$cache/"
   printf 'laplace.native-prepared-cache/v1\n%s\n' "$key" > "$cache/.laplace-prepared-cache"
 fi
@@ -81,6 +82,9 @@ for name in tier0.bin tier0.flags tier0.flags.layout tier0.highway; do
 done
 bash "$ROOT/native-inputs.sh" prepare "$work/native"
 cache=$(jq -er .cache "$LAPLACE_BUILD/Laplace-Native/selected-inputs.json")
+mode=$(stat -c %a "$cache")
+(( (8#$mode & 0055) == 0055 ))
+echo 'PASS verified cache permits traversal by the separate PostgreSQL OS reader'
 snapshot() { for name in tier0.bin tier0.flags tier0.flags.layout tier0.highway; do stat -c '%n %i %y' "$cache/$name"; done; }
 snapshot > "$work/before"
 calls=$(wc -l < "$work/gh.log")
@@ -100,3 +104,12 @@ fi
 grep -Fq 'Prepared input digest mismatch: tier0.bin' "$work/corrupt.log"
 test "$(wc -l < "$work/gh.log")" = "$calls"
 echo 'PASS corrupted cached bytes fail instead of silently selecting or overwriting another closure'
+
+mv "$LAPLACE_BUILD/Laplace-Native/prepared" "$work/retained-prepared"
+ln -s "$work/retained-prepared" "$LAPLACE_BUILD/Laplace-Native/prepared"
+if NATIVE_OFFLINE=1 bash "$ROOT/native-inputs.sh" prepare "$work/native" > "$work/redirected.log" 2>&1; then
+  echo 'FAIL redirected cache parent accepted' >&2; exit 1
+fi
+grep -Fq 'CI build root traverses a symlink' "$work/redirected.log"
+test "$(wc -l < "$work/gh.log")" = "$calls"
+echo 'PASS a redirected cache parent is refused before cache access or permission publication'
