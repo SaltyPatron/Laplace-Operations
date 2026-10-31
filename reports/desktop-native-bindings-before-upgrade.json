@@ -1,0 +1,65 @@
+{
+  "checked_utc": "2026-10-31T14:45:44.276009+00:00",
+  "scope": "Read-only pre-upgrade Native function OIDs",
+  "databases": [
+    {
+      "database": "laplace",
+      "functions": [
+        {
+          "oid": "1096696",
+          "name": "laplace_cp_id",
+          "module": "$libdir/laplace_4d9b62619df04c965b27",
+          "schema": "public",
+          "arguments": "integer"
+        },
+        {
+          "oid": "1096803",
+          "name": "laplace_id",
+          "module": "$libdir/laplace_4d9b62619df04c965b27",
+          "schema": "public",
+          "arguments": "text"
+        },
+        {
+          "oid": "1109340",
+          "name": "laplace_restore_function_bindings",
+          "module": "$libdir/laplace_4d9b62619df04c965b27",
+          "schema": "public",
+          "arguments": ""
+        }
+      ],
+      "extension_version": "1.54"
+    },
+    {
+      "database": "laplace-mono",
+      "functions": [
+        {
+          "oid": "1126554",
+          "name": "laplace_cp_id",
+          "module": "$libdir/laplace_69574c84699c5e9a5388",
+          "schema": "public",
+          "arguments": "integer"
+        },
+        {
+          "oid": "1126661",
+          "name": "laplace_id",
+          "module": "$libdir/laplace_69574c84699c5e9a5388",
+          "schema": "public",
+          "arguments": "text"
+        },
+        {
+          "oid": "1139198",
+          "name": "laplace_restore_function_bindings",
+          "module": "$libdir/laplace_69574c84699c5e9a5388",
+          "schema": "public",
+          "arguments": ""
+        }
+      ],
+      "extension_version": "1.60"
+    },
+    {
+      "database": "laplace-desktop-app",
+      "functions": null,
+      "extension_version": null
+    }
+  ]
+}

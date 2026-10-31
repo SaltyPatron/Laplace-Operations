@@ -1,0 +1,18 @@
+[
+  {
+    "codepoint": "0xd800",
+    "stdout": "entity     dff435ed8113f31233474261aa854f0f   tier 0   (-0.054678, -0.931108, 0.175319, 0.315137)   hilbert 274a71197f93455b   depth 0.000000\nwall       inside\nparts      1\n  [0]      dff435ed8113f31233474261aa854f0f   tier 0   (-0.054678, -0.931108, 0.175319, 0.315137)   hilbert 274a71197f93455b   depth 0.000000\ntier 0     ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984\ncomputed in 463.85 ms, mapping tier 0 included; no database\n"
+  },
+  {
+    "codepoint": "0xdbff",
+    "stdout": "entity     fa5a060c1e71a595d3f2595f8783c6ed   tier 0   (-0.117027, -0.890339, 0.336900, 0.283017)   hilbert 275b08086a943014   depth 0.000000\nwall       inside\nparts      1\n  [0]      fa5a060c1e71a595d3f2595f8783c6ed   tier 0   (-0.117027, -0.890339, 0.336900, 0.283017)   hilbert 275b08086a943014   depth 0.000000\ntier 0     ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984\ncomputed in 515.07 ms, mapping tier 0 included; no database\n"
+  },
+  {
+    "codepoint": "0xdc00",
+    "stdout": "entity     ccb958508a431b01ad9484e67d820e09   tier 0   (-0.099707, -0.890993, 0.322193, 0.303944)   hilbert 275b08a1c26945e1   depth 0.000000\nwall       inside\nparts      1\n  [0]      ccb958508a431b01ad9484e67d820e09   tier 0   (-0.099707, -0.890993, 0.322193, 0.303944)   hilbert 275b08a1c26945e1   depth 0.000000\ntier 0     ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984\ncomputed in 462.74 ms, mapping tier 0 included; no database\n"
+  },
+  {
+    "codepoint": "0xdfff",
+    "stdout": "entity     12501a6725d76de9a6d1c78f69fd2517   tier 0   (-0.042949, -0.899725, 0.434208, 0.010686)   hilbert 27aa8cce5c6191d1   depth 0.000000\nwall       inside\nparts      1\n  [0]      12501a6725d76de9a6d1c78f69fd2517   tier 0   (-0.042949, -0.899725, 0.434208, 0.010686)   hilbert 27aa8cce5c6191d1   depth 0.000000\ntier 0     ece594fd75fb70cbc5fc40ffa6ec9fb42f71f8ebad3a73be09b99aa3d7db8984\ncomputed in 450.48 ms, mapping tier 0 included; no database\n"
+  }
+]

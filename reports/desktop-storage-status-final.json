@@ -1,0 +1,1678 @@
+{
+  "schema": "laplace.desktop-storage/v1",
+  "checked_utc": "2026-10-31T15:09:25.6703210Z",
+  "build_root": "D:\\Libraries\\build\\Laplace",
+  "work_root": "E:\\Data\\Laplace\\work",
+  "policy": {
+    "reusable_packages": 2,
+    "reusable_components": 2,
+    "rollback_releases": 1,
+    "operation_successes": 3,
+    "operation_failures": 1
+  },
+  "entries": [
+    {
+      "path": "E:\\Data\\Laplace\\services\\laplace\\releases\\081c6e6927f47f53b1f35d5fdbb51bd94ac1d3c85bd3cc7d3891b2573341f6d4",
+      "root": "E:\\Data\\Laplace\\services\\laplace\\releases",
+      "kind": "modular_release",
+      "marker": "package.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T22:33:29.6046545Z",
+      "reasons": [
+        "rollback_or_reuse"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34",
+      "root": "E:\\Data\\Laplace\\services\\laplace\\releases",
+      "kind": "modular_release",
+      "marker": "package.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T23:41:00.0663994Z",
+      "reasons": [
+        "live_reference"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5",
+      "root": "E:\\Data\\Laplace\\services\\laplace\\releases",
+      "kind": "modular_release",
+      "marker": "package.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T14:54:34.1506802Z",
+      "reasons": [
+        "live_reference"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\services\\laplace-mono-api\\web\\releases\\52c713f52a895a078464dfc3f3a6c53b5343b974657fb8b95f23e39e70d54cc6",
+      "root": "E:\\Data\\Laplace\\services\\laplace-mono-api\\web\\releases",
+      "kind": "iis_release",
+      "marker": "iis-package.json",
+      "revision": "52c713f52a895a078464dfc3f3a6c53b5343b974657fb8b95f23e39e70d54cc6",
+      "modified_utc": "2026-10-31T14:48:54.7749449Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\services\\laplace-mono-api\\web\\releases\\c6186d634bf5b47646d7952c4f43bc7e2b17351074ab1387b1d601df4b0a6420",
+      "root": "E:\\Data\\Laplace\\services\\laplace-mono-api\\web\\releases",
+      "kind": "iis_release",
+      "marker": "iis-package.json",
+      "revision": "c6186d634bf5b47646d7952c4f43bc7e2b17351074ab1387b1d601df4b0a6420",
+      "modified_utc": "2026-10-30T16:31:56.9237601Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\services\\laplace-mono-uci\\releases\\5636113d6fb93a11a29d0bde200cfa9ca6818f12c46628f9b57e410a5cfd1eef",
+      "root": "E:\\Data\\Laplace\\services\\laplace-mono-uci\\releases",
+      "kind": "uci_release",
+      "marker": "uci-package.json",
+      "revision": "5636113d6fb93a11a29d0bde200cfa9ca6818f12c46628f9b57e410a5cfd1eef",
+      "modified_utc": "2026-10-29T22:37:17.3124595Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\services\\laplace-mono-uci\\releases\\c7d3b6d14d119f36b3b50d553181ea16707766f6c15f3a1ee2bb099aed406e76",
+      "root": "E:\\Data\\Laplace\\services\\laplace-mono-uci\\releases",
+      "kind": "uci_release",
+      "marker": "uci-package.json",
+      "revision": "c7d3b6d14d119f36b3b50d553181ea16707766f6c15f3a1ee2bb099aed406e76",
+      "modified_utc": "2026-10-29T20:16:31.8183047Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\services\\laplace-mono-uci\\releases\\dcab43b",
+      "root": "E:\\Data\\Laplace\\services\\laplace-mono-uci\\releases",
+      "kind": "uci_release",
+      "marker": null,
+      "revision": "dcab43b",
+      "modified_utc": "2026-10-12T02:42:33.2833518Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false,
+      "uci_payload_sha256": "05ca6bbfcce8d55ca4f339c646b30989868266b4d75db36df05af3c16d444508"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages\\470c3b363f0dc92b50d41cee03c6edc4d7cc71c0ef9b9a10637c58062e072b3e",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages",
+      "kind": "iis_package",
+      "marker": "iis-package.json",
+      "revision": "52c713f52a895a078464dfc3f3a6c53b5343b974657fb8b95f23e39e70d54cc6",
+      "modified_utc": "2026-10-31T14:48:26.3374816Z",
+      "reasons": [
+        "retained_release",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages\\6db414a15ea5b2eb2713c21bc2bc8c99f2c37e1a8c6c6597103b5178c6397478",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages",
+      "kind": "iis_package",
+      "marker": "iis-package.json",
+      "revision": "c6186d634bf5b47646d7952c4f43bc7e2b17351074ab1387b1d601df4b0a6420",
+      "modified_utc": "2026-10-30T16:31:34.1203371Z",
+      "reasons": [
+        "retained_release",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages\\e89e68f9b684c205dff1d4d77526dbe17b98041118fa2f087efa68ed269e908c",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages",
+      "kind": "iis_package",
+      "marker": "iis-package.json",
+      "revision": "4c5871718f9db93c184c8104186e7f882eb5d7314c513ee523faebcf1cc297ad",
+      "modified_utc": "2026-10-30T18:36:23.9061938Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages\\f8ffc7d5e404b80cf2200e58eea4b04be83308b79e97d3db15584e6ad09f1d76",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages",
+      "kind": "iis_package",
+      "marker": "iis-package.json",
+      "revision": "60f039aa16ac23c060901d1a9bb056838cc8dd660f9d1556ece77c89e899c863",
+      "modified_utc": "2026-10-31T07:18:34.6694384Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\426108834852f89ed3857bacee32b48579ea2b699b3693008f27fb835e559d9b",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T15:56:02.8163373Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\57f8b879883b0fa33e88584b10927058c1de90b2dfa751e7fe04a2306116352f",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T16:29:12.7640502Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\7551fd66165906c5d41320aee08e591c53b1e233b36bdcd317dcce7ed6aab65b",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T18:34:10.4345762Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\88ecb3a7522973c8a9191ee62c68cb4a25865a932aac305daf6da413a7d9cff3",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T07:16:35.5104919Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\944afe35fdc8d7cc292e2eb8872fae2c251a6d9a4363d56b0dbb2a69c35127f0",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T14:46:21.3756680Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\cbab2b9925b838c1a567f9aa035136728f356e413d39f51bac492d65aa7bdac0",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T06:08:24.0481562Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\33d9d4bee8c629fe4af36369272625710e2743634ee52f63240ab34d66756359",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T18:34:30.0062486Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\475e72551b7ac1ad7be1572727dc837972881fdc151c790aad73b255fcb6cc52",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T07:16:56.3847172Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\73e6441eec25182947548810e4979f8bbd72a391223e8b87e6683ad06636fdd3",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T06:08:43.5323264Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\873385e5998d7f9fed907a28795866b75e468148aa6c445b1c26b7ceb51bab24",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T14:46:43.5065952Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\9525fd98cdb455779e055eea5b868c3b7b0d77bb00ac453f9365f7896354bee2",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T15:56:27.0023038Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\f9f5ebbe245ee28a637c03a50025f67881130c78bafc7e2dd34bc5e9359d67d8",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T16:29:33.1701485Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\075cd5976a2789b64f3ae2185abe0ac864c463e15d71281408d815a77d66a9f4",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T06:08:53.3222922Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\3eb169b023ad4cc3e0e563ec93ce8b4d96ab7935a309f259166af3dd6b4435d4",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T07:17:05.2183857Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\4c4c4172112f332b1d4c08141663c7aaf34f70b9a28396169c9a9425aae41451",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T15:56:38.0620826Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\78db151da8f53fb46179ac2fe02c7c26ff641dd8812c7083334b23ace1d0d236",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T16:29:43.5764327Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\b8e7e0fd1a71fdc0586c77716c25a662843b7bbdedcc14da25aeb7b41cb9b57e",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T18:34:39.4913678Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\e78ee8c68000cf6993bccd75c69a2ea17844a1798297ffa318d6401ad612e77e",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T14:46:54.1750824Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\0d68446d773210e5cff634b0ce0babab499bea2a0c78b219911f07661daa0003",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T06:09:02.9755555Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\2d2731246a06360f8d9fe9d210f40aea89fd8d48671b013f9bd94400e334b920",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T16:29:53.9519022Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\41d92b83bf38ff7ae24138760fb09e8af42898ae6069b2581d50ab9c0fda3faa",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T15:56:48.5747466Z",
+      "reasons": [
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\9336167ecff544f3564b7c6a81b2593127aa2c554de9decc283e759d14774c47",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T18:34:48.9490892Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\a535c31bb883bc825a4a186f779101da04a84723ce98cc43b9f51960d885bebb",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T07:17:14.1314323Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\c8bf4ea1f3dae2d5fc6cd7a0bd72c7e7e7c537135b068c8e7ee1196ddbbca803",
+      "root": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations",
+      "kind": "component",
+      "marker": "artifact.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T14:47:04.1934354Z",
+      "reasons": [
+        "live_reference",
+        "process_visibility_incomplete"
+      ],
+      "retire": false
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\components-20261030T1833272250069Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "components.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T18:35:54.1518318Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "components|desktop",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\components-20261030T1833272250069Z\\components.json",
+      "receipt_sha256": "348C58DF6C9675563DD9F9B13024A2043A7ABAD87B7F7610B39123C0C9E8F11C"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\components-20261031T0716009179981Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "components.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T07:18:14.2473930Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "components|desktop",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\components-20261031T0716009179981Z\\components.json",
+      "receipt_sha256": "0C49FC52DDF90FF512B9909FA3624D8A51A008E6F4CA33ECA9DDC6991762A307"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\components-20261031T1445300918623Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "components.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T14:47:44.3332610Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "components|desktop",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\components-20261031T1445300918623Z\\components.json",
+      "receipt_sha256": "CFD32CBE2CBC583280360D456A7C5B444A31DEC9A6C6D679EBB9D19BCA87802B"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261030T1555187455109Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T15:59:47.1615163Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "deploy|desktop",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261030T1555187455109Z\\receipt.json",
+      "receipt_sha256": "19E93C2C84B37DC63598C95DB36AC80073593CC0A701505D1B0D2FDDF969851D"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261030T1628278483042Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T16:32:47.6849772Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "deploy|desktop",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261030T1628278483042Z\\receipt.json",
+      "receipt_sha256": "5CDD50B543CBFE15E4CB0EBFFC190478C09A2626246C90D6A57AAE5E02E6975E"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261030T1724373671173Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T17:26:40.6336477Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "deploy|desktop",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261030T1724373671173Z\\receipt.json",
+      "receipt_sha256": "8DF6E5CCF331237E762F99B4743570FE33E06219EB9CA88AFF869CACE1BDB21E"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261031T1453396525442Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T14:55:21.1639918Z",
+      "reasons": [
+        "recent_failure"
+      ],
+      "retire": false,
+      "history_group": "deploy|desktop",
+      "history_status": "failed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261031T1453396525442Z\\receipt.json",
+      "receipt_sha256": "4B63727738A4BFD4BEBFC8E445A1EA046FFCDB9DC565B7A95ACEAE6968CF32DA"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-003533",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T00:35:36.1659878Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://127.0.0.1:5187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-003533\\receipt.json",
+      "receipt_sha256": "68C1E6F99E6FF7336DE37FE844DB75900EE8A145CA3B5B934DA296489EF22CB0"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-003643",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T00:36:45.7383045Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://127.0.0.1:5187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-003643\\receipt.json",
+      "receipt_sha256": "B315E70E6AE3B5671F3A8AC22DBCEC3FEFB32C171DD6DFBA4DB5D8D831DCA4A5"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-042212",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T04:41:23.5425423Z",
+      "reasons": [
+        "recent_failure"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:5187",
+      "history_status": "failed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-042212\\receipt.json",
+      "receipt_sha256": "DF02CEA9FD93AAAF2C94623FFC18740308CD253278965AFA0A8B187DB36BA596"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-042605",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T04:26:07.3028168Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:15187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-042605\\receipt.json",
+      "receipt_sha256": "D0BC064573175A0AB9022FB9AA1EFE784B4A40B540B67A83456B03671A79BEC0"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-042822",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T04:28:23.8871771Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:15187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-042822\\receipt.json",
+      "receipt_sha256": "A0E404FE21C3B3DC0EEE77971801A6E784F0C4E74BED995EB92664F95B0BD12C"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-050750-2920863c",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T05:08:47.7820714Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:15187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-050750-2920863c\\receipt.json",
+      "receipt_sha256": "BC6751A489E3738D6B622A835CB508E14AA21ACB61A7509B47E440FBFA39815C"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-050949-ff03692a",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T05:11:37.5759420Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:32500",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-050949-ff03692a\\receipt.json",
+      "receipt_sha256": "DF71435B944AC534FF1DF95AA3BF1305D7F7F1376934B7D5A1619C64D2E1F011"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-051139-639216f8",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T05:11:46.6757147Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:32532",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-051139-639216f8\\receipt.json",
+      "receipt_sha256": "60B261ECA1B31323199C42A7BD75F195BBC0EFC5845A096CB4BAC5F63D321700"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-051237-08cdcd2b",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T05:12:44.9235049Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:32566",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-051237-08cdcd2b\\receipt.json",
+      "receipt_sha256": "96A3791A525BFD694C7375148DFB3D7CF78EEA6D9FCB798958E61D389BEC6B99"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-173703-99e25154",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T17:37:18.5994491Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:48712",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-173703-99e25154\\receipt.json",
+      "receipt_sha256": "68572338435809F168668AE274A7B0A3E7592E97D8BD827CE915185CBFF665FB"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-173721-2595137a",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T17:37:24.0499547Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:48712",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-173721-2595137a\\receipt.json",
+      "receipt_sha256": "ED7D738F54AA9DF694E0B0A6298105A51AF057950E056DCAFD4568C476071B8C"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-184543-14877e75",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T18:47:19.2430669Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:5193",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-184543-14877e75\\receipt.json",
+      "receipt_sha256": "28673D9B3035BEDFC080224752996EB3C8F3EC2563DB9420D9C571B512B1C2A8"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-184719-e24ca041",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T18:47:51.9931692Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:5193",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261011-184719-e24ca041\\receipt.json",
+      "receipt_sha256": "76A7A3F10F4C8E602F15AA6A5E0A156586BFBA7065CCBA04F9CE93BA65550B35"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261012-193509-d038a252",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-13T11:30:21.4583400Z",
+      "reasons": [
+        "retained_receipt_reference"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:5187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261012-193509-d038a252\\receipt.json",
+      "receipt_sha256": "D2039985CED879EC348F84DD8E39C34FAF76CD441AFCD5DCD0C086E9CD44AB3D"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261013-114221-7e7dc0c2",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-13T11:42:23.9373135Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:5198",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261013-114221-7e7dc0c2\\receipt.json",
+      "receipt_sha256": "79C0A67677771AC0340F7BDBBD9BB718EE886F7E6617671969D5C0511BE6F529"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261019-140943-90f3aa45",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-19T14:09:46.4682052Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:5187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261019-140943-90f3aa45\\receipt.json",
+      "receipt_sha256": "FB77684726FE5833F7E6112A993F557F0F85D1DB65B843E049C7D75D82074B99"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261027-201441-f3c8be05",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-27T20:14:46.2719639Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:5197",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261027-201441-f3c8be05\\receipt.json",
+      "receipt_sha256": "0C1442BA64D69E6F66BA4EEAE3F3F546AB5D2B1663CD758B62F199F5AAB57B8E"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261027-202805-47d6a1cf",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-27T20:28:08.9056297Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:5197",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261027-202805-47d6a1cf\\receipt.json",
+      "receipt_sha256": "AB9088913CF41FF73E55BD80BBAAC070823264D49290D21D75EF21FE570DB7BB"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261029-223956-aa6e41ba",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T22:39:58.9450794Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:5187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261029-223956-aa6e41ba\\receipt.json",
+      "receipt_sha256": "7388FDC644768B240AC7F8D5EEEC974C71017F1663047EFFAAA12CDDA2C80189"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261029-224211-4c965011",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T22:42:14.0600797Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:5187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261029-224211-4c965011\\receipt.json",
+      "receipt_sha256": "59A9BAC49B82FA852A9ADD9A57C6AF0F2EFDA5DBEFEE174A51FAFE911429BC5B"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261029-224219-c30b08ad",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T22:42:52.1887388Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:6635",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261029-224219-c30b08ad\\receipt.json",
+      "receipt_sha256": "3EC7D7D82F885581D11DBD25E6CC0679D0D30A59C20027E4BD8DFE3F20C6A9D4"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261029-224300-c23506ff",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T22:43:03.8094086Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-run|http://localhost:6635",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-run-20261029-224300-c23506ff\\receipt.json",
+      "receipt_sha256": "3275A2B80BFCBF0081FB9F93D4EB895779C74F63607806EDBF90BFF1F1B9C592"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-verification-20261011-173710-6445bfc7",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-11T17:37:11.0570252Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-verification|http://localhost:48712",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-verification-20261011-173710-6445bfc7\\receipt.json",
+      "receipt_sha256": "B4A4F94E1992F84904BA3ECEA1399D28C36F43AC112B4EF4701B212D512999B5"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-verification-20261012-193607-707ca6e0",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-12T19:36:08.6295494Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-verification|http://localhost:5187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-verification-20261012-193607-707ca6e0\\receipt.json",
+      "receipt_sha256": "455A42078DC83374B1520C2450744407594989DB02DF9980DF80312B0CE77BD4"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-verification-20261013-113247-e4e1477d",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-13T11:32:48.0111360Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-verification|http://localhost:5187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-verification-20261013-113247-e4e1477d\\receipt.json",
+      "receipt_sha256": "BFB7A93414A5B3AB2EB15916575BE573DDED426208380C94F34FF648C6E1AC3E"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-verification-20261013-114351-d2f15d21",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-13T11:43:53.1127616Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-verification|http://localhost:5187",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-verification-20261013-114351-d2f15d21\\receipt.json",
+      "receipt_sha256": "519FA1BD769A2C06F0B1B0CEC555496398078DA5D5BCF5E948B9EE211F70EA39"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\desktop-verification-20261029-224232-dee79104",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T22:42:32.6112347Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "desktop-verification|http://localhost:6635",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\desktop-verification-20261029-224232-dee79104\\receipt.json",
+      "receipt_sha256": "E5D3871AEF4CBF91FF282A83A7779E72ABE2EFA346B995E3E86DB629CD5F34F4"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261017T0558290858176Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-17T05:58:31.2577257Z",
+      "reasons": [
+        "recent_failure"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|migrate",
+      "history_status": "failed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261017T0558290858176Z\\receipt.json",
+      "receipt_sha256": "1938CA6E09B832F1002FFCD36D6587A46EE96B79228564109D85E99FC4549D41"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261017T0558508982923Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-17T05:58:53.0895987Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|remigrate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261017T0558508982923Z\\receipt.json",
+      "receipt_sha256": "6B6A74B326D515997AF040116A507E8C140A366F292EE1B50497E5827F2576B9"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261018T2037502631299Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-18T20:37:55.2692640Z",
+      "reasons": [
+        "recent_failure"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|recreate",
+      "history_status": "failed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261018T2037502631299Z\\receipt.json",
+      "receipt_sha256": "931E9D61AA46FB8BC78DE71E1E6F238165A871CC852320FF56422529C9CBD9CA"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261021T1605305611919Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-21T16:05:34.8739474Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|recreate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261021T1605305611919Z\\receipt.json",
+      "receipt_sha256": "B63D4655D4A89A96478B8740AB7F636FCDC3BDF5ABBECB2E0465361F88D809EE"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261021T1605352837825Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-21T16:05:57.3592644Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|recreate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261021T1605352837825Z\\receipt.json",
+      "receipt_sha256": "69C033F106F55679E41932FE2E06F7B51686CE0D91B043AFC660AED8B4DB7EC7"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261024T0503006776488Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-24T05:03:01.0703396Z",
+      "reasons": [
+        "recent_failure"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|recreate",
+      "history_status": "failed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261024T0503006776488Z\\receipt.json",
+      "receipt_sha256": "794CC1355D3A030755DF21C867EB746CE8A224A52F8BAE4418473F8F4F537FD6"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261024T0505005882575Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-24T05:05:04.5224485Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|recreate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261024T0505005882575Z\\receipt.json",
+      "receipt_sha256": "7701276243DA84D1B99AD1C409E70AFBCFC72FE781E231F4555902E572FF124E"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261024T0505049354589Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-24T05:05:28.0433017Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|recreate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261024T0505049354589Z\\receipt.json",
+      "receipt_sha256": "47E4AD99F356C0B3C07763F3F55A8BAB2298B254330CAF5FC891B828A14F6407"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261027T1751595322016Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-27T17:52:00.3341686Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|status",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261027T1751595322016Z\\receipt.json",
+      "receipt_sha256": "3C160752CD5A301A70C96017AD982C935E38BD6507BC3F8748D878ADC31297F9"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261027T1847095924887Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-27T18:47:22.1896537Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|recreate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261027T1847095924887Z\\receipt.json",
+      "receipt_sha256": "FB6880D3960BF7118AB67545410F346CC638B28999D262923BC7D14712807C01"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261027T1847225700553Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-27T18:47:55.4446499Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|recreate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261027T1847225700553Z\\receipt.json",
+      "receipt_sha256": "AAF0B90907B62A78C03E81A348175425DAEB0DF72F10DF1390531A0669E44BB7"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261029T0317169237917Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T03:19:40.3889379Z",
+      "reasons": [
+        "recent_failure"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|migrate",
+      "history_status": "failed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261029T0317169237917Z\\receipt.json",
+      "receipt_sha256": "B043BD3675809C3ECB0B99064B55F1180D012DD6AE53C39E59D07C53FD074118"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261029T1443083391814Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T14:43:09.2558836Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|status",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261029T1443083391814Z\\receipt.json",
+      "receipt_sha256": "CF8A7EB4B6F767C1C5F48CBEBD8458E136AB1EA8FE8B5C419E378E419A535783"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261029T1651587022672Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T16:51:59.6985426Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|status",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261029T1651587022672Z\\receipt.json",
+      "receipt_sha256": "4DBD16DCA05B74A153DA6BEDC9D3515BC04A2AF617D5A76F4DF2BD004DD5CF0D"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1631434112581Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T16:31:48.2136882Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|migrate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1631434112581Z\\receipt.json",
+      "receipt_sha256": "F06468FA636FA30672C880278A38B1E9B822655A680B5CA7A1EC33A7EAAFA120"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1632141708998Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T16:32:15.1919394Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|status",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1632141708998Z\\receipt.json",
+      "receipt_sha256": "D531503B0F32A184895533F4DF66E090D8444C92D0D6EFA6B8A28BEE134D7F59"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1725467800626Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T17:25:48.9583536Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|migrate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1725467800626Z\\receipt.json",
+      "receipt_sha256": "C9FABA740C90DD69174BBDD4BA3423D43B54BD190F07EE281DE31BE5E035F98C"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1725493756131Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T17:25:53.1133091Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|migrate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1725493756131Z\\receipt.json",
+      "receipt_sha256": "9704631AE0C62A92CF1C11459072AF07E4728933663061621BA7F70DA6EEF96A"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1726107797339Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T17:26:11.5963746Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|status",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1726107797339Z\\receipt.json",
+      "receipt_sha256": "476394477DEA2B35D58522756E1FE7BF2CE646FFCD162C79C6B70043797853F5"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1836306288282Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T18:36:32.3849208Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|migrate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261030T1836306288282Z\\receipt.json",
+      "receipt_sha256": "8487FAB14ADD5639DD72C5040CA318194C87ADA220AD0C8A89B6823DE2395FA1"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261031T1448357989475Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T14:48:37.5648884Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-desktop-app|migrate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261031T1448357989475Z\\receipt.json",
+      "receipt_sha256": "E3AD17BA3F5E9B4BAF26BBE43FCAF37B24875374CDAC5E82638E6A4F68C3C8CD"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261031T1448379906312Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T14:48:42.5039570Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|migrate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261031T1448379906312Z\\receipt.json",
+      "receipt_sha256": "5B6CC13B794D1ABBB39568A514AF044436C3293C2D6DDF0B254023C3BEE2AA32"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261031T1449210765889Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-31T14:49:22.1720732Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace-mono|status",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\iis-database-20261031T1449210765889Z\\receipt.json",
+      "receipt_sha256": "68868348FC0BD44716D98D452645DF22F7AFEC5DE3F589DA975C3FCCBA25EA5E"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\modular-database-20261029T2013597836567Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-29T20:14:03.0660375Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|HART-DESKTOP|laplace|migrate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\modular-database-20261029T2013597836567Z\\receipt.json",
+      "receipt_sha256": "8721B92159BA2CE1EA2FA3375382F7C2DC1C2DC11337C98603E9487ABF935F67"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\modular-database-20261030T0004560212010Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T00:05:05.0976031Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "database|hart-desktop|laplace|migrate",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\modular-database-20261030T0004560212010Z\\receipt.json",
+      "receipt_sha256": "BE5E70C30E30261E5756CAA916D52E75CBB5FEF5CEE49B3CCC5293822321FAFB"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\test-20261030T0020430877013Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T00:21:02.2134144Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "test|desktop",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\test-20261030T0020430877013Z\\receipt.json",
+      "receipt_sha256": "D7DDACDECA48853D265FC64F1890A70AA6C7F06DF3D30043850B1E54EF0BD6FE"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\test-20261030T0103436549328Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T01:04:20.8701280Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "test|desktop",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\test-20261030T0103436549328Z\\receipt.json",
+      "receipt_sha256": "07A14AA911EFD779B8EE6F4E79EA9FFB1E69FBADEF08BAC200D65923F9AAF2DF"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\test-20261030T0148137075260Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T01:48:22.3021135Z",
+      "reasons": [
+        "recent_failure"
+      ],
+      "retire": false,
+      "history_group": "test|desktop",
+      "history_status": "failed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\test-20261030T0148137075260Z\\receipt.json",
+      "receipt_sha256": "AD80A3CE5E348468E4C2C8EC57CC28D6B6680CA47EB8AA2404A50314A9737103"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\test-20261030T0220196427418Z",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": "receipt.json",
+      "revision": null,
+      "modified_utc": "2026-10-30T02:20:41.6808976Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "test|desktop",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\test-20261030T0220196427418Z\\receipt.json",
+      "receipt_sha256": "FA966B954E40987C0C51936DB447598F4825F9B3CFD77D68A6D3A0CC5BF7EF4C"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\development-20261010-230408.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-10T23:04:17.3137630Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "development|desktop|test",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\development-20261010-230408.json",
+      "receipt_sha256": "93F81118BFBE88A11EF99305EB5E541C225F32AAA058E68FCA00743A13599142"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\development-20261025-152829.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-25T15:28:36.8616583Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "development|desktop|test",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\development-20261025-152829.json",
+      "receipt_sha256": "6B1BFF1FAB508A4A3D85F5AAAC6964958B5BA3F645F78CAF1895C1CD9C4E8CF4"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\development-20261027-201240.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-27T20:13:22.5674196Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "development|desktop|build",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\development-20261027-201240.json",
+      "receipt_sha256": "1739AC7D3CDF3FEC391B5C91DB5E5C01CCDB9B4B361D680401E68F9040DFA25D"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\development-20261027-201943.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-27T20:22:25.3409228Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "development|desktop|build",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\development-20261027-201943.json",
+      "receipt_sha256": "504590F57DAE7447F95F03ECBB912E10C6C9B7F56492843F1F5D313329918B46"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\development-20261029-221153.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-29T22:12:06.1789455Z",
+      "reasons": [
+        "recent_failure"
+      ],
+      "retire": false,
+      "history_group": "development|desktop|build",
+      "history_status": "failed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\development-20261029-221153.json",
+      "receipt_sha256": "77259303F8753186DA3CB641C0CF4648ECC29661216B3768CDEAA4EB4952646C"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\development-20261029-221812.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-29T22:21:18.4183643Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "development|desktop|build",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\development-20261029-221812.json",
+      "receipt_sha256": "670E0B3DB5929B371D1055009F25C5AFED3871187A311E62D483F2F0FE43FDF3"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\storage-20261030T1559471427628Z.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-30T15:59:47.1427437Z",
+      "reasons": [
+        "retained_receipt_reference"
+      ],
+      "retire": false,
+      "history_group": "storage",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\storage-20261030T1559471427628Z.json",
+      "receipt_sha256": "9115E416F3DEF3FC68E45A457EE11AD7249208C35276CD85C5F387ACC907F804"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\storage-20261030T1632476735756Z.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-30T16:32:47.6735605Z",
+      "reasons": [
+        "retained_receipt_reference"
+      ],
+      "retire": false,
+      "history_group": "storage",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\storage-20261030T1632476735756Z.json",
+      "receipt_sha256": "7830A6EB973FC8E2AB2FE5A02E5D213A22549EEC8676AE85A10CF762A18E3045"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\storage-20261030T1726406224004Z.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-30T17:26:40.6223859Z",
+      "reasons": [
+        "retained_receipt_reference"
+      ],
+      "retire": false,
+      "history_group": "storage",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\storage-20261030T1726406224004Z.json",
+      "receipt_sha256": "7BC86DBBA9554906304AA76230B2644E5623213602D07A96F17E182A608A9A0F"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\storage-20261031T0510387334698Z.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-31T05:10:38.7332287Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "storage",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\storage-20261031T0510387334698Z.json",
+      "receipt_sha256": "F5D5B110B4319868A7C8989B2D0E3DF855F68A0A9DA85E5C1DB06EA097FB40AF"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\storage-20261031T1449383939908Z.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-31T14:49:38.3939693Z",
+      "reasons": [
+        "recent_success"
+      ],
+      "retire": false,
+      "history_group": "storage",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\storage-20261031T1449383939908Z.json",
+      "receipt_sha256": "231DC4AD9898491297F08229802848DBED2BCEB4F2E5D90763F18E46AA02D28E"
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\operations\\storage-20261031T1508414240493Z.json",
+      "root": "E:\\Data\\Laplace\\work\\operations",
+      "kind": "operation_history",
+      "marker": null,
+      "revision": null,
+      "modified_utc": "2026-10-31T15:08:41.4237833Z",
+      "reasons": [
+        "recent_run"
+      ],
+      "retire": false,
+      "history_group": "storage",
+      "history_status": "passed",
+      "receipt_path": "E:\\Data\\Laplace\\work\\operations\\storage-20261031T1508414240493Z.json",
+      "receipt_sha256": "5E7459121DB7BA358BA76D142505565C04EC2AD84992DF1E2CF951319095C133"
+    }
+  ],
+  "database_references": [
+    "E:/Data/Laplace/deploy/share/highway.bin",
+    "E:/Data/Laplace/deploy/share/tier0.bin",
+    "E:/Data/Laplace/deploy/share/tier0.flags",
+    "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5\\share\\prepared\\tier0.bin",
+    "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5\\share\\prepared\\tier0.flags",
+    "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5\\share\\prepared\\tier0.highway"
+  ],
+  "source_and_build_policy": "Keep source checkouts, registered worktree builds and declared incremental build profiles. Retire abandoned generated worktree builds and publisher scratch."
+}

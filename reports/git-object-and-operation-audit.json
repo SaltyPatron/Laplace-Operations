@@ -1,0 +1,103 @@
+{
+  "checked_utc": "2026-10-31T15:12:59.926603+00:00",
+  "status": "passed",
+  "method": "Compare fsck candidate commits against raw ancestry of remote branches and tags verified published by the repository audit.",
+  "repositories": [
+    {
+      "repository": "code-search",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace-Conventional",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace-Engine",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace-MCP",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace-Native",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace-Operations",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace-postgres",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace-Prototype",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace-Refactor",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 3106,
+      "candidates_covered_by_published_refs": 3106,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace-UCI",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    },
+    {
+      "repository": "Laplace-Wiki",
+      "fsck_exit": 0,
+      "fsck_candidate_unreachable_commits": 0,
+      "candidates_covered_by_published_refs": 0,
+      "uncovered_unreachable_commits": 0,
+      "pending_git_operations": []
+    }
+  ]
+}

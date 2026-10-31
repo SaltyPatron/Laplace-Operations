@@ -1,0 +1,20 @@
+{
+  "canonical_git_checkout_count": 12,
+  "git_heads": [
+    "Laplace-MCP\\.git\\HEAD",
+    "Laplace-Wiki\\.git\\HEAD",
+    "Laplace-Engine\\.git\\HEAD",
+    "Laplace-UCI\\.git\\HEAD",
+    "Laplace-Conventional\\.git\\HEAD",
+    "Laplace-Refactor\\.git\\HEAD",
+    "Laplace-Prototype\\.git\\HEAD",
+    "Laplace\\.git\\HEAD",
+    "code-search\\.git\\HEAD",
+    "Laplace-postgres\\.git\\HEAD",
+    "Laplace-Operations\\.git\\HEAD",
+    "Laplace-Native\\.git\\HEAD"
+  ],
+  "build_scratch_entries": 0,
+  "source_runtime_changes_after_windows_package": [],
+  "checked_utc": "2026-10-31T15:14:14.489267+00:00"
+}

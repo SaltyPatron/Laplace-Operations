@@ -1,0 +1,52 @@
+{
+  "status": "passed",
+  "finished_utc": "2026-10-31T05:14:18.9732260Z",
+  "mode": "windows_recycle_bin",
+  "entries": [
+    {
+      "files": 6903,
+      "path": "E:\\Repositories\\Laplace\\.build\\.tmp\\warning-cleanup-20261020\\app",
+      "bytes": 2741314021.0
+    },
+    {
+      "files": 58,
+      "path": "E:\\Repositories\\Laplace\\.build\\.tmp\\read-path-20261020\\managed",
+      "bytes": 171693172.0
+    },
+    {
+      "files": 480,
+      "path": "E:\\Repositories\\Laplace\\.build\\.tmp\\read-path-20261020\\native",
+      "bytes": 360723456.0
+    },
+    {
+      "files": 58,
+      "path": "E:\\Repositories\\Laplace\\.build\\.tmp\\read-path-20261020\\share",
+      "bytes": 56663443.0
+    },
+    {
+      "files": 3,
+      "path": "E:\\Repositories\\Laplace\\.build\\.tmp\\read-path-20261020\\VBCSCompiler",
+      "bytes": 332072.0
+    },
+    {
+      "files": 28,
+      "path": "E:\\Repositories\\Laplace\\.build\\.tmp\\deployment-0e5789450\\engine",
+      "bytes": 615310499.0
+    },
+    {
+      "files": 534,
+      "path": "E:\\Repositories\\Laplace\\.build\\.tmp\\deployment-0e5789450\\managed",
+      "bytes": 666738297.0
+    },
+    {
+      "files": 203,
+      "path": "E:\\Repositories\\Laplace\\.build\\.tmp\\deployment-0e5789450\\published",
+      "bytes": 583827330.0
+    },
+    {
+      "files": 3,
+      "path": "E:\\Repositories\\Laplace\\.build\\.tmp\\deployment-0e5789450\\VBCSCompiler",
+      "bytes": 332072.0
+    }
+  ]
+}

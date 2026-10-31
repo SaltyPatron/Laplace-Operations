@@ -1,0 +1,171 @@
+{
+  "host": "hart-server",
+  "databases": [
+    {
+      "database": "laplace",
+      "exit": 0,
+      "result": [
+        {
+          "functions": [
+            {
+              "oid": "25411463",
+              "name": "laplace_cp_id",
+              "module": "$libdir/laplace_e41712bfed34e7729bfd",
+              "schema": "public",
+              "arguments": "integer"
+            },
+            {
+              "oid": "25411570",
+              "name": "laplace_id",
+              "module": "$libdir/laplace_e41712bfed34e7729bfd",
+              "schema": "public",
+              "arguments": "text"
+            },
+            {
+              "oid": "27264634",
+              "name": "laplace_restore_function_bindings",
+              "module": "$libdir/laplace_e41712bfed34e7729bfd",
+              "schema": "public",
+              "arguments": ""
+            }
+          ],
+          "codepoints": [
+            {
+              "cp": 55295,
+              "id": "8c8d209eca28961feffccae973e55647",
+              "reverse": 55295,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 55296,
+              "id": "dff435ed8113f31233474261aa854f0f",
+              "reverse": 55296,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 56319,
+              "id": "fa5a060c1e71a595d3f2595f8783c6ed",
+              "reverse": 56319,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 56320,
+              "id": "ccb958508a431b01ad9484e67d820e09",
+              "reverse": 56320,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 57343,
+              "id": "12501a6725d76de9a6d1c78f69fd2517",
+              "reverse": 57343,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 57344,
+              "id": "bcfe3646ff1d6ebc2d5141b3a6cf2793",
+              "reverse": 57344,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 1114111,
+              "id": "aed22c3c4482e24326cb680eebf34582",
+              "reverse": 1114111,
+              "coordinate_bytes": 37
+            }
+          ],
+          "extension_version": "1.61"
+        }
+      ],
+      "error": ""
+    },
+    {
+      "database": "laplace-mono",
+      "exit": 0,
+      "result": [
+        {
+          "functions": [
+            {
+              "oid": "41652935",
+              "name": "laplace_cp_id",
+              "module": "laplace_08492d006b9e8f5f9ab8",
+              "schema": "public",
+              "arguments": "integer"
+            },
+            {
+              "oid": "41652962",
+              "name": "laplace_id",
+              "module": "laplace_08492d006b9e8f5f9ab8",
+              "schema": "public",
+              "arguments": "text"
+            },
+            {
+              "oid": "41663686",
+              "name": "laplace_restore_function_bindings",
+              "module": "laplace_08492d006b9e8f5f9ab8",
+              "schema": "public",
+              "arguments": ""
+            }
+          ],
+          "codepoints": [
+            {
+              "cp": 55295,
+              "id": "8c8d209eca28961feffccae973e55647",
+              "reverse": 55295,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 55296,
+              "id": "dff435ed8113f31233474261aa854f0f",
+              "reverse": 55296,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 56319,
+              "id": "fa5a060c1e71a595d3f2595f8783c6ed",
+              "reverse": 56319,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 56320,
+              "id": "ccb958508a431b01ad9484e67d820e09",
+              "reverse": 56320,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 57343,
+              "id": "12501a6725d76de9a6d1c78f69fd2517",
+              "reverse": 57343,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 57344,
+              "id": "bcfe3646ff1d6ebc2d5141b3a6cf2793",
+              "reverse": 57344,
+              "coordinate_bytes": 37
+            },
+            {
+              "cp": 1114111,
+              "id": "aed22c3c4482e24326cb680eebf34582",
+              "reverse": 1114111,
+              "coordinate_bytes": 37
+            }
+          ],
+          "extension_version": "1.61"
+        }
+      ],
+      "error": ""
+    }
+  ],
+  "global_prepared": {
+    "path": "/opt/laplace/share/laplace/tier0.bin",
+    "bytes": 71303168,
+    "sha256": "053feae171eaf496b4c5bc6a7ae3615cf8d7632dfae5b31436c3872fa4be83d1"
+  },
+  "checked_utc": "2026-10-31T14:47:32.048701+00:00",
+  "status": "passed",
+  "checks": [
+    "laplace: extension 1.61; codepoint reverse, Native IDs, and coordinate readback passed",
+    "populated laplace-mono function OIDs preserved and Native module replaced",
+    "laplace-mono: extension 1.61; codepoint reverse, Native IDs, and coordinate readback passed"
+  ]
+}

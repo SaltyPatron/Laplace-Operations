@@ -1,0 +1,145 @@
+{
+  "host": "HART-DESKTOP",
+  "checked_utc": "2026-10-31T15:09:37.5473988Z",
+  "service": "laplace-postgres",
+  "cluster": "7696004236835714020",
+  "data": "E:/Data/Laplace/pgdata",
+  "wal": "D:\\Data\\Laplace\\pg_wal",
+  "connections": [
+    {
+      "identity": "ahart|sspi:HART-DESKTOP\\ahart|t",
+      "address": "100.70.222.78"
+    },
+    {
+      "identity": "ahart|sspi:HART-DESKTOP\\ahart|t",
+      "address": "192.168.1.3"
+    },
+    {
+      "identity": "ahart|sspi:HART-DESKTOP\\ahart|t",
+      "address": "fd7a:115c:a1e0::be33:de4f"
+    }
+  ],
+  "clients": [
+    {
+      "implementation": "laplace-mono",
+      "profile": "development",
+      "configuration": "E:\\Data\\Laplace\\clients\\laplace-mono\\client.json",
+      "executable": "E:\\Data\\Laplace\\services\\laplace-mono-api\\web\\releases\\52c713f52a895a078464dfc3f3a6c53b5343b974657fb8b95f23e39e70d54cc6\\cli\\Laplace.Cli.exe",
+      "database_host": "HART-DESKTOP",
+      "database_name": "laplace-mono",
+      "database_role": "laplace_desktop_db"
+    },
+    {
+      "implementation": "laplace",
+      "configuration": "E:\\Data\\Laplace\\clients\\laplace\\client.json",
+      "installation": "E:\\Data\\Laplace\\clients\\laplace\\installation.json",
+      "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5",
+      "executable": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5\\bin\\laplace.exe",
+      "database_host": "HART-DESKTOP",
+      "database": "laplace",
+      "database_role": "ahart",
+      "work": "E:\\Data\\Laplace\\work\\clients\\ahart\\laplace",
+      "data": "E:\\Data\\Ingest",
+      "inputs": {
+        "source": "E:\\Repositories\\Laplace",
+        "models": "E:\\Models"
+      },
+      "revisions": {
+        "Laplace-Engine": "697cc84a44829b461dc158d4676781f039fee45b",
+        "Laplace-Native": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+        "Laplace-MCP": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006"
+      }
+    }
+  ],
+  "substrates": [
+    {
+      "database": "laplace-mono",
+      "native_ingest_api": "passed"
+    },
+    {
+      "database": "laplace",
+      "native_ingest_api": "passed"
+    }
+  ],
+  "scope": "all",
+  "modular_clients": {
+    "schema": "laplace.desktop-clients/v1",
+    "checked_utc": "2026-10-31T15:09:37.6623567Z",
+    "host": "hart-desktop",
+    "status": "reconnect_required",
+    "selected_release": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5",
+    "revisions": {
+      "Laplace-Engine": "697cc84a44829b461dc158d4676781f039fee45b",
+      "Laplace-Native": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+      "Laplace-MCP": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006"
+    },
+    "processes": [
+      {
+        "pid": 3248,
+        "started_utc": "2026-10-31T04:51:59.8594330Z",
+        "executable": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34\\bin\\lpm.exe",
+        "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34",
+        "selected": false,
+        "mode": "mcp-stdio",
+        "parents": [
+          {
+            "pid": 18884,
+            "name": "python.exe"
+          },
+          {
+            "pid": 3908,
+            "name": "codex.exe"
+          }
+        ]
+      }
+    ],
+    "stale_count": 1,
+    "unobservable_pids": [],
+    "releases": [
+      {
+        "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\081c6e6927f47f53b1f35d5fdbb51bd94ac1d3c85bd3cc7d3891b2573341f6d4",
+        "pids": [],
+        "protected": false,
+        "reasons": [],
+        "retirement": "requires_reference_audit"
+      },
+      {
+        "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34",
+        "pids": [
+          3248
+        ],
+        "protected": true,
+        "reasons": [
+          "running_process"
+        ],
+        "retirement": "blocked"
+      },
+      {
+        "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5",
+        "pids": [],
+        "protected": true,
+        "reasons": [
+          "installed_selection"
+        ],
+        "retirement": "blocked"
+      }
+    ],
+    "reconnect_policy": "Reconnect each reported MCP client to launch the selected release; active stdio sessions remain pinned. Let older native commands finish. Run laplace-ops clients verify afterward. No client application is terminated."
+  },
+  "iis_ready": true,
+  "iis_seeded": true,
+  "uci": {
+    "release": "5636113d6fb93a11a29d0bde200cfa9ca6818f12c46628f9b57e410a5cfd1eef",
+    "status": "passed",
+    "profiles": [
+      {
+        "database": "laplace-mono",
+        "profile": "mono-development",
+        "move": "bestmove g1f3",
+        "cluster": "7696004236835714020"
+      }
+    ],
+    "transport": "authenticated_websocket"
+  },
+  "passed": true
+}

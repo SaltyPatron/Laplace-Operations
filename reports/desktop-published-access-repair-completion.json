@@ -1,0 +1,27 @@
+{
+  "status": "passed",
+  "started_utc": "2026-10-31T15:08:34.2454183Z",
+  "identity": "HART-DESKTOP\\ahart",
+  "repaired": [
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\944afe35fdc8d7cc292e2eb8872fae2c251a6d9a4363d56b0dbb2a69c35127f0",
+      "items": 858
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\873385e5998d7f9fed907a28795866b75e468148aa6c445b1c26b7ceb51bab24",
+      "items": 746
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\e78ee8c68000cf6993bccd75c69a2ea17844a1798297ffa318d6401ad612e77e",
+      "items": 78
+    },
+    {
+      "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\c8bf4ea1f3dae2d5fc6cd7a0bd72c7e7e7c537135b068c8e7ee1196ddbbca803",
+      "items": 104
+    }
+  ],
+  "builds_or_installations": 0,
+  "cleanup_receipt": "E:\\Data\\Laplace\\work\\operations\\storage-20261031T1508414240493Z.json",
+  "removed": 7,
+  "completed_utc": "2026-10-31T15:08:41.5223423Z"
+}

@@ -1,0 +1,111 @@
+{
+  "operation": "deploy",
+  "target": "desktop",
+  "source": "E:\\Repositories\\Laplace\\Laplace",
+  "identity": "HART-DESKTOP\\ahart",
+  "started_utc": "2026-10-31T14:53:38.1717680Z",
+  "status": "failed",
+  "steps": [
+    {
+      "name": "Package modular Native, Engine and MCP; update installed client",
+      "status": "passed",
+      "started_utc": "2026-10-31T14:53:39.6548587Z",
+      "log": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261031T1453396525442Z\\01.log",
+      "exit_code": 0,
+      "finished_utc": "2026-10-31T14:55:09.2332917Z",
+      "seconds": 89.58
+    },
+    {
+      "name": "Migrate the installed modular substrate and select server-local caches",
+      "status": "passed",
+      "started_utc": "2026-10-31T14:55:09.2386288Z",
+      "log": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261031T1453396525442Z\\02.log",
+      "exit_code": 0,
+      "finished_utc": "2026-10-31T14:55:13.3667695Z",
+      "seconds": 4.13
+    },
+    {
+      "name": "Verify selected installed components",
+      "status": "passed",
+      "started_utc": "2026-10-31T14:55:13.3671193Z",
+      "log": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261031T1453396525442Z\\03.log",
+      "exit_code": 0,
+      "finished_utc": "2026-10-31T14:55:18.3804239Z",
+      "seconds": 5.01
+    }
+  ],
+  "selected_components": [
+    "modular"
+  ],
+  "installation": "E:/Data/Laplace/services/laplace",
+  "operations_revision": "a2f4f97f10c413686bea2748c17f6fd2297f0b20",
+  "modular_clients": {
+    "schema": "laplace.desktop-clients/v1",
+    "checked_utc": "2026-10-31T14:55:18.5532265Z",
+    "host": "hart-desktop",
+    "status": "reconnect_required",
+    "selected_release": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5",
+    "revisions": {
+      "Laplace-Engine": "697cc84a44829b461dc158d4676781f039fee45b",
+      "Laplace-Native": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+      "Laplace-MCP": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006"
+    },
+    "processes": [
+      {
+        "pid": 3248,
+        "started_utc": "2026-10-31T04:51:59.8594330Z",
+        "executable": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34\\bin\\lpm.exe",
+        "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34",
+        "selected": false,
+        "mode": "mcp-stdio",
+        "parents": [
+          {
+            "pid": 18884,
+            "name": "python.exe"
+          },
+          {
+            "pid": 3908,
+            "name": "codex.exe"
+          }
+        ]
+      }
+    ],
+    "stale_count": 1,
+    "unobservable_pids": [],
+    "releases": [
+      {
+        "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\081c6e6927f47f53b1f35d5fdbb51bd94ac1d3c85bd3cc7d3891b2573341f6d4",
+        "pids": [],
+        "protected": false,
+        "reasons": [],
+        "retirement": "requires_reference_audit"
+      },
+      {
+        "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34",
+        "pids": [
+          3248
+        ],
+        "protected": true,
+        "reasons": [
+          "running_process"
+        ],
+        "retirement": "blocked"
+      },
+      {
+        "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5",
+        "pids": [],
+        "protected": true,
+        "reasons": [
+          "installed_selection"
+        ],
+        "retirement": "blocked"
+      }
+    ],
+    "reconnect_policy": "Reconnect each reported MCP client to launch the selected release; active stdio sessions remain pinned. Let older native commands finish. Run laplace-ops clients verify afterward. No client application is terminated."
+  },
+  "cleanup_error": "Access to the path 'E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\944afe35fdc8d7cc292e2eb8872fae2c251a6d9a4363d56b0dbb2a69c35127f0\\artifact.json' is denied.",
+  "finished_utc": "2026-10-31T14:55:21.1639918Z",
+  "warnings": [
+    "WARNING: Modular clients: reconnect_required; 1 older processes, 0 unobservable. Reconnect each reported MCP client to launch the selected release; active stdio sessions remain pinned. Let older native commands finish. Run laplace-ops clients verify afterward. No client application is terminated."
+  ]
+}

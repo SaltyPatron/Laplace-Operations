@@ -1,0 +1,8 @@
+{
+  "status": "verified",
+  "source": "E:\\Repositories\\Laplace\\.build\\.tmp\\read-path-20261020\\pgdata",
+  "archive": "E:\\Repositories\\Laplace\\artifacts\\repository-cleanup-2026-10-31T04-53-01-772Z\\read-path-test-database-backup.zip",
+  "files": 16370,
+  "archive_bytes": 78136189,
+  "archive_sha256": "97456353b03ce21cb48a64bda9766b900f943f1d882da7fdfee53f2ab7a05e6b"
+}

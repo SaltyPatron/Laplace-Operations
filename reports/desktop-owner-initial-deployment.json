@@ -1,0 +1,60 @@
+{
+  "operation": "deploy",
+  "target": "desktop",
+  "source": "E:\\Repositories\\Laplace\\Laplace",
+  "identity": "HART-DESKTOP\\ahart",
+  "started_utc": "2026-10-31T14:45:24.9817019Z",
+  "status": "failed",
+  "steps": [
+    {
+      "name": "Apply and verify PostgreSQL tuning",
+      "status": "passed",
+      "started_utc": "2026-10-31T14:45:26.7092742Z",
+      "log": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261031T1445267065070Z\\01.log",
+      "exit_code": 0,
+      "finished_utc": "2026-10-31T14:45:28.9154839Z",
+      "seconds": 2.2
+    },
+    {
+      "name": "Build selected components, compose and activate IIS",
+      "status": "passed",
+      "started_utc": "2026-10-31T14:45:28.9243988Z",
+      "log": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261031T1445267065070Z\\02.log",
+      "exit_code": 0,
+      "finished_utc": "2026-10-31T14:49:22.2657960Z",
+      "seconds": 233.34
+    },
+    {
+      "name": "Package modular Native, Engine and MCP; update installed client",
+      "status": "failed",
+      "started_utc": "2026-10-31T14:49:22.2663168Z",
+      "log": "E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261031T1445267065070Z\\03.log",
+      "exit_code": 1,
+      "finished_utc": "2026-10-31T14:49:23.1308404Z",
+      "seconds": 0.86
+    }
+  ],
+  "selected_components": [
+    "api",
+    "cli",
+    "migrations",
+    "modular",
+    "native",
+    "postgres",
+    "uci",
+    "web"
+  ],
+  "origin": "https://dev.hartonomous.com",
+  "source_revision": "7f857d3618fb202947b31aa154f303ad8a359b46",
+  "modified_source": [],
+  "error": "Package modular Native, Engine and MCP; update installed client failed (exit 1). Log: E:\\Data\\Laplace\\work\\operations\\desktop-deploy-20261031T1445267065070Z\\03.log",
+  "cleanup": {
+    "receipt": "E:\\Data\\Laplace\\work\\operations\\storage-20261031T1449383939908Z.json",
+    "status": "passed",
+    "removed": 78
+  },
+  "finished_utc": "2026-10-31T14:49:38.4120191Z",
+  "warnings": [
+    "E:\\Repositories\\Laplace\\Laplace\\app\\Laplace.Chess\\Service\\ChessCalculationSources.cs(11,6): warning CA2255: The 'ModuleInitializer' attribute is only intended to be used in application code or advanced source generator scenarios (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca2255) [E:\\Repositories\\Laplace\\Laplace\\app\\Laplace.Chess\\Laplace.Chess.csproj]"
+  ]
+}

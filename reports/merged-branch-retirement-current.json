@@ -1,0 +1,142 @@
+[
+  {
+    "repo": "Laplace-Operations",
+    "ref": "refs/heads/fix/activate-before-runtime-readback-20261031",
+    "sha": "61d3ae16b4715019d97f4af81ecdf55a16320640",
+    "main": "14f24c9267863ff53569b2748bb144b8717f23d9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace-postgres",
+    "ref": "refs/heads/fix/complete-unicode-floor-20261031",
+    "sha": "53198e81ffe095c38b06237f4be593956b03221c",
+    "main": "acc33f25101bb2df491ea635aaf5cafdae6e128a",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace-Prototype",
+    "ref": "refs/heads/fix/complete-floor-fingerprint-20261031",
+    "sha": "c234f3f5215377554c521c03207af649028e5705",
+    "main": "9e23359443b04e59a3ca42111a78329358aa106c",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace-Wiki",
+    "ref": "refs/heads/docs/complete-codepoint-floor-20261031",
+    "sha": "8e95906a36e01859fe286f68fdae35aaaab0c3d0",
+    "main": "4672c199de19f8ed392617a5c856a4a8d7b7abe8",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace",
+    "ref": "refs/heads/integrate/clean-platform-20261031",
+    "sha": "5e78670e18c11c0292c6908a58cc8517e8760057",
+    "main": "16036d3db99108f18872c729ab23906c906ff8f9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace",
+    "ref": "refs/heads/pending/desktop-mcp-and-devcontainer",
+    "sha": "20b255d18bf022463b825078c198570b1bae273b",
+    "main": "16036d3db99108f18872c729ab23906c906ff8f9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace",
+    "ref": "refs/heads/pending/product-quality",
+    "sha": "59b411ed966a6d5e78a950f9de61c010c956aa36",
+    "main": "16036d3db99108f18872c729ab23906c906ff8f9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace",
+    "ref": "refs/heads/pending/workspace-account-recovery",
+    "sha": "3c10a9ab17605e486cb99e78a3ac061e4a877b22",
+    "main": "16036d3db99108f18872c729ab23906c906ff8f9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace",
+    "ref": "refs/heads/recovery/foundry-stash-20261022",
+    "sha": "863dd3999c19b08d06f859221ab118735a3d33e1",
+    "main": "16036d3db99108f18872c729ab23906c906ff8f9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace",
+    "ref": "refs/remotes/origin/pending/desktop-mcp-and-devcontainer",
+    "sha": "20b255d18bf022463b825078c198570b1bae273b",
+    "main": "16036d3db99108f18872c729ab23906c906ff8f9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace",
+    "ref": "refs/remotes/origin/pending/product-quality",
+    "sha": "59b411ed966a6d5e78a950f9de61c010c956aa36",
+    "main": "16036d3db99108f18872c729ab23906c906ff8f9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace",
+    "ref": "refs/remotes/origin/pending/workspace-account-recovery",
+    "sha": "3c10a9ab17605e486cb99e78a3ac061e4a877b22",
+    "main": "16036d3db99108f18872c729ab23906c906ff8f9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace",
+    "ref": "refs/remotes/origin/recovery/foundry-stash-20261022",
+    "sha": "863dd3999c19b08d06f859221ab118735a3d33e1",
+    "main": "16036d3db99108f18872c729ab23906c906ff8f9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace-Native",
+    "ref": "refs/heads/fix/preserve-surrogate-text-boundaries-20261031",
+    "sha": "a6b557281bb57ff21f8f145f8909c29f4337ae79",
+    "main": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace-Engine",
+    "ref": "refs/heads/fix/qualify-complete-unicode-floor-20261031",
+    "sha": "e9482fe0fe53726a8e0b98553092e8b4be36cd61",
+    "main": "697cc84a44829b461dc158d4676781f039fee45b",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace-Operations",
+    "ref": "refs/heads/fix/prepare-engine-before-runtime-activation-20261031",
+    "sha": "5197eef7bee3109f8fb294f7c6df714c43173b4a",
+    "main": "1e0c7bfc72de4ccc147c1400038c5d1103d2b5e9",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace-postgres",
+    "ref": "refs/heads/fix/select-qualified-native-inputs-20261031",
+    "sha": "8f4558421d744c0611ac2bfc13cf6f5a77c88fda",
+    "main": "1bedc24ff28fcb63d2e9d29d0984badfb1a999d5",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace",
+    "ref": "refs/heads/fix/qualify-codepoint-module-upgrade-20261031",
+    "sha": "857aa2b10a10608c6a70e681d264eb3459a4937b",
+    "main": "7f857d3618fb202947b31aa154f303ad8a359b46",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace-postgres",
+    "ref": "refs/heads/fix/release-complete-codepoint-native-module-20261031",
+    "sha": "e09da8cdf6789b0542a06ce1dd738d8baf4a05a7",
+    "main": "5c623bcd5a841ca8188678150bbb836dbae2570a",
+    "proof": "ancestor of origin/main"
+  },
+  {
+    "repo": "Laplace-Operations",
+    "ref": "refs/heads/fix/prepare-windows-package-database-20261031",
+    "sha": "067a8528d80b12e5d63224e255b06c55741c1bb3",
+    "main": "8e4e47bf2f04936a72c8126f66896dbe941578b9",
+    "proof": "ancestor of origin/main"
+  }
+]

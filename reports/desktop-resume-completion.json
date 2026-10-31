@@ -1,0 +1,20 @@
+{
+  "status": "failed",
+  "started_utc": "2026-10-31T14:53:37.6362111Z",
+  "prior_deployment": "desktop-owner-initial-deployment.json",
+  "extra_uac_prompts": 0,
+  "uci_runtime_source_equivalent": true,
+  "uci_nonruntime_changes": [
+    ".github/workflows/build.yml",
+    "README.md",
+    "configuration.md"
+  ],
+  "steps": [
+    {
+      "name": "modular",
+      "status": "running",
+      "started_utc": "2026-10-31T14:53:37.6465055Z"
+    }
+  ],
+  "error": "Desktop resume stage modular failed: 1"
+}

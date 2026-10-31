@@ -1,0 +1,101 @@
+{
+  "status": "passed",
+  "completed_utc": "2026-10-31T15:14:14.489267+00:00",
+  "scope": "Repository reconciliation, owned unused-output cleanup, and installed runtime delivery verification; receipts retain individual scope and timestamps.",
+  "source": {
+    "repositories": 12,
+    "all_clean_current_remote_main": true,
+    "extra_worktrees": 0,
+    "extra_local_branches": 0,
+    "stashes": 0,
+    "unpublished_commits": 0,
+    "pending_git_operations": 0,
+    "revisions": {
+      "code-search": "384225428f850dbbdcba1334f16f60a9e89659a9",
+      "Laplace": "488c7d0a5ca004b4db3b0cccfb3f42de89cd27b2",
+      "Laplace-Conventional": "0fc78df75122843c96abe356e7c6f7e6e3323bf6",
+      "Laplace-Engine": "697cc84a44829b461dc158d4676781f039fee45b",
+      "Laplace-MCP": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006",
+      "Laplace-Native": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+      "Laplace-Operations": "c1cb4e1a2fdbfb10e93515aa0ab17fcc28a28832",
+      "Laplace-postgres": "5c623bcd5a841ca8188678150bbb836dbae2570a",
+      "Laplace-Prototype": "9e23359443b04e59a3ca42111a78329358aa106c",
+      "Laplace-Refactor": "f33c3711b9b8cfce9a9b128850c49f9cc29cf408",
+      "Laplace-UCI": "d5c7d513b8ed9f63decba9e169ff8cb4e39954af",
+      "Laplace-Wiki": "4672c199de19f8ed392617a5c856a4a8d7b7abe8"
+    }
+  },
+  "desktop": {
+    "iis_ready": true,
+    "native_extension": "1.61",
+    "all_2048_surrogates_verified": true,
+    "function_oids_preserved": true,
+    "mcp_unicode_transport": "passed",
+    "authenticated_uci": "passed",
+    "remaining_access_errors": 0,
+    "eligible_unused_outputs": 0,
+    "privileged_visibility_deferrals": 0,
+    "latest_cleanup_removed": 7,
+    "modular_release": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5",
+    "iis_release": "52c713f52a895a078464dfc3f3a6c53b5343b974657fb8b95f23e39e70d54cc6"
+  },
+  "linux": {
+    "modular_delivery": "https://github.com/SaltyPatron/Laplace-Operations/actions/runs/41184514444",
+    "application_delivery": "https://github.com/SaltyPatron/Laplace/actions/runs/41183030049",
+    "hosts": [
+      "hart-server",
+      "hart-prod"
+    ],
+    "deployment_and_cleanup": "passed",
+    "database_extension_version": "1.61",
+    "populated_function_oids_preserved": true,
+    "substrate_reachable": true,
+    "perfcache_ready": true,
+    "has_data": false,
+    "product_ready": false,
+    "ingestion_run": false,
+    "stored_coordinate_rewrite": false,
+    "modular_release": "/hosting/laplace/modular/releases/1e9ba7e4e568bb5b1ccae4a0376314a2f46a3bbe9b040eec27e55cea35fb0095",
+    "application_revision": "7f857d3618fb202947b31aa154f303ad8a359b46"
+  },
+  "retention": {
+    "recovery_archives": 5,
+    "recovery_archive_bytes": 451817835,
+    "rollback_and_reuse": "standard collector retention",
+    "active_mcp_clients": [
+      {
+        "pid": 3248,
+        "started_utc": "2026-10-31T04:51:59.8594330Z",
+        "executable": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34\\bin\\lpm.exe",
+        "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34",
+        "selected": false,
+        "mode": "mcp-stdio",
+        "parents": [
+          {
+            "pid": 18884,
+            "name": "python.exe"
+          },
+          {
+            "pid": 3908,
+            "name": "codex.exe"
+          }
+        ]
+      }
+    ],
+    "active_mcp_reconnect_notice": "One live MCP stdio session belonging to this Codex conversation remains pinned to its previous release. The selected release passed fresh MCP readback; the live session and its release are retained until reconnect.",
+    "historical_git_commits": "preserved in published archive and branch-preservation tags; implemented work is on main"
+  },
+  "receipts": {
+    "repositories-current-main.json": "7bdfcb4d40f5ce6b115ac0ab27c606af6f7fd89474710524123a5eb18f4c49ab",
+    "git-object-and-operation-audit.json": "98f2f51080982b2ff5d1f4dac908a7aeddcae71b3789feb67c5283a15f377c3c",
+    "desktop-published-access-repair-completion.json": "d2fc333dc53e0b748f06c232d103a960c5ec87e85b241fe7264c7fcc943aade4",
+    "desktop-published-access-ordinary-readback.json": "544cfcc5fcefc98de4fad1ddbd2633790a148c7e8e1f2af86e2d244b5d89a614",
+    "desktop-storage-cleanup-final.json": "5e7459121db7ba358ba76d142505565c04ec2ad84992df1e2cf951319095c133",
+    "desktop-storage-status-final.json": "3d0a4facabfb72a68cbf8132cf7a6a5e7147daa3a0ce494dde0dd5dc15b7c1e8",
+    "desktop-all-installed-readback.json": "35d1c51ac5f82b3405137383d1ecaff710ebc4bfdb96d79231c9f5697cffc350",
+    "desktop-codepoint-runtime-readback-final.json": "e3f0962fe357376df06e6e5a2a009e90f333df49e693b4a6c33b42bcb5652ed9",
+    "server-codepoint-runtime-readback-final.json": "22dbf1b291b1560f46998f2994b6cef3645967cea984d2622cf862a73efc20fd",
+    "recovery-archives-current.json": "f9f4358945c253b060600776636478ecb27378bffe7752c8148eebd26ca2b661",
+    "workspace-final-scratch-audit.json": "0c3ee8c11835efe07ab689c043749135756a8db111497f69e9b889d95457c41e"
+  }
+}

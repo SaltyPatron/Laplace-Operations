@@ -1,0 +1,7 @@
+{
+  "authorized_by": "user: yes",
+  "launched_utc": "2026-10-31T15:08:33.9777012Z",
+  "pid": 6068,
+  "script": "E:\\Repositories\\Laplace\\artifacts\\repository-cleanup-2026-10-31T04-53-01-772Z\\repair-published-artifact-access.ps1",
+  "scope": "Four reviewed component directories and standard cleanup; no builds or installations"
+}

@@ -1,0 +1,31 @@
+{
+  "checked_utc": "2026-10-31T15:14:14.489267+00:00",
+  "retention": "Intentional local recovery artifacts; remote receipt records their hashes. These are not source worktrees or unfinished product branches.",
+  "archives": [
+    {
+      "name": "abandoned-fixtures-backup.zip",
+      "bytes": 197961,
+      "sha256": "e21527ea89542bcbb88e47ff66dfe6383e01cd15a97d252abae77239b846dbf8"
+    },
+    {
+      "name": "deployment-snapshot-differences.zip",
+      "bytes": 20843,
+      "sha256": "6a30cf8a7b9c4b3c6fa43736ac15465c0bbf25f6ffe90b629327843a58c3b5be"
+    },
+    {
+      "name": "desktop-prepared-before-full-floor.zip",
+      "bytes": 116467644,
+      "sha256": "550a0288d87d44da5ee182cbd0f0fe435a16bb58a774a6ce81cf8ac6580de837"
+    },
+    {
+      "name": "read-path-test-database-backup.zip",
+      "bytes": 78136189,
+      "sha256": "97456353b03ce21cb48a64bda9766b900f943f1d882da7fdfee53f2ab7a05e6b"
+    },
+    {
+      "name": "remaining-workspace-scratch-backup.zip",
+      "bytes": 256995198,
+      "sha256": "d782c98bdf2af793f0ca1fe128ffc46c574c5752cafadda77c9875d1d84990c4"
+    }
+  ]
+}
