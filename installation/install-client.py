@@ -6,7 +6,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-import socket
 import sys
 import tempfile
 
@@ -32,20 +31,6 @@ os.set_inheritable(lease.fileno(),True)
 client=runpy.run_path(str(program))
 client['run_client'](configuration,release)
 '''.replace('CONFIGURATION', repr(str(configuration)), 1)
-
-
-def verify_engine(executable, environment, configure_database=False):
-    operations = ([['deploy', '--configure-server-cache']] if configure_database else [])
-    operations += [['text', 'Laplace'], ['status'], ['sources']]
-    for operation in operations:
-        verification = subprocess.run([str(executable), *operation], env=environment,
-                                      capture_output=True, text=True, timeout=60)
-        if verification.returncode:
-            raise ValueError('Installed modular Engine ' + operation[0] + ' failed: ' + verification.stderr.strip())
-        if operation == ['sources'] and verification.stderr.strip():
-            raise ValueError('Installed recipe resources failed: ' + verification.stderr.strip())
-        if operation == ['status'] and verification.stdout.count("the same as this engine's") != 2:
-            raise ValueError('Installed modular database must match both Engine artifact fingerprints: ' + verification.stdout.strip())
 
 
 def main():
@@ -85,10 +70,9 @@ def main():
     pending = None
     try:
         executable, environment, description = client.selected(candidate)
-        if args.configure_database and description['database_host'].lower() != socket.gethostname().lower():
-            raise ValueError('Only a host-local deployment can select server cache paths')
         # Native composition and selected-database readback precede command replacement.
-        verify_engine(executable, client.process_environment(environment), args.configure_database)
+        client.verify_engine(executable, client.process_environment(environment),
+                             configure_database=args.configure_database, database_host=description['database_host'])
         mcp_verification = (client.verify_mcp(executable, client.process_environment(environment), database=description['database'])
                             if 'Laplace-MCP' in description['revisions'] else {'status': 'not_packaged'})
         if args.configuration.exists() and json.loads(args.configuration.read_text()).get('schema') != profile['schema']:

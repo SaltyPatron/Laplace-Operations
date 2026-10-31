@@ -98,6 +98,23 @@ def selected(configuration, release=None):
         'work': str(work), 'data': str(data), 'inputs': inputs, 'revisions': package['revisions']}
 
 
+def verify_engine(executable, environment, *, configure_database=False, database_host=None):
+    if configure_database and (not database_host or database_host.lower() != socket.gethostname().lower()):
+        raise ValueError('Only a host-local deployment can select server cache paths')
+    operations = ([['deploy', '--configure-server-cache']] if configure_database else [])
+    operations += [['text', 'Laplace'], ['status'], ['sources']]
+    for operation in operations:
+        verification = subprocess.run([str(executable), *operation], env=environment,
+                                      capture_output=True, text=True, timeout=120)
+        if verification.returncode:
+            raise ValueError('Installed modular Engine ' + operation[0] + ' failed: ' +
+                             (verification.stderr or verification.stdout).strip())
+        if operation == ['sources'] and verification.stderr.strip():
+            raise ValueError('Installed recipe resources failed: ' + verification.stderr.strip())
+        if operation == ['status'] and verification.stdout.count("the same as this engine's") != 2:
+            raise ValueError('Installed modular database must match both Engine artifact fingerprints: ' + verification.stdout.strip())
+
+
 def verify_mcp(executable, environment, *, database):
     """Verify composition and SQL readback through the installed native server."""
     mcp = executable.with_name('lpm.exe' if os.name == 'nt' else 'lpm')

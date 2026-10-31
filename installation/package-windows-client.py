@@ -210,11 +210,23 @@ def closure(root, directories):
             queue.append(target)
 
 
+def verify_candidate(configuration, *, configure_database=False):
+    import client
+    executable, environment, description = client.selected(configuration)
+    environment = client.process_environment(environment)
+    environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')
+    client.verify_engine(executable, environment, configure_database=configure_database,
+                         database_host=description['database_host'])
+    if 'Laplace-MCP' in description['revisions']:
+        client.verify_mcp(executable, environment, database=description['database'])
+
+
 def main():
     global STORE, DECLARATION
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--installation', type=Path, required=True)
     parser.add_argument('--force', action='store_true', help='Explicitly rebuild the selected native components and grammars')
+    parser.add_argument('--configure-database', action='store_true', help='Host deployment only: select installed server caches before candidate compatibility verification')
     args = parser.parse_args()
     DECLARATION = args.installation.resolve()
     if os.name != 'nt':
@@ -222,6 +234,8 @@ def main():
     config = json.loads(args.installation.read_text())
     if config['schema'] != 'laplace.modular-installation/v1' or config['host'].lower() != socket.gethostname().split('.')[0].lower():
         raise ValueError('Installation declaration does not select this Windows host')
+    if args.configure_database and config['socket'].lower() != socket.gethostname().lower():
+        raise ValueError('Only a host-local deployment can select server cache paths')
     STORE = Path(config.get('artifacts') or Path(config['prefix']) / 'artifacts')
     if not STORE.is_absolute() or '..' in STORE.parts:
         raise ValueError('Declare an absolute artifact store')
@@ -337,26 +351,12 @@ def main():
                    'role': config['operator_client']['role'], 'data': config['operator_client']['data'],
                    'work': config['operator_client']['work'], 'connection': config['operator_client']['connection']}
         profile.update({key: config['operator_client'][key] for key in ('source', 'models') if key in config['operator_client']})
-        import client
         client_candidate = pending.with_suffix('.client')
         client_candidate.write_text(json.dumps(profile))
         try:
-            executable, environment, _ = client.selected(client_candidate)
-            environment = client.process_environment(environment)
-            environment['PATH'] = str(Path(os.environ['SystemRoot']) / 'System32')
-            operations = [['text', 'Laplace'], ['status'], ['sources']]
-            for operation in operations:
-                result = subprocess.run([str(executable), *operation], capture_output=True, text=True, env=environment, timeout=120)
-                if result.returncode:
-                    raise ValueError('Packaged Engine ' + operation[0] + ' failed: ' + (result.stderr or result.stdout))
-                if operation == ['sources'] and result.stderr.strip():
-                    raise ValueError('Packaged recipe resources failed: ' + result.stderr)
-                if operation == ['status'] and result.stdout.count("the same as this engine's") != 2:
-                    raise ValueError('Installed tier 0 and highway do not agree with the selected database: ' + result.stdout)
             # The candidate MCP must initialize and execute a native tool before
             # changing the installed selection used by future client connections.
-            if has_mcp:
-                client.verify_mcp(executable, environment, database=config['database'])
+            verify_candidate(client_candidate, configure_database=args.configure_database)
             os.replace(pending, destination)
         finally:
             client_candidate.unlink(missing_ok=True)

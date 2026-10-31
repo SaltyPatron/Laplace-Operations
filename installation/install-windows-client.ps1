@@ -13,6 +13,7 @@ $storageOperation=Enter-DesktopStorageOperation
 try {
 if (-not $SkipPackage) {
     $options=if($Force){@('--force')}else{@()}
+    if($ConfigureDatabase){$options+='--configure-database'}
     & $python "$PSScriptRoot/package-windows-client.py" --installation $declaration @options
     if ($LASTEXITCODE -ne 0) { throw 'Modular client packaging failed; command selection was not changed.' }
 }

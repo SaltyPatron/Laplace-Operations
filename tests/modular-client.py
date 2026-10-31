@@ -31,22 +31,22 @@ class InstallationReadback(unittest.TestCase):
     def test_host_preparation_precedes_mandatory_compatibility_readback(self):
         def run(arguments, **kwargs):
             return SimpleNamespace(returncode=0, stderr='', stdout="the same as this engine's\nthe same as this engine's\n")
-        with patch.object(installer.subprocess, 'run', side_effect=run) as execute:
-            installer.verify_engine(Path('laplace'), {}, configure_database=True)
+        with patch.object(client.subprocess, 'run', side_effect=run) as execute:
+            client.verify_engine(Path('laplace'), {}, configure_database=True, database_host=socket.gethostname())
         self.assertEqual([call.args[0][1:] for call in execute.call_args_list],
                          [['deploy', '--configure-server-cache'], ['text', 'Laplace'], ['status'], ['sources']])
 
     def test_ordinary_client_installation_does_not_mutate_server_selection(self):
         result = SimpleNamespace(returncode=0, stderr='', stdout="the same as this engine's\nthe same as this engine's\n")
-        with patch.object(installer.subprocess, 'run', return_value=result) as execute:
-            installer.verify_engine(Path('laplace'), {})
+        with patch.object(client.subprocess, 'run', return_value=result) as execute:
+            client.verify_engine(Path('laplace'), {})
         self.assertEqual([call.args[0][1:] for call in execute.call_args_list],
                          [['text', 'Laplace'], ['status'], ['sources']])
 
     def test_failed_host_preparation_stops_before_readback(self):
-        with patch.object(installer.subprocess, 'run', return_value=SimpleNamespace(returncode=1, stderr='prepare refused')) as execute:
+        with patch.object(client.subprocess, 'run', return_value=SimpleNamespace(returncode=1, stderr='prepare refused')) as execute:
             with self.assertRaisesRegex(ValueError, 'deploy failed: prepare refused'):
-                installer.verify_engine(Path('laplace'), {}, configure_database=True)
+                client.verify_engine(Path('laplace'), {}, configure_database=True, database_host=socket.gethostname())
         self.assertEqual(execute.call_count, 1)
 
 
@@ -77,6 +77,43 @@ class ClientInputs(unittest.TestCase):
     def select(self):
         self.configuration.write_text(json.dumps(self.profile))
         return client.selected(self.configuration)
+
+    def test_windows_candidate_prepares_local_database_before_compatibility_readback(self):
+        spec = importlib.util.spec_from_file_location('package', ROOT / 'installation/package-windows-client.py')
+        package = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(package)
+        self.select()
+        selected = False
+        def engine(arguments, **kwargs):
+            nonlocal selected
+            operation = arguments[1:]
+            if operation == ['deploy', '--configure-server-cache']:
+                selected = True
+            if operation == ['status'] and not selected:
+                return SimpleNamespace(returncode=0, stderr='', stdout='old database fingerprint')
+            return SimpleNamespace(returncode=0, stderr='', stdout="the same as this engine's\nthe same as this engine's\n")
+        with patch.dict(sys.modules, {'client': client}), patch.dict(os.environ, {'SystemRoot': str(self.root)}), \
+             patch.object(client.subprocess, 'run', side_effect=engine):
+            with self.assertRaisesRegex(ValueError, 'must match both Engine artifact fingerprints'):
+                package.verify_candidate(self.configuration)
+            self.assertFalse(selected)
+            package.verify_candidate(self.configuration, configure_database=True)
+            self.assertTrue(selected)
+
+    def test_windows_candidate_cannot_configure_a_remote_database(self):
+        spec = importlib.util.spec_from_file_location('package', ROOT / 'installation/package-windows-client.py')
+        package = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(package)
+        self.select()
+        installation = Path(self.profile['installation'])
+        host = json.loads(installation.read_text())
+        host['socket'] = 'another-database-host'
+        installation.write_text(json.dumps(host))
+        with patch.dict(sys.modules, {'client': client}), patch.dict(os.environ, {'SystemRoot': str(self.root)}), \
+             patch.object(client.subprocess, 'run') as execute:
+            with self.assertRaisesRegex(ValueError, 'Only a host-local deployment'):
+                package.verify_candidate(self.configuration, configure_database=True)
+            execute.assert_not_called()
 
     @unittest.skipIf(os.name == 'nt', 'POSIX release bootstrap and lifetime lease')
     def test_installed_bootstrap_uses_the_packaged_client_and_pins_code_and_native_selection(self):
