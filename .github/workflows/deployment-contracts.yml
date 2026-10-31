@@ -143,6 +143,8 @@ jobs:
           bash tests/ingest-wal.sh
           bash tests/deployment-artifacts.sh
           bash tests/prepared-artifacts-incremental.sh
+          bash tests/modular-activation.sh
+          bash tests/native-inputs.sh
           bash tests/deployment-readback.sh
           bash tests/fingerprint-comparison.sh
           ruby tests/deployment-workflow.rb

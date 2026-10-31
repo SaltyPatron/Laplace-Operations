@@ -545,6 +545,15 @@ def switch_link(path, target):
 
 
 def activate(config, release, receipt_path, install):
+    if not install:
+        program = release_controller(config, release)
+        expected_environment = receipt_path / 'environment.expected'
+        atomic(expected_environment, runtime_environment(package_api(program).runtime_environment(
+            config, Path(config['prefix']) / 'current')), 0o640)
+        checked(['bash', ROOT / 'installation/activate-modular.sh', receipt_path / 'selection.json',
+                 release, receipt_path, UNITS / UNIT, expected_environment, '--',
+                 'python3', program, 'verify', '--config', config['installed_config']], input=unit_text(config))
+        return
     prefix = Path(config['prefix'])
     current = prefix / 'current'
     if release.parent.resolve() != (prefix / 'releases').resolve() or release.is_symlink():
@@ -581,8 +590,6 @@ def activate(config, release, receipt_path, install):
         if install:
             checked(['systemctl', 'enable', '--now', UNIT])
             checked(['systemctl', 'restart', UNIT])
-        else:
-            Path(config['restart_signal']).touch()
         for _ in range(100):
             result = checked(['systemctl', 'show', UNIT, '-p', 'InvocationID', '-p', 'ActiveState'], capture_output=True)
             observed = dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
@@ -616,8 +623,6 @@ def activate(config, release, receipt_path, install):
                 checked(['systemctl', 'start', UNIT])
             if legacy_active:
                 legacy_command(config, 'start')
-        elif previous:
-            Path(config['restart_signal']).touch()
         raise
 
 

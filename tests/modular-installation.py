@@ -131,32 +131,6 @@ class Installation(unittest.TestCase):
                     self.load()
                 self.value[key] = original
 
-    def test_failed_activation_restores_previous_release(self):
-        config = self.load()
-        config['prefix'] = str(self.directory / 'installation')
-        prefix = Path(config['prefix'])
-        old, new = prefix / 'releases/old', prefix / 'releases/new'
-        old.mkdir(parents=True)
-        new.mkdir()
-        current = prefix / 'current'
-        current.symlink_to(old)
-        config['restart_signal'] = str(self.directory / 'restart')
-        observed_switch = []
-
-        def command(args, **kwargs):
-            if 'InvocationID' in args and '-p' in args and 'ActiveState' not in args:
-                return subprocess.CompletedProcess(args, 0, stdout='previous\n')
-            observed_switch.append(current.resolve())
-            raise RuntimeError('injected activation failure')
-
-        with patch.object(modular, 'release_controller', return_value=new / 'libexec/laplace-mcp-deployment.py'), \
-             patch.object(modular, 'checked', side_effect=command), patch.object(modular.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
-            with self.assertRaisesRegex(RuntimeError, 'injected'):
-                modular.activate(config, new, self.directory, False)
-        self.assertEqual(observed_switch, [new])
-        self.assertEqual(current.resolve(), old)
-        self.assertTrue(Path(config['restart_signal']).exists())
-
     def test_configuration_rejects_linked_destinations(self):
         elsewhere = self.directory / 'elsewhere'
         elsewhere.mkdir()

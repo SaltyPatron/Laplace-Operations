@@ -50,37 +50,6 @@ class Revisions(unittest.TestCase):
                 lambda path: {'status': 'diverged'} if '/compare/' in path else {'sha': 'a' * 40})
 
 
-class NativeInputs(unittest.TestCase):
-    def request(self, missing=(), expired=False, revision='a' * 40):
-        def read(path):
-            if '/actions/runs?' in path:
-                return {'workflow_runs': [{'id': 7, 'head_sha': revision, 'head_branch': 'main',
-                    'path': '.github/workflows/laplace.yml', 'event': 'push'}]}
-            if '/jobs?' in path:
-                return {'jobs': [{'name': name, 'conclusion': 'failure' if name in missing else 'success'}
-                    for name in ('native (icx-release)', 'native (gcc-release)', 'isa')]}
-            if '/artifacts?' in path:
-                return {'artifacts': [{'name': 'native-prepared-inputs', 'expired': expired}]}
-            self.fail('Unexpected endpoint: ' + path)
-        return read
-
-    def test_verified_closure_can_be_selected_while_dispatch_finishes(self):
-        self.assertEqual(resolver.verified_native_run('owner', 'a' * 40, self.request()), 7)
-
-    def test_each_compiler_and_isa_must_have_passed(self):
-        for name in ('native (icx-release)', 'native (gcc-release)', 'isa'):
-            with self.subTest(name=name), self.assertRaises(ValueError):
-                resolver.verified_native_run('owner', 'a' * 40, self.request(missing=(name,)))
-
-    def test_expired_artifact_is_rejected(self):
-        with self.assertRaises(ValueError):
-            resolver.verified_native_run('owner', 'a' * 40, self.request(expired=True))
-
-    def test_artifact_from_another_revision_is_rejected(self):
-        with self.assertRaises(ValueError):
-            resolver.verified_native_run('owner', 'a' * 40, self.request(revision='b' * 40))
-
-
 class EngineQualification(unittest.TestCase):
     def setUp(self):
         self.mutations = []
