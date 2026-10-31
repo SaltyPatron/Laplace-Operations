@@ -125,6 +125,8 @@ jobs:
           python3 tests/database-restart.py
           python3 tests/linux-operator.py
           python3 tests/modular-client.py
+          python3 tests/client-environment.py
+          python3 tests/codespaces-configuration.py
           python3 tests/storage.py
           pwsh -NoProfile -File tests/desktop-clients.ps1
           pwsh -NoProfile -File tests/deployment-artifacts.ps1
