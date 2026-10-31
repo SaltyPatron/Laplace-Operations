@@ -1,0 +1,118 @@
+{
+  "headRefOid": "e965bc99096e0614600a6f6383f2d5634e248265",
+  "mergeable": "MERGEABLE",
+  "state": "OPEN",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:03:10Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955401/job/124571576068",
+      "name": "Owner policy transport on Python 3.10",
+      "startedAt": "2026-10-31T15:03:02Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 CI contract"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:03:20Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955369/job/124571575760",
+      "name": "runtime-files",
+      "startedAt": "2026-10-31T15:03:02Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 Windows deployment"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:04:40Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955401/job/124571575864",
+      "name": "PostgreSQL owner recovery and platform assignment",
+      "startedAt": "2026-10-31T15:03:01Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 CI contract"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:03:23Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955401/job/124571575956",
+      "name": "PostgreSQL runtime grant recovery",
+      "startedAt": "2026-10-31T15:03:02Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 CI contract"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:03:13Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955401/job/124571575671",
+      "name": "Identity law vectors (monorepo composition through Laplace-Native)",
+      "startedAt": "2026-10-31T15:03:01Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 CI contract"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:04:27Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955401/job/124571575936",
+      "name": "Windows native package integrity",
+      "startedAt": "2026-10-31T15:03:02Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 CI contract"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:04:10Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955401/job/124571575998",
+      "name": "Authenticated CLI transport (ubuntu-24.04)",
+      "startedAt": "2026-10-31T15:03:01Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 CI contract"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:04:40Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955401/job/124571575867",
+      "name": "Authenticated CLI transport (windows-2025)",
+      "startedAt": "2026-10-31T15:03:02Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 CI contract"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:04:42Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955401/job/124571575920",
+      "name": "Static CI/CD contract",
+      "startedAt": "2026-10-31T15:03:02Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 CI contract"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:04:42Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955401/job/124571993012",
+      "name": "Remove artifact-free stale workflow identities",
+      "startedAt": "2026-10-31T15:04:43Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 CI contract"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-31T15:04:42Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/SaltyPatron/Laplace/actions/runs/41212955401/job/124572007562",
+      "name": "Archive evidence-bearing stale workflow identities",
+      "startedAt": "2026-10-31T15:04:46Z",
+      "status": "COMPLETED",
+      "workflowName": "Policy \u2014 CI contract"
+    }
+  ],
+  "url": "https://github.com/SaltyPatron/Laplace/pull/1972"
+}

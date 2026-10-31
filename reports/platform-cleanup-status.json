@@ -1,0 +1,107 @@
+{
+  "checked_utc": "2026-10-31T15:06:58.927217+00:00",
+  "status": "installed_verified_cleanup_access_repair_pending",
+  "scope": "Laplace source reconciliation, owned cleanup and restored full-codepoint delivery",
+  "source": {
+    "repository_count": 12,
+    "all_clean_current_main": true,
+    "local_branches_per_repository": 1,
+    "worktrees_per_repository": 1,
+    "stashes": 0,
+    "unpublished_reflog_and_unreachable_commits": 0,
+    "main_revisions": {
+      "code-search": "384225428f850dbbdcba1334f16f60a9e89659a9",
+      "Laplace": "488c7d0a5ca004b4db3b0cccfb3f42de89cd27b2",
+      "Laplace-Conventional": "0fc78df75122843c96abe356e7c6f7e6e3323bf6",
+      "Laplace-Engine": "697cc84a44829b461dc158d4676781f039fee45b",
+      "Laplace-MCP": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006",
+      "Laplace-Native": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+      "Laplace-Operations": "c1cb4e1a2fdbfb10e93515aa0ab17fcc28a28832",
+      "Laplace-postgres": "5c623bcd5a841ca8188678150bbb836dbae2570a",
+      "Laplace-Prototype": "9e23359443b04e59a3ca42111a78329358aa106c",
+      "Laplace-Refactor": "f33c3711b9b8cfce9a9b128850c49f9cc29cf408",
+      "Laplace-UCI": "d5c7d513b8ed9f63decba9e169ff8cb4e39954af",
+      "Laplace-Wiki": "4672c199de19f8ed392617a5c856a4a8d7b7abe8"
+    },
+    "verified_utc": "2026-10-31T15:06:19.314089+00:00"
+  },
+  "codepoint_floor": {
+    "count": 1114112,
+    "surrogates": 2048,
+    "native_revision": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+    "tier0_sha256": "053feae171eaf496b4c5bc6a7ae3615cf8d7632dfae5b31436c3872fa4be83d1",
+    "native_complete_floor_ci": "https://github.com/SaltyPatron/Laplace-Native/actions/runs/41179256416",
+    "live_generalized_utf8_probe": "server-surrogate-text-runtime.json"
+  },
+  "linux": {
+    "modular_delivery": "https://github.com/SaltyPatron/Laplace-Operations/actions/runs/41184514444",
+    "application_delivery": "https://github.com/SaltyPatron/Laplace/actions/runs/41183030049",
+    "hosts": [
+      "hart-server",
+      "hart-prod"
+    ],
+    "deployment_and_cleanup": "passed",
+    "database_extension_version": "1.61",
+    "populated_function_oids_preserved": true,
+    "substrate_reachable": true,
+    "perfcache_ready": true,
+    "has_data": false,
+    "product_ready": false,
+    "ingestion_run": false,
+    "stored_coordinate_rewrite": false,
+    "modular_release": "/hosting/laplace/modular/releases/1e9ba7e4e568bb5b1ccae4a0376314a2f46a3bbe9b040eec27e55cea35fb0095",
+    "application_revision": "7f857d3618fb202947b31aa154f303ad8a359b46"
+  },
+  "windows": {
+    "state": "IIS, modular CLI/MCP, Native 1.61 and UCI activated and verified; final storage access repair pending",
+    "prepared_package": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages\\f8ffc7d5e404b80cf2200e58eea4b04be83308b79e97d3db15584e6ad09f1d76",
+    "native_extension_build": "1.61 build passed without installation",
+    "protected_component_directories": 4,
+    "remaining_operation": "repair-published-artifact-access.ps1: grant enrolled operator access on the four newly published components, then run the standard storage collector; no build or installation.",
+    "administrator_prompt_launched_for_this_operation": true,
+    "approval": "Awaiting explicit answer for the four-directory access repair and standard cleanup; no additional UAC launched.",
+    "package_sequence_fix": "https://github.com/SaltyPatron/Laplace-Operations/pull/154",
+    "modular_native_build": "passed against current Native and Engine main, no installation or database mutation",
+    "preflight": {
+      "checked_utc": "2026-10-31T14:30:08.9432113Z",
+      "status": "preflight-passed",
+      "identity": "HART-DESKTOP\\ahart",
+      "administrator_token": false,
+      "package": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages\\f8ffc7d5e404b80cf2200e58eea4b04be83308b79e97d3db15584e6ad09f1d76",
+      "release": "60f039aa16ac23c060901d1a9bb056838cc8dd660f9d1556ece77c89e899c863",
+      "manifest_sha256": "0945170449cd018b3db9049af1a8bda690521e704908f08edb7c4bd115947255",
+      "verified_files": 5031,
+      "runtime_source_matches_main": true,
+      "administrator_operation_launched": false
+    },
+    "installed_readback": "desktop-all-installed-readback.json",
+    "native_and_surrogate_readback": "desktop-codepoint-runtime-readback-final.json",
+    "modular_release": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5",
+    "iis_release": "52c713f52a895a078464dfc3f3a6c53b5343b974657fb8b95f23e39e70d54cc6",
+    "source_runtime_equivalence": "Application runtime paths are unchanged between installed 7f857d3618fb202947b31aa154f303ad8a359b46 and main 488c7d0a5ca004b4db3b0cccfb3f42de89cd27b2; only the Windows component publisher changed.",
+    "original_acl_directories_repaired": 23,
+    "shared_blob_access_audit": {
+      "files": 1000,
+      "unreadable": 0
+    },
+    "followup_administrator_prompt_launched": false,
+    "publisher_access_fix": [
+      "https://github.com/SaltyPatron/Laplace-Operations/pull/156",
+      "https://github.com/SaltyPatron/Laplace/pull/1972"
+    ],
+    "packaging_argument_fix": "https://github.com/SaltyPatron/Laplace-Operations/pull/155",
+    "cleanup_outputs_removed_before_final_access_failure": 78,
+    "active_pinned_client": {
+      "pid": 3248,
+      "release": "3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34",
+      "owner": "current Codex MCP conversation",
+      "retained": true
+    }
+  },
+  "retention": {
+    "workspace_build_scratch_entries": 0,
+    "recovery_archives": "recovery-archives-current.json",
+    "history": "Published annotated archive tags preserve historical commits; archive preservation is separate from implementation integration on main.",
+    "running_client_leases": "Preserved; active user sessions are not orphan outputs."
+  }
+}

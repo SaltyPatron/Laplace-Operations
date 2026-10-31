@@ -1,0 +1,8 @@
+{
+  "declaration": "E:\\Data\\Laplace\\services\\laplace-mono-uci\\agent\\installation.json",
+  "site": "laplace-mono-uci",
+  "release": "5636113d6fb93a11a29d0bde200cfa9ca6818f12c46628f9b57e410a5cfd1eef",
+  "binary": "E:\\Data\\Laplace\\services\\laplace-mono-uci\\releases\\5636113d6fb93a11a29d0bde200cfa9ca6818f12c46628f9b57e410a5cfd1eef\\laplace-uci-connect.dll",
+  "product_version": "1.0.0+715a14bff1c9325e86fdca044215f13c90340654",
+  "uci_source": "d5c7d513b8ed9f63decba9e169ff8cb4e39954af"
+}

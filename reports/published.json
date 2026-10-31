@@ -1,0 +1,104 @@
+[
+  {
+    "path": "E:\\Repositories\\Laplace\\code-search",
+    "published_branches": [],
+    "published_tags": [],
+    "archive_commit": null
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace",
+    "published_branches": [
+      "pending/desktop-mcp-and-devcontainer",
+      "pending/product-quality",
+      "pending/workspace-account-recovery",
+      "recovery/foundry-stash-20261022"
+    ],
+    "published_tags": [
+      "archive/local-work-20261031",
+      "archive/mono-policy-source-20261011"
+    ],
+    "archive_commit": "89d0d85f8f4ae05df725dc23920ccf078c25dc2c"
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace-Conventional",
+    "published_branches": [],
+    "published_tags": [],
+    "archive_commit": null
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace-Engine",
+    "published_branches": [],
+    "published_tags": [
+      "archive/local-work-20261031"
+    ],
+    "archive_commit": "16a5b245ce8b2673b6d72a5824d3cf4806cd5caa"
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace-MCP",
+    "published_branches": [],
+    "published_tags": [
+      "archive/local-work-20261031"
+    ],
+    "archive_commit": "be842f34c29f4beaa74b61aef57e0b9a0ab1ba5e"
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace-Native",
+    "published_branches": [],
+    "published_tags": [
+      "archive/local-work-20261031"
+    ],
+    "archive_commit": "803abfa841c9ddd8b1bfd05e1872fcd84eca5dc1"
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace-Operations",
+    "published_branches": [
+      "pending/desktop-client-and-devcontainer",
+      "pending/recovered-modular-delivery",
+      "pending/recovered-runtime-rerun"
+    ],
+    "published_tags": [
+      "archive/local-work-20261031"
+    ],
+    "archive_commit": "f020f97a2033fe6cdaf260411df854f12d3068e8"
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace-postgres",
+    "published_branches": [],
+    "published_tags": [
+      "archive/local-work-20261031"
+    ],
+    "archive_commit": "b385d686a565e4aca23e16f5d886b9e9918ca67d"
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace-Prototype",
+    "published_branches": [],
+    "published_tags": [
+      "archive/local-work-20261031"
+    ],
+    "archive_commit": "7a766be37422dc8029eb9c39b629962ea84d0f76"
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace-Refactor",
+    "published_branches": [],
+    "published_tags": [
+      "archive/local-work-20261031"
+    ],
+    "archive_commit": "e4ef0453afca872d6a2d98f24d0d4f931a1fb1ee"
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace-UCI",
+    "published_branches": [],
+    "published_tags": [
+      "archive/local-work-20261031"
+    ],
+    "archive_commit": "44d4cde30e0a478a2cadc25758995cc1735eda02"
+  },
+  {
+    "path": "E:\\Repositories\\Laplace\\Laplace-Wiki",
+    "published_branches": [],
+    "published_tags": [
+      "archive/local-work-20261031"
+    ],
+    "archive_commit": "6bd9290bc9120b98d823da1657dac1ad43dac1f3"
+  }
+]

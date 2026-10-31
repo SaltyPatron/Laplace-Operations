@@ -1,0 +1,10 @@
+{
+  "source_commit": "0e5789450eb3507b877cf1b1c30d6ba835620f7f",
+  "newline_only_differences": 3802,
+  "content_differences": [],
+  "extra_files": [
+    "web/openapi/openapi.json"
+  ],
+  "recovery_archive": "E:\\Repositories\\Laplace\\artifacts\\repository-cleanup-2026-10-31T04-53-01-772Z\\deployment-snapshot-differences.zip",
+  "recovery_sha256": "6a30cf8a7b9c4b3c6fa43736ac15465c0bbf25f6ffe90b629327843a58c3b5be"
+}

@@ -1,0 +1,19 @@
+[
+  {
+    "indexes": [],
+    "database": "laplace"
+  },
+  {
+    "indexes": [
+      {
+        "live": true,
+        "name": "physicality_assertions",
+        "ready": true,
+        "table": "physicality",
+        "valid": true,
+        "schema": "public"
+      }
+    ],
+    "database": "laplace-mono"
+  }
+]

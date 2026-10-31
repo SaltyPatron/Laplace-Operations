@@ -1,0 +1,63 @@
+{
+  "status": "passed",
+  "scope": "desktop prepared build inputs",
+  "target": "E:\\Data\\Laplace\\work\\tier0",
+  "before": {
+    "tier0.bin": {
+      "sha256": "56fc87097cb1fe081acbe9b4da91d8f34aadb15c2ce4b091873afbc6342779fe",
+      "bytes": 71172096
+    },
+    "tier0.flags": {
+      "sha256": "f7b6c4d3f73197139a04d41b1daae7010a3802d1a8cc39ecee7c8817e8c89092",
+      "bytes": 35651584
+    },
+    "tier0.flags.layout": {
+      "sha256": "13c63be53219cd610ff5a45ce4d6e233380833cecbc03fcdd1b9521a4c7d6ba2",
+      "bytes": 23534
+    },
+    "tier0.highway": {
+      "sha256": "de1bab970f9c77ebace3a58c4c51af01bca11bf1eb0c822dd047d07a8e13693a",
+      "bytes": 56556616
+    },
+    "tier0.highway.keys": {
+      "sha256": "87606218cba3311a3f7937fac8ba2aadb9e895b899db3c6534500cd432fdfd1f",
+      "bytes": 18799681
+    },
+    "tier0.highway.layout": {
+      "sha256": "04fad7800a78bfce404e775f5f3415db25bc04721b28b548b19f94a15629befa",
+      "bytes": 1430
+    },
+    "tier0.highway.nodes": {
+      "sha256": "7b1349277df75dddf35bc2758a353f3383e6b8b65a4bacda4f15fa6a0b512f95",
+      "bytes": 24467854
+    }
+  },
+  "after": {
+    "tier0.bin": {
+      "sha256": "053feae171eaf496b4c5bc6a7ae3615cf8d7632dfae5b31436c3872fa4be83d1",
+      "bytes": 71303168
+    },
+    "tier0.flags": {
+      "sha256": "f7b6c4d3f73197139a04d41b1daae7010a3802d1a8cc39ecee7c8817e8c89092",
+      "bytes": 35651584
+    },
+    "tier0.flags.layout": {
+      "sha256": "d752191e3d27420b66d3332d62680962cbb8970ef1fa55133f275e73a60f5328",
+      "bytes": 23434
+    },
+    "tier0.highway": {
+      "sha256": "a9c131991184fe5abeb2c83e2c1bb69e7b59049578bc47278948d3148ee9a333",
+      "bytes": 56556616
+    }
+  },
+  "backup": "E:\\Repositories\\Laplace\\artifacts\\repository-cleanup-2026-10-31T04-53-01-772Z\\desktop-prepared-before-full-floor.zip",
+  "database_references": [
+    "E:/Data/Laplace/deploy/share/highway.bin",
+    "E:/Data/Laplace/deploy/share/tier0.bin",
+    "E:/Data/Laplace/deploy/share/tier0.flags",
+    "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34\\share\\prepared\\tier0.bin",
+    "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34\\share\\prepared\\tier0.flags",
+    "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34\\share\\prepared\\tier0.highway"
+  ],
+  "highway_fingerprint": "fingerprint 0af9466e17875d63a134eddc54ce0e77a4286faff04fa65b1db478937aed3e17"
+}

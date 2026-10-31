@@ -1,0 +1,218 @@
+{
+  "checked_utc": "2026-10-31T15:00:03.288732+00:00",
+  "databases": [
+    {
+      "identity": {
+        "tls": true,
+        "role": "ahart",
+        "system_user": "sspi:HART-DESKTOP\\ahart"
+      },
+      "functions": [
+        {
+          "oid": "1096696",
+          "name": "laplace_cp_id",
+          "module": "$libdir/laplace_c5b215655c6c853df3c8",
+          "schema": "public",
+          "arguments": "integer"
+        },
+        {
+          "oid": "1096803",
+          "name": "laplace_id",
+          "module": "$libdir/laplace_c5b215655c6c853df3c8",
+          "schema": "public",
+          "arguments": "text"
+        },
+        {
+          "oid": "1109340",
+          "name": "laplace_restore_function_bindings",
+          "module": "$libdir/laplace_c5b215655c6c853df3c8",
+          "schema": "public",
+          "arguments": ""
+        }
+      ],
+      "boundaries": [
+        {
+          "cp": 55295,
+          "id": "8c8d209eca28961feffccae973e55647",
+          "reverse": 55295,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 55296,
+          "id": "dff435ed8113f31233474261aa854f0f",
+          "reverse": 55296,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 56319,
+          "id": "fa5a060c1e71a595d3f2595f8783c6ed",
+          "reverse": 56319,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 56320,
+          "id": "ccb958508a431b01ad9484e67d820e09",
+          "reverse": 56320,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 57343,
+          "id": "12501a6725d76de9a6d1c78f69fd2517",
+          "reverse": 57343,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 57344,
+          "id": "bcfe3646ff1d6ebc2d5141b3a6cf2793",
+          "reverse": 57344,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 1114111,
+          "id": "aed22c3c4482e24326cb680eebf34582",
+          "reverse": 1114111,
+          "coordinate_bytes": 37
+        }
+      ],
+      "surrogates": {
+        "count": 2048,
+        "roundtrips": true,
+        "coordinates": true
+      },
+      "cache_settings": {
+        "laplace.flags": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5\\share\\prepared\\tier0.flags",
+        "laplace.tier0": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5\\share\\prepared\\tier0.bin",
+        "laplace.highway": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5\\share\\prepared\\tier0.highway"
+      },
+      "extension_version": "1.61",
+      "function_oids_preserved": true,
+      "database": "laplace"
+    },
+    {
+      "identity": {
+        "tls": true,
+        "role": "ahart",
+        "system_user": "sspi:HART-DESKTOP\\ahart"
+      },
+      "functions": [
+        {
+          "oid": "1126554",
+          "name": "laplace_cp_id",
+          "module": "$libdir/laplace_c5b215655c6c853df3c8",
+          "schema": "public",
+          "arguments": "integer"
+        },
+        {
+          "oid": "1126661",
+          "name": "laplace_id",
+          "module": "$libdir/laplace_c5b215655c6c853df3c8",
+          "schema": "public",
+          "arguments": "text"
+        },
+        {
+          "oid": "1139198",
+          "name": "laplace_restore_function_bindings",
+          "module": "$libdir/laplace_c5b215655c6c853df3c8",
+          "schema": "public",
+          "arguments": ""
+        }
+      ],
+      "boundaries": [
+        {
+          "cp": 55295,
+          "id": "8c8d209eca28961feffccae973e55647",
+          "reverse": 55295,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 55296,
+          "id": "dff435ed8113f31233474261aa854f0f",
+          "reverse": 55296,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 56319,
+          "id": "fa5a060c1e71a595d3f2595f8783c6ed",
+          "reverse": 56319,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 56320,
+          "id": "ccb958508a431b01ad9484e67d820e09",
+          "reverse": 56320,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 57343,
+          "id": "12501a6725d76de9a6d1c78f69fd2517",
+          "reverse": 57343,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 57344,
+          "id": "bcfe3646ff1d6ebc2d5141b3a6cf2793",
+          "reverse": 57344,
+          "coordinate_bytes": 37
+        },
+        {
+          "cp": 1114111,
+          "id": "aed22c3c4482e24326cb680eebf34582",
+          "reverse": 1114111,
+          "coordinate_bytes": 37
+        }
+      ],
+      "surrogates": {
+        "count": 2048,
+        "roundtrips": true,
+        "coordinates": true
+      },
+      "cache_settings": {
+        "laplace.flags": "E:/Data/Laplace/deploy/share/tier0.flags",
+        "laplace.tier0": "E:/Data/Laplace/deploy/share/tier0.bin",
+        "laplace.highway": "E:/Data/Laplace/deploy/share/highway.bin"
+      },
+      "extension_version": "1.61",
+      "function_oids_preserved": true,
+      "database": "laplace-mono"
+    }
+  ],
+  "modular_mcp": {
+    "initialize": "passed",
+    "tools": 24,
+    "text": "passed",
+    "database_readback": "passed",
+    "database": "laplace",
+    "executable": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5\\bin\\lpm.exe"
+  },
+  "mcp_unicode_transport": {
+    "status": "passed",
+    "result": "JSON-RPC IDs and arguments are separate; escaped/direct Unicode agree; canonical ID reaches the database reader; quoted field names stay content"
+  },
+  "selection": {
+    "implementation": "laplace",
+    "configuration": "E:\\Data\\Laplace\\clients\\laplace\\client.json",
+    "installation": "E:\\Data\\Laplace\\clients\\laplace\\installation.json",
+    "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5",
+    "executable": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5\\bin\\laplace.exe",
+    "database_host": "HART-DESKTOP",
+    "database": "laplace",
+    "database_role": "ahart",
+    "work": "E:\\Data\\Laplace\\work\\clients\\ahart\\laplace",
+    "data": "E:\\Data\\Ingest",
+    "inputs": {
+      "source": "E:\\Repositories\\Laplace",
+      "models": "E:\\Models"
+    },
+    "revisions": {
+      "Laplace-Engine": "697cc84a44829b461dc158d4676781f039fee45b",
+      "Laplace-Native": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+      "Laplace-MCP": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006"
+    }
+  },
+  "selected_cache": {
+    "path": "E:\\Data\\Laplace\\services\\laplace\\releases\\5a2c07d2ad128a091ff46d328dc46f9d203de0e668f753cec6314a1e5b3dc8d5\\share\\prepared\\tier0.bin",
+    "bytes": 71303168,
+    "sha256": "053feae171eaf496b4c5bc6a7ae3615cf8d7632dfae5b31436c3872fa4be83d1"
+  },
+  "status": "passed"
+}
