@@ -1,0 +1,237 @@
+{
+  "created_utc": "2026-10-31T08:30:20.802502+00:00",
+  "scope": "Remote preservation of cleanup evidence and historical one-off tools; not a platform completion claim.",
+  "operations_main": "8e4e47bf2f04936a72c8126f66896dbe941578b9",
+  "files": [
+    {
+      "path": "historical-tools/Audit-StorageElevated.ps1",
+      "bytes": 1140,
+      "sha256": "9f7a617a8fc417a20c56ce360bcb914f43c7a36585cfa17d283e6ac5c354b7f5"
+    },
+    {
+      "path": "historical-tools/Complete-RuntimeStorageCleanup.ps1",
+      "bytes": 2536,
+      "sha256": "f97d70235ce6cca3bf91b968840729eea6abe6b4ce536a55db51fb5dd3b5081b"
+    },
+    {
+      "path": "historical-tools/Repair-CleanupAccess.ps1",
+      "bytes": 2228,
+      "sha256": "417d218b8e260d10612ee3f8f7f4b6fcd1cdf5eb28dbe1c62051604de4bf091a"
+    },
+    {
+      "path": "historical-tools/build-native-candidate.cmd",
+      "bytes": 1896,
+      "sha256": "b3f8a68ca92500bf9f714b1701f53a13e5d22339c0b999c901c47c296cc58bf8"
+    },
+    {
+      "path": "historical-tools/check-operations-final-linux.py",
+      "bytes": 945,
+      "sha256": "24b8256ec0f44b0c0a9ec58a66ce2c2700cb551b4694763fe9f7f13f30b7bdb0"
+    },
+    {
+      "path": "historical-tools/complete-desktop-owner.ps1",
+      "bytes": 4013,
+      "sha256": "f7b242ea80d48049487417acfb74d568d83d078c7d08382b37273b9dede81add"
+    },
+    {
+      "path": "historical-tools/final-repository-audit.py",
+      "bytes": 2268,
+      "sha256": "b3295483da4959b2dbccec296dd52125d461b1a635fa47ec1bdb3fd67c321b4c"
+    },
+    {
+      "path": "historical-tools/finish-floor-consumers.py",
+      "bytes": 7821,
+      "sha256": "c7618f6e73887a1ad5545d3401e905693f9cf831f5c5834c6679e19f6c885c43"
+    },
+    {
+      "path": "historical-tools/native-full-codespace-review.patch",
+      "bytes": 11828,
+      "sha256": "a6de91d68be4c846b7c4f9ae430b9271693c679c7032cb5f479cfc1015f15c3f"
+    },
+    {
+      "path": "historical-tools/publish-cleanup-evidence.py",
+      "bytes": 6216,
+      "sha256": "b2a2c05813a0aefca110848951182356d33a3ee7e40a4fdb7f33a27a72a451a9"
+    },
+    {
+      "path": "historical-tools/publish-desktop-prepared-inputs.py",
+      "bytes": 3845,
+      "sha256": "9486d83005f61171fb89dd27ac1a546cbe78e944b7377b23050bc535ff597be3"
+    },
+    {
+      "path": "historical-tools/resume-modular-owner.py",
+      "bytes": 1982,
+      "sha256": "0244b999551d173a506b7d2331e472691876a890ab80a04bc3b026e61ac98e68"
+    },
+    {
+      "path": "historical-tools/retire-merged-branches.py",
+      "bytes": 1511,
+      "sha256": "7fcf7d4b621200341bc58f6c7e790ef106cd7be4244dffdc8f8e8fd50c28b40b"
+    },
+    {
+      "path": "historical-tools/retire-qualified-input-copies.ps1",
+      "bytes": 2893,
+      "sha256": "20eb390d5cde21ae8fde2ff42370bd25911195d73860b602e7c13df43d19ee1c"
+    },
+    {
+      "path": "historical-tools/verify-server-full-codepoint.py",
+      "bytes": 4018,
+      "sha256": "6f4364a75c078fca663e0a1411425b5df68c44853ccd45259c2894d94cf79892"
+    },
+    {
+      "path": "reports/build-output-cleanup.json",
+      "bytes": 1499,
+      "sha256": "b4d896468ccd6375b26ae9d85b29ed12fe34bd2373fb727f7f11080eab69380a"
+    },
+    {
+      "path": "reports/deployment-snapshot-comparison.json",
+      "bytes": 427,
+      "sha256": "358e48390e52d3c3901d39c99b2160f0094e1fe96f663d4fe129b6b49058acda"
+    },
+    {
+      "path": "reports/desktop-client-inventory-current.json",
+      "bytes": 2079,
+      "sha256": "498b0dadcc19b10761e5f77cff26a6a5623f04524799aa8e0b13545bb547e90c"
+    },
+    {
+      "path": "reports/desktop-prepared-input-repair.json",
+      "bytes": 2602,
+      "sha256": "c54a38a91c916c01b142c2a2f308a516e7ba536d868706f6bf3923ac3eda0356"
+    },
+    {
+      "path": "reports/desktop-prepared-package.json",
+      "bytes": 3235,
+      "sha256": "d30639c6229368184ea34309cd4c40af4861c3728731de047b998eb67b44d2eb"
+    },
+    {
+      "path": "reports/desktop-unreadable-component-directories.json",
+      "bytes": 5885,
+      "sha256": "6b753bfac3603cd96e8380f92835e91a451acb04a4824d350e2936f3b93fc864"
+    },
+    {
+      "path": "reports/fixture-cleanup.json",
+      "bytes": 15526,
+      "sha256": "72ee7c74430bc27a789e489b0c9b4df52dd4411d7b40939148f5d4c7a61ea234"
+    },
+    {
+      "path": "reports/generated-test-output-retirement.json",
+      "bytes": 347,
+      "sha256": "eee948dabdf0ff402bdcc96d884e1006acd46451ba7149340fd6424e21d2d048"
+    },
+    {
+      "path": "reports/git-object-and-operation-audit.json",
+      "bytes": 1979,
+      "sha256": "f8c8cd7858cb107fc0a9975612cebe7d49932b3e3cd98eb9a40a59eebd28dd35"
+    },
+    {
+      "path": "reports/linux-installed-cleanup-final.json",
+      "bytes": 5006,
+      "sha256": "c829574c674e7c53465d94a9ad7a699d99f9614f5b7904228f021d64d993b3d0"
+    },
+    {
+      "path": "reports/main-integration-audit.json",
+      "bytes": 18689,
+      "sha256": "45d88b4b3021d0ba19e9d16ec273d4633cac50344bdc18bd398761296062faf7"
+    },
+    {
+      "path": "reports/merged-branch-retirement-current.json",
+      "bytes": 5197,
+      "sha256": "0940d77e42d10464fc57406f1fa1f20b0202313a0368fb73aaaa3239f40e37b4"
+    },
+    {
+      "path": "reports/mono-final-delivery-success.json",
+      "bytes": 15093,
+      "sha256": "282e10545d006c1c67c0cc44202564e35957bce3631747ec6117e9920609e595"
+    },
+    {
+      "path": "reports/operations-package-order-final-delivery.json",
+      "bytes": 16481,
+      "sha256": "8a7e84f5817290cd617ad406ac549702104fd9d0808790b822e9ce136b918632"
+    },
+    {
+      "path": "reports/platform-cleanup-status.json",
+      "bytes": 3798,
+      "sha256": "ed8e415b1e0a0fb720da0d27c38077419afc1309e8498f715879e3684bb59dd8"
+    },
+    {
+      "path": "reports/published.json",
+      "bytes": 3033,
+      "sha256": "40620703d4a0fbf3d34666a555d4d2758a9e3c09df869bba1beafb4f0a612481"
+    },
+    {
+      "path": "reports/qualified-input-copy-retirement.json",
+      "bytes": 595,
+      "sha256": "bf869a97c8659c5948cdfb9f91addf23fc85b65f663b99643a74b0c08ad671f0"
+    },
+    {
+      "path": "reports/qualified-native-inputs-manifest.json",
+      "bytes": 537,
+      "sha256": "7b1769076728b2f3e1f9bf35d145470e29d5856260b48b38bb6bc16202a7e552"
+    },
+    {
+      "path": "reports/read-path-test-database-backup.json",
+      "bytes": 385,
+      "sha256": "cf3b243f83619a1001656c6ab601041f803f93dadff777db84bec1b79e2f7448"
+    },
+    {
+      "path": "reports/recovery-archives-current.json",
+      "bytes": 1129,
+      "sha256": "1ba1024c8e94c5a011ddd1397971d31e5da2d46bb387eae04946746f111aa8c7"
+    },
+    {
+      "path": "reports/remaining-workspace-scratch-cleanup.json",
+      "bytes": 44925,
+      "sha256": "e846fe84a2bafb3002feec7e3236fa14fd98ed8c54039d3a52600f1ea794b0c9"
+    },
+    {
+      "path": "reports/repositories-current-main.json",
+      "bytes": 5383,
+      "sha256": "22ef8a4204e0ca60ddccff21ae3ba372bbd11beabb12a6d4df3290494bc9656f"
+    },
+    {
+      "path": "reports/scratch-source-publication.json",
+      "bytes": 9441,
+      "sha256": "2552091f72013e990462a225d0ef2e81e5c62ddbf8ccec79bef47eed6686bc11"
+    },
+    {
+      "path": "reports/server-codepoint-runtime-readback-final.json",
+      "bytes": 5198,
+      "sha256": "36d785ef587c5ac016f4b8695b1a5971f4cfbc0bd30275294f7e4121e15e876e"
+    },
+    {
+      "path": "reports/server-modular-delivery-final.json",
+      "bytes": 5108,
+      "sha256": "3b895c45dd2b0af19900f7a11a9587166078a3a285f7edc12e832b4795c7df07"
+    },
+    {
+      "path": "reports/server-modular-delivery-success.json",
+      "bytes": 4269,
+      "sha256": "f5bf88903d5425300bbb127d76d73275055ebbfc23d224415f311b8894f8d706"
+    },
+    {
+      "path": "reports/server-surrogate-text-runtime.json",
+      "bytes": 3559,
+      "sha256": "1eb954c9634d2973648255f6d529aceacde452636693cacdf96ee4441f7e5516"
+    },
+    {
+      "path": "reports/storage-cleanup-result.json",
+      "bytes": 1220,
+      "sha256": "b12372de887bcfbbb7ebada3261c3bbcc57410bf780fef89183da419b50ed0ac"
+    },
+    {
+      "path": "reports/surrogate-text-candidate-probe.json",
+      "bytes": 2061,
+      "sha256": "ce85eeb1bb737e6c06756d0ce508f6f2287cad137feb0e7ebca7f31d99f2adfb"
+    },
+    {
+      "path": "reports/windows-modular-build-receipt.json",
+      "bytes": 1031,
+      "sha256": "1e4a246e93bec454b29321ea3a47491bb3381847adcd7d42f28e9372c36ea53c"
+    },
+    {
+      "path": "reports/workspace-final-scratch-audit.json",
+      "bytes": 572,
+      "sha256": "9a5e6996ec61c087bc50ef0269216c5e2036dedc42a9f94325fb65738b6f8b7a"
+    }
+  ]
+}

@@ -1,0 +1,201 @@
+{
+  "scope": "repository source state only",
+  "verified_utc": "2026-10-31T08:30:17.131281+00:00",
+  "repository_count": 12,
+  "all_current_main": true,
+  "repositories": [
+    {
+      "repo": "code-search",
+      "head": "384225428f850dbbdcba1334f16f60a9e89659a9",
+      "remote_main": "384225428f850dbbdcba1334f16f60a9e89659a9",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 0
+    },
+    {
+      "repo": "Laplace",
+      "head": "7f857d3618fb202947b31aa154f303ad8a359b46",
+      "remote_main": "7f857d3618fb202947b31aa154f303ad8a359b46",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 19
+    },
+    {
+      "repo": "Laplace-Conventional",
+      "head": "0fc78df75122843c96abe356e7c6f7e6e3323bf6",
+      "remote_main": "0fc78df75122843c96abe356e7c6f7e6e3323bf6",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 0
+    },
+    {
+      "repo": "Laplace-Engine",
+      "head": "697cc84a44829b461dc158d4676781f039fee45b",
+      "remote_main": "697cc84a44829b461dc158d4676781f039fee45b",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 1
+    },
+    {
+      "repo": "Laplace-MCP",
+      "head": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006",
+      "remote_main": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 1
+    },
+    {
+      "repo": "Laplace-Native",
+      "head": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+      "remote_main": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 2
+    },
+    {
+      "repo": "Laplace-Operations",
+      "head": "8e4e47bf2f04936a72c8126f66896dbe941578b9",
+      "remote_main": "8e4e47bf2f04936a72c8126f66896dbe941578b9",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/fingerprints",
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 2
+    },
+    {
+      "repo": "Laplace-postgres",
+      "head": "5c623bcd5a841ca8188678150bbb836dbae2570a",
+      "remote_main": "5c623bcd5a841ca8188678150bbb836dbae2570a",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 1
+    },
+    {
+      "repo": "Laplace-Prototype",
+      "head": "9e23359443b04e59a3ca42111a78329358aa106c",
+      "remote_main": "9e23359443b04e59a3ca42111a78329358aa106c",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 1
+    },
+    {
+      "repo": "Laplace-Refactor",
+      "head": "f33c3711b9b8cfce9a9b128850c49f9cc29cf408",
+      "remote_main": "f33c3711b9b8cfce9a9b128850c49f9cc29cf408",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 22
+    },
+    {
+      "repo": "Laplace-UCI",
+      "head": "d5c7d513b8ed9f63decba9e169ff8cb4e39954af",
+      "remote_main": "d5c7d513b8ed9f63decba9e169ff8cb4e39954af",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 1
+    },
+    {
+      "repo": "Laplace-Wiki",
+      "head": "4672c199de19f8ed392617a5c856a4a8d7b7abe8",
+      "remote_main": "4672c199de19f8ed392617a5c856a4a8d7b7abe8",
+      "dirty_entries": 0,
+      "local_branches": [
+        "main"
+      ],
+      "remote_heads": [
+        "refs/heads/main"
+      ],
+      "worktrees": 1,
+      "stashes": 0,
+      "uncovered_reflog_commits": 0,
+      "remote_verified_tags": 1
+    }
+  ]
+}

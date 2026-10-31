@@ -1,0 +1,140 @@
+[
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\13e189f1fb50b17ada323d9f7666cd1bb80fb29cd1c783931cd9d862fa77b6b7",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "api"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\426108834852f89ed3857bacee32b48579ea2b699b3693008f27fb835e559d9b",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "api"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\57f8b879883b0fa33e88584b10927058c1de90b2dfa751e7fe04a2306116352f",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "api"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\7551fd66165906c5d41320aee08e591c53b1e233b36bdcd317dcce7ed6aab65b",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "api"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\api\\cbab2b9925b838c1a567f9aa035136728f356e413d39f51bac492d65aa7bdac0",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "api"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\33d9d4bee8c629fe4af36369272625710e2743634ee52f63240ab34d66756359",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "cli"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\5e8e8ebe65e497fe9e3d74d36edcf3080f5a9dcfa86f1e27c7a0fbbce7334cf9",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "cli"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\73e6441eec25182947548810e4979f8bbd72a391223e8b87e6683ad06636fdd3",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "cli"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\84bf13e8c262b9f710112b121334e1c0df89df48a207d8ea37ccd5dd218b879d",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "cli"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\9525fd98cdb455779e055eea5b868c3b7b0d77bb00ac453f9365f7896354bee2",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "cli"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\cli\\f9f5ebbe245ee28a637c03a50025f67881130c78bafc7e2dd34bc5e9359d67d8",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "cli"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\075cd5976a2789b64f3ae2185abe0ac864c463e15d71281408d815a77d66a9f4",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "uci"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\328764bd2a1cba34387fd35c14659a4a629ab8cfe02ab43bbb544891cceffe15",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "uci"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\4c4c4172112f332b1d4c08141663c7aaf34f70b9a28396169c9a9425aae41451",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "uci"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\78db151da8f53fb46179ac2fe02c7c26ff641dd8812c7083334b23ace1d0d236",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "uci"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\b8e7e0fd1a71fdc0586c77716c25a662843b7bbdedcc14da25aeb7b41cb9b57e",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "uci"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\uci\\cd8de37d7a6819327657cbcea1150fd5de688ddf5645bd5c665a468a3342f8f3",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "uci"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\0d68446d773210e5cff634b0ce0babab499bea2a0c78b219911f07661daa0003",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "migrations"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\2d2731246a06360f8d9fe9d210f40aea89fd8d48671b013f9bd94400e334b920",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "migrations"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\41d92b83bf38ff7ae24138760fb09e8af42898ae6069b2581d50ab9c0fda3faa",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "migrations"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\4fbcb613c2c6927cf4a1c558ee5d589d0683597fd19f0a34bbea3cf735578069",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "migrations"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\5295bc58f4fac23eea09b7982c2d77184ab62f8d34952269400a7dbb79d5f457",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "migrations"
+  },
+  {
+    "path": "E:\\Data\\Laplace\\work\\artifacts\\windows-components\\migrations\\9336167ecff544f3564b7c6a81b2593127aa2c554de9decc283e759d14774c47",
+    "error": "MethodInvocationException",
+    "attributes": "Directory",
+    "component": "migrations"
+  }
+]

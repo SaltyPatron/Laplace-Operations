@@ -1,0 +1,56 @@
+{
+  "schema": "laplace.desktop-clients/v1",
+  "checked_utc": "2026-10-31T08:04:35.1495069Z",
+  "host": "hart-desktop",
+  "status": "current",
+  "selected_release": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34",
+  "revisions": {
+    "Laplace-Engine": "bf257d3a3c08434cfd9c1b6fe48e4a044470abf1-dirty-eeaef321c09d",
+    "Laplace-Native": "c0b9ecdefb1624611ccd60948f3eb4f80dbdc077",
+    "Laplace-MCP": "11698838d7ef6fdd32d4751b5b6f52c1411ec113"
+  },
+  "processes": [
+    {
+      "pid": 3248,
+      "started_utc": "2026-10-31T04:51:59.8594330Z",
+      "executable": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34\\bin\\lpm.exe",
+      "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34",
+      "selected": true,
+      "mode": "mcp-stdio",
+      "parents": [
+        {
+          "pid": 18884,
+          "name": "python.exe"
+        },
+        {
+          "pid": 3908,
+          "name": "codex.exe"
+        }
+      ]
+    }
+  ],
+  "stale_count": 0,
+  "unobservable_pids": [],
+  "releases": [
+    {
+      "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\081c6e6927f47f53b1f35d5fdbb51bd94ac1d3c85bd3cc7d3891b2573341f6d4",
+      "pids": [],
+      "protected": false,
+      "reasons": [],
+      "retirement": "requires_reference_audit"
+    },
+    {
+      "release": "E:\\Data\\Laplace\\services\\laplace\\releases\\3936c2ebb177949828db2a1782b5761d30e8cde316f70d64094eafeec0666b34",
+      "pids": [
+        3248
+      ],
+      "protected": true,
+      "reasons": [
+        "installed_selection",
+        "running_process"
+      ],
+      "retirement": "blocked"
+    }
+  ],
+  "reconnect_policy": "Reconnect each reported MCP client to launch the selected release; active stdio sessions remain pinned. Let older native commands finish. Run laplace-ops clients verify afterward. No client application is terminated."
+}

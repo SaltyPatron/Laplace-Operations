@@ -1,0 +1,35 @@
+{
+  "status": "passed",
+  "remaining_retirable": 0,
+  "finished_utc": "2026-10-31T05:10:40.6341171Z",
+  "selection_hashes": {
+    "E:/Data/Laplace/clients/laplace/installation.json": "806EC6C61FCA07E6CEAEAF290255C23A7D7DB4A4F9C1707A16E8510E2CD675D1",
+    "E:\\Data\\Laplace\\services\\laplace-mono-api\\installation.json": "175154E4A7FF4BA8B0455646AB86DFA47A8700286669763E91F1C34B6BCC4D91",
+    "E:\\Data\\Laplace\\services\\laplace-mono-api\\web\\web.config": "3C2737E149780AC074FA0691248D8780EA484544B8E1260EF94E048A7D411F51",
+    "E:\\Data\\Laplace\\services\\laplace-mono-api\\web\\active.json": "38650415BB0F0ECAB3C2DE582DBA7DE633725C234712E8940DFBCCE57FAD3DE0"
+  },
+  "database_cleanup": [
+    {
+      "database": "postgres",
+      "status": "not_installed",
+      "loads": []
+    },
+    {
+      "database": "laplace",
+      "status": "passed",
+      "loads": []
+    },
+    {
+      "database": "laplace-mono",
+      "status": "passed",
+      "loads": []
+    },
+    {
+      "database": "laplace-desktop-app",
+      "status": "not_installed",
+      "loads": []
+    }
+  ],
+  "removed": 309,
+  "receipt": "E:\\Data\\Laplace\\work\\operations\\storage-20261031T0510387334698Z.json"
+}

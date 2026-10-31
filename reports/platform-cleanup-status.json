@@ -1,0 +1,71 @@
+{
+  "checked_utc": "2026-10-31T08:30:17.261668+00:00",
+  "status": "windows_activation_and_access_repair_pending",
+  "scope": "Laplace source reconciliation, owned cleanup and restored full-codepoint delivery",
+  "source": {
+    "repository_count": 12,
+    "all_clean_current_main": true,
+    "local_branches_per_repository": 1,
+    "worktrees_per_repository": 1,
+    "stashes": 0,
+    "unpublished_reflog_and_unreachable_commits": 0,
+    "main_revisions": {
+      "code-search": "384225428f850dbbdcba1334f16f60a9e89659a9",
+      "Laplace": "7f857d3618fb202947b31aa154f303ad8a359b46",
+      "Laplace-Conventional": "0fc78df75122843c96abe356e7c6f7e6e3323bf6",
+      "Laplace-Engine": "697cc84a44829b461dc158d4676781f039fee45b",
+      "Laplace-MCP": "b4bd89be403523b5c6a45fda4c4d5b97c8dfe006",
+      "Laplace-Native": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+      "Laplace-Operations": "8e4e47bf2f04936a72c8126f66896dbe941578b9",
+      "Laplace-postgres": "5c623bcd5a841ca8188678150bbb836dbae2570a",
+      "Laplace-Prototype": "9e23359443b04e59a3ca42111a78329358aa106c",
+      "Laplace-Refactor": "f33c3711b9b8cfce9a9b128850c49f9cc29cf408",
+      "Laplace-UCI": "d5c7d513b8ed9f63decba9e169ff8cb4e39954af",
+      "Laplace-Wiki": "4672c199de19f8ed392617a5c856a4a8d7b7abe8"
+    }
+  },
+  "codepoint_floor": {
+    "count": 1114112,
+    "surrogates": 2048,
+    "native_revision": "38f4139bab5ea44f860d5e9e2b322b963b7f5a71",
+    "tier0_sha256": "053feae171eaf496b4c5bc6a7ae3615cf8d7632dfae5b31436c3872fa4be83d1",
+    "native_complete_floor_ci": "https://github.com/SaltyPatron/Laplace-Native/actions/runs/41179256416",
+    "live_generalized_utf8_probe": "server-surrogate-text-runtime.json"
+  },
+  "linux": {
+    "modular_delivery": "https://github.com/SaltyPatron/Laplace-Operations/actions/runs/41184514444",
+    "application_delivery": "https://github.com/SaltyPatron/Laplace/actions/runs/41183030049",
+    "hosts": [
+      "hart-server",
+      "hart-prod"
+    ],
+    "deployment_and_cleanup": "passed",
+    "database_extension_version": "1.61",
+    "populated_function_oids_preserved": true,
+    "substrate_reachable": true,
+    "perfcache_ready": true,
+    "has_data": false,
+    "product_ready": false,
+    "ingestion_run": false,
+    "stored_coordinate_rewrite": false,
+    "modular_release": "/hosting/laplace/modular/releases/1e9ba7e4e568bb5b1ccae4a0376314a2f46a3bbe9b040eec27e55cea35fb0095",
+    "application_revision": "7f857d3618fb202947b31aa154f303ad8a359b46"
+  },
+  "windows": {
+    "state": "prepared; not activated",
+    "prepared_package": "E:\\Data\\Laplace\\work\\artifacts\\iis-packages\\f8ffc7d5e404b80cf2200e58eea4b04be83308b79e97d3db15584e6ad09f1d76",
+    "native_extension_build": "1.61 build passed without installation",
+    "protected_component_directories": 23,
+    "remaining_operation": "One consolidated enrolled-operator Administrator operation: repair the reviewed component ACLs, deploy through the standard desktop owner, and verify/read back/clean.",
+    "administrator_prompt_launched_for_this_operation": false,
+    "approval": "Pending the existing asynchronous user question. No approval inferred from elapsed time.",
+    "package_sequence_fix": "https://github.com/SaltyPatron/Laplace-Operations/pull/154",
+    "modular_native_build": "passed against current Native and Engine main, no installation or database mutation"
+  },
+  "retention": {
+    "workspace_build_scratch_entries": 0,
+    "recovery_archives": "recovery-archives-current.json",
+    "history": "Published annotated archive tags preserve historical commits; archive preservation is separate from implementation integration on main.",
+    "running_client_leases": "Preserved; active user sessions are not orphan outputs."
+  }
+}

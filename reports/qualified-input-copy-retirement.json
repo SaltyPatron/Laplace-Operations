@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "finished_utc": "2026-10-31T08:14:19.6565934Z",
+  "mode": "windows_recycle_bin",
+  "retired": [
+    "E:\\Repositories\\Laplace\\artifacts\\repository-cleanup-2026-10-31T04-53-01-772Z\\native-candidate-tier0.bin",
+    "E:\\Repositories\\Laplace\\artifacts\\repository-cleanup-2026-10-31T04-53-01-772Z\\qualified-native-inputs"
+  ],
+  "bytes": 234838489.0,
+  "preserved_prepared_store": "E:\\Data\\Laplace\\work\\tier0",
+  "proof": "Every generated input hash matched the canonical prepared store; no active CMake profile referenced the audit input paths."
+}
