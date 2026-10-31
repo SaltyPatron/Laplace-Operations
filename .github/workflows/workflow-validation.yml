@@ -1,12 +1,12 @@
 name: Operations workflow validation
+# Syntax checks are available locally; hosted replay is opt-in.
 on:
-  push:
-    branches: [main]
-    paths: ['.github/**', 'verify-admitted-data.py', 'sql/verify-admitted-data.sql']
-  pull_request:
-    paths: ['.github/**', 'verify-admitted-data.py', 'sql/verify-admitted-data.sql']
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: operations-workflow-validation-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   workflows:
     runs-on: ubuntu-24.04

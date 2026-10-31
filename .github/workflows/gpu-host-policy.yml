@@ -1,16 +1,16 @@
 name: GPU host eligibility
+# This exercises policy fixtures, not desktop GPU workloads. Hosted replay is opt-in.
 on:
-  pull_request:
-    paths:
-      - chess/provision.sh
-      - laplace.env
-      - tests/chess-gpu-policy.sh
-      - .github/workflows/gpu-host-policy.yml
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: operations-gpu-host-policy-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   refusal:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:

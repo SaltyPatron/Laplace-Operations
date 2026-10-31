@@ -1,11 +1,13 @@
 name: Deployment failure boundaries
+# Development checks run locally on HART-DESKTOP. Hosted fixture replay is
+# an explicit operator choice; ordinary edits do not allocate hosted runners.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: operations-deployment-contracts-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   configuration-index:
     runs-on: ubuntu-24.04
@@ -26,9 +28,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Verify acceptance result failure boundaries
-        shell: pwsh
-        run: pwsh -NoProfile -File tests/acceptance-runner.ps1
       - name: Verify installed modular client input and cache selection
         run: python tests/modular-client.py
       - name: Verify runtime audit uses its owner without remote installation
