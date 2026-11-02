@@ -30,6 +30,8 @@ foreach($relative in @('package.json','bin/lpm.exe','share/prepared/tier0.bin','
 }
 $nativeConfig=Get-Content -LiteralPath (Join-Path $root 'state/native.json') -Raw|ConvertFrom-Json
 $nativeConfig.release=$nativeRoot
+$nativeConfig|Add-Member code_roots @($c.native.code_roots) -Force
+$nativeConfig|Add-Member work (Join-Path $root 'state/logs/native') -Force
 $operation=Enter-DesktopStorageOperation
 $publicationLock=$null
 try{
@@ -46,7 +48,7 @@ try{
     Copy-Item -LiteralPath (Join-Path $nativeRoot 'bin/lpm.exe') -Destination (Join-Path $publish 'native/lpm.exe')
     Copy-Item -LiteralPath (Join-Path $prepared 'tier0.highway') -Destination (Join-Path $publish 'native/tier0.highway')
     Write-ModularWebJson (Join-Path $publish 'native-resources.json') $nativeConfig
-    Write-ModularWebJson (Join-Path $publish 'appsettings.Production.json') ([ordered]@{SharedIdentityPath=$c.identity_path;NativeConfigFile='native-resources.json'})
+    Write-ModularWebJson (Join-Path $publish 'appsettings.Production.json') ([ordered]@{SharedIdentityPath=$c.identity_path;NativeConfigFile='native-resources.json';McpIdentityEndpoint=($c.origin.TrimEnd('/')+'/mcp')})
     # The stable IIS host owns web.config. It is not application package content.
     $packageWebConfig=Join-Path $publish 'web.config'
     if(Test-Path -LiteralPath $packageWebConfig){Remove-Item -LiteralPath $packageWebConfig}
