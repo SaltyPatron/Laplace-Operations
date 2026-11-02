@@ -41,6 +41,40 @@ $root=[IO.Path]::GetFullPath($c.directory);$state=Join-Path $root 'state';$null=
 $certificate=Join-Path $state 'postgres-root.crt';Copy-Item -LiteralPath $n.certificate -Destination $certificate
 $config=[ordered]@{release=$installed.release;database=$n.database;host='HART-DESKTOP';role=$role;certificate=$certificate;threads=2}
 $config|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $state 'native.json') -Encoding utf8NoBOM
+Write-Host "Configured ${role}: read-only SSPI access to $database for IIS pool $($c.pool)."
+
+# The IIS application stays on this stable directory. Routine publication only
+# replaces its ANCM configuration and selects an immutable application release.
+. "$PSScriptRoot/modular-web.ps1"
+$hostDirectory=Join-Path $root 'web'
+$logs=Join-Path $state 'logs/iis'
+$null=New-Item -ItemType Directory -Force -Path $hostDirectory,$logs,$c.receipts
+Add-Type -Path "$env:windir/System32/inetsrv/Microsoft.Web.Administration.dll"
+$manager=[Microsoft.Web.Administration.ServerManager]::new()
+try {
+    $site=$manager.Sites[$c.site]
+    if(-not $site){throw 'The declared parent IIS site is not installed.'}
+    $origin=[Uri]$c.origin
+    if(-not @($site.Bindings|Where-Object {$_.Protocol -eq 'https' -and $_.Host -ieq $origin.DnsSafeHost -and $_.EndPoint.Port -eq $origin.Port}).Count){throw 'The parent site does not own the declared HTTPS origin.'}
+    $parentDirectory=$site.Applications['/'].VirtualDirectories['/'].PhysicalPath
+    $application=$site.Applications[$c.application]
+    if($application -and ($application.ApplicationPoolName -cne $c.pool -or -not [IO.Path]::GetFullPath($application.VirtualDirectories['/'].PhysicalPath).StartsWith($root+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){throw 'The declared child application belongs to another installation.'}
+    if(@($manager.Sites|ForEach-Object {$siteName=$_.Name;$_.Applications|Where-Object {$_.ApplicationPoolName -eq $c.pool -and ($siteName -ne $c.site -or $_.Path -ne $c.application)}}).Count){throw 'The modular pool is shared with another application.'}
+    $pool=$manager.ApplicationPools[$c.pool]
+    if(-not $pool){$pool=$manager.ApplicationPools.Add($c.pool)}
+    $pool.ManagedRuntimeVersion='';$pool.StartMode='AlwaysRunning';$pool.AutoStart=$true;$pool.ProcessModel.IdentityType='ApplicationPoolIdentity'
+    if(-not $application){$application=$site.Applications.Add($c.application,$hostDirectory)}
+    $activePath=Join-Path $root 'active.json'
+    if(Test-Path -LiteralPath $activePath){
+        $active=Get-Content -LiteralPath $activePath -Raw|ConvertFrom-Json
+        if($active.release -notmatch '^[a-f0-9]{64}$' -or [IO.Path]::GetFullPath($active.directory) -ine (Join-Path $root ('releases/'+$active.release))){throw 'The active modular release does not belong to this installation.'}
+        Write-ModularWebFile (Join-Path $hostDirectory 'web.config') (Get-ModularWebConfig $hostDirectory $active.directory $active.release $logs)
+    }
+    $application.VirtualDirectories['/'].PhysicalPath=$hostDirectory
+    $application.ApplicationPoolName=$c.pool;$application.SetAttributeValue('preloadEnabled',$true)
+    $manager.CommitChanges()
+    if($pool.State -eq 'Stopped'){$null=$pool.Start()}else{$null=$pool.Recycle()}
+} finally {$manager.Dispose()}
 $sid=([Security.Principal.NTAccount]::new('IIS APPPOOL',$c.pool)).Translate([Security.Principal.SecurityIdentifier])
 foreach($target in @($installed.release,$state)){
     $acl=Get-Acl -LiteralPath $target
@@ -50,4 +84,16 @@ foreach($target in @($installed.release,$state)){
     }
     Set-Acl -LiteralPath $target -AclObject $acl
 }
-Write-Host "Configured ${role}: read-only SSPI access to $database for IIS pool $($c.pool)."
+foreach($target in @($root,$hostDirectory,$state)){
+    $acl=Get-Acl -LiteralPath $target
+    $rule=[Security.AccessControl.FileSystemAccessRule]::new($sid,'ReadAndExecute','ContainerInherit,ObjectInherit','None','Allow')
+    $acl.SetAccessRule($rule);Set-Acl -LiteralPath $target -AclObject $acl
+}
+$acl=Get-Acl -LiteralPath (Join-Path $state 'logs')
+$acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'Modify','ContainerInherit,ObjectInherit','None','Allow'))
+Set-Acl -LiteralPath (Join-Path $state 'logs') -AclObject $acl
+$acl=Get-Acl -LiteralPath $parentDirectory
+$acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'ReadAndExecute','ObjectInherit','NoPropagateInherit','Allow'))
+Set-Acl -LiteralPath $parentDirectory -AclObject $acl
+Write-ModularWebJson (Join-Path $state 'hosting.json') ([ordered]@{schema='laplace.modular-web-host/v1';directory=$hostDirectory;parent_directory=$parentDirectory;site=$c.site;application=$c.application;pool=$c.pool;origin=$c.origin})
+Write-Host "Configured IIS host $($c.site)$($c.application) at $hostDirectory. Publish-ModularWeb.ps1 runs as the desktop operator."

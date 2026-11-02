@@ -17,15 +17,15 @@ if($Package){
     $Package=[IO.Path]::GetFullPath($Package)
     $selected=[Collections.Generic.HashSet[string]]::new([string[]]@('api','cli','uci','web'),[StringComparer]::Ordinal)
 }
-$valid=@('all','modular','native','postgres','api','cli','uci','migrations','web')
+$valid=@('all','modular','modular-web','native','postgres','api','cli','uci','migrations','web')
 if(@($selected | Where-Object {$_ -notin $valid}).Count){throw "Unknown component selection: $Components"}
 if($selected.Contains('all')){foreach($name in $valid | Where-Object {$_ -ne 'all'}){$null=$selected.Add($name)};$null=$selected.Remove('all')}
 if($selected.Contains('native')){foreach($name in $valid | Where-Object {$_ -ne 'all'}){$null=$selected.Add($name)}}
 if($selected.Contains('postgres')){foreach($name in 'native','api','cli','uci','migrations','web'){$null=$selected.Add($name)}}
 if($selected.Contains('api')){$null=$selected.Add('web')}
-$mono=@($selected | Where-Object {$_ -ne 'modular'} | Sort-Object)
-$modular=if($selected.Contains('modular')){Get-DesktopClientDeclaration $ModularInstallation}else{$null}
-$scope=if($selected.Contains('modular')){if($mono.Count){'all'}else{'modular'}}else{'monorepo'}
+$mono=@($selected | Where-Object {$_ -notin @('modular','modular-web')} | Sort-Object)
+$modular=if($selected.Contains('modular') -or $selected.Contains('modular-web')){Get-DesktopClientDeclaration $ModularInstallation}else{$null}
+$scope=if($modular){if($mono.Count){'all'}else{'modular'}}else{'monorepo'}
 $steps=@()
 if($selected.Contains('postgres')){$steps+=@{name='Apply and verify PostgreSQL tuning';script="$operations/tune-pg.ps1";arguments=@()}}
 if($mono.Count){
@@ -46,6 +46,9 @@ if($selected.Contains('modular')){
 }
 if($selected.Contains('uci')){
     $steps+=@{name='Publish the desktop UCI connector and bind its engine to the selected local substrate';script="$PSScriptRoot/desktop-uci.ps1";arguments=@('-IisInstallation',$installation,'-Publish')}
+}
+if($selected.Contains('modular-web')){
+    $steps+=@{name='Publish and verify the modular browser';script="$PSScriptRoot/Publish-ModularWeb.ps1";arguments=@()}
 }
 $steps+=@{name='Verify selected installed components';script="$PSScriptRoot/Verify-DesktopDatabases.ps1";arguments=@('-ModularInstallation',$ModularInstallation,'-Scope',$scope)}
 Write-Host 'Laplace desktop deployment' -ForegroundColor Cyan
@@ -157,7 +160,12 @@ try {
     }
     $componentReceipt=Join-Path $run 'components.json'
     if(Test-Path -LiteralPath $componentReceipt){$result.components=Get-Content -LiteralPath $componentReceipt -Raw | ConvertFrom-Json}
-    if($modular){
+    if($selected.Contains('modular-web')){
+        $webDeclaration=Get-Content -LiteralPath (Join-Path $PSScriptRoot ($env:COMPUTERNAME.ToLowerInvariant()+'-modular-web.json')) -Raw|ConvertFrom-Json
+        $result.modular_web=Get-Content -LiteralPath (Join-Path $webDeclaration.directory 'active.json') -Raw|ConvertFrom-Json
+        if(-not $mono.Count){$result.release=$result.modular_web.release}
+    }
+    if($selected.Contains('modular')){
     $result.modular_clients=Get-DesktopClientState -Declaration $modular
     Write-DesktopClientState $result.modular_clients
     $result.status = switch ($result.modular_clients.status) {
@@ -202,6 +210,9 @@ if($mono.Count){
     Write-Host "`nDesktop deployment complete: $($result.origin)" -ForegroundColor Green
     Write-Host "Release: $($result.release)"
     Write-Host "Source: $($result.source_revision)"
+}elseif($selected.Contains('modular-web')){
+    Write-Host "`nModular browser deployment complete: $($result.modular_web.origin)" -ForegroundColor Green
+    Write-Host "Release: $($result.modular_web.release)"
 }else{Write-Host "`nModular desktop deployment complete: $($result.installation)" -ForegroundColor Green}
 Write-Host "$($warnings.Count) distinct warning lines recorded; full output is retained in the stage logs."
 exit 0

@@ -98,6 +98,7 @@ LOCAL DESKTOP IIS & DATABASE MAINTENANCE (https://dev.hartonomous.com)
   laplace-ops deploy desktop          Package modular CLI/MCP, publish IIS, migrate, and verify installed and running releases
   laplace-ops deploy desktop -Plan    Show desktop deployment stages without changing the installation
   laplace-ops deploy desktop -Components web       Update only the web component
+  laplace-ops deploy desktop -Components modular-web  Update the modular browser using the installed native package
   laplace-ops deploy desktop -Components api,cli   Update API/web and CLI; reuse other components
   laplace-ops deploy desktop -Force                Explicitly rebuild selected components
   laplace-ops deploy desktop -Package <directory>  Activate a verified prepared IIS package without a build
