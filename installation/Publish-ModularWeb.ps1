@@ -94,12 +94,31 @@ try{
         $schema=Invoke-RestMethod ($base+'api/schema') -TimeoutSec 60
         $mono=Invoke-WebRequest ($c.origin.TrimEnd('/')+'/health') -TimeoutSec 15
         if($mono.StatusCode -ne 200){throw 'The parent application is unavailable.'}
+        $clientPath=Join-Path $env:APPDATA 'Code/User/mcp.json'
+        $mcpClient=@{status='not_configured'}
+        if(Test-Path -LiteralPath $clientPath){
+            $client=Get-Content -Raw -LiteralPath $clientPath|ConvertFrom-Json
+            if($client.servers.'laplace-code'){
+                $headers=@{Accept='application/json, text/event-stream'}
+                foreach($property in $client.servers.laplace.headers.PSObject.Properties){$headers[$property.Name]=$property.Value}
+                $request=@{jsonrpc='2.0';id=1;method='tools/list'}|ConvertTo-Json -Compress
+                $tools=Invoke-RestMethod ($base+'mcp') -Method Post -Headers $headers -ContentType 'application/json' -Body $request -TimeoutSec 120
+                foreach($required in @('code_search','reindex','code_where','code_callers','code_callees','file_outline')){
+                    if($required -notin @($tools.result.tools.name)){throw "The installed IIS MCP lacks $required."}
+                }
+                $request=@{jsonrpc='2.0';id=2;method='tools/call';params=@{name='code_search';arguments=@{query='NativeRuntime';limit=1}}}|ConvertTo-Json -Depth 8 -Compress
+                $read=Invoke-RestMethod ($base+'mcp') -Method Post -Headers $headers -ContentType 'application/json' -Body $request -TimeoutSec 130
+                if($read.error -or $read.result.isError){throw 'The installed IIS native code search failed.'}
+                $mcpClient=Set-ModularMcpClient $clientPath $c.origin ($base+'mcp')
+            }
+        }
         $receipt=[ordered]@{
             status='verified';utc=[DateTime]::UtcNow.ToString('o');host=$env:COMPUTERNAME;origin=$base;release=$release;directory=$destination
             source_revision=(& git -C $source rev-parse HEAD).Trim();source_changes=@(& git -C $source status --porcelain -- .)
             site=$c.site;application=$c.application;pool=$c.pool;host_directory=$hostDirectory;data='native-live';database=$catalog.database;read_only=$catalog.read_only
             native_resources=$nativeRoot;native_access=$nativeAccess;native_binary_sha256=(Get-FileHash -LiteralPath (Join-Path $destination 'native/lpm.exe')).Hash.ToLowerInvariant();native_cache=$schema.highway
             mono_status=$mono.StatusCode;previous=$(if($changed){$previous.directory}else{$previous.previous});activation=$(if($changed){'restarted'}else{'reused'})
+            mcp_client=$mcpClient
         }
         $receiptFile=Join-Path $c.receipts ('deploy-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')+'.json')
         Write-ModularWebJson $receiptFile $receipt

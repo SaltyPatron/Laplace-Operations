@@ -49,6 +49,16 @@ try {
     $snapshot += Process 15 'lpm.exe' ''
     $state=Get-DesktopClientState -Declaration $declaration -Processes $snapshot
     if ($state.status -ne 'unverifiable' -or @($state.releases | Where-Object { -not $_.protected }).Count) { throw 'Incomplete process visibility permitted a successful inventory or retirement.' }
+    $webParent=Process 21 'w3wp.exe' '' 0 -1
+    $snapshot+=$webParent
+    $hidden=@($snapshot|Where-Object ProcessId -eq 15)[0];$hidden.ParentProcessId=21
+    $service=[pscustomobject]@{pid=15;parent_pid=21;started_utc=$hidden.CreationDate.ToUniversalTime().ToString('o');executable_sha256=('a'*64);release=$old;source='verified-iis-health'}
+    $state=Get-DesktopClientState -Declaration $declaration -Processes $snapshot -ServiceReaders @($service)
+    if($state.status -ne 'reconnect_required' -or $state.service_readers.Count -ne 1 -or $state.unobservable_pids.Count){throw 'Verified IIS reader ownership was conflated with interactive client visibility.'}
+    if(-not @($state.releases|Where-Object release -eq $old)[0].protected){throw 'The IIS reader release was not retained.'}
+    $service.started_utc=$hidden.CreationDate.AddMinutes(1).ToUniversalTime().ToString('o')
+    $state=Get-DesktopClientState -Declaration $declaration -Processes $snapshot -ServiceReaders @($service)
+    if($state.status -ne 'unverifiable' -or $state.unobservable_pids.Count -ne 1){throw 'A mismatched reader start time bypassed process visibility safety.'}
     $foreign=$declaration.PSObject.Copy(); $foreign.host='other-host'
     $foreign | ConvertTo-Json | Set-Content -LiteralPath $declarationPath
     $refused=$false
