@@ -11,6 +11,25 @@ function Write-ModularWebFile([string]$Path,[string]$Content) {
     } finally { if(Test-Path -LiteralPath $temporary){Remove-Item -LiteralPath $temporary} }
 }
 
+function Set-ModularMcpClient([string]$Path,[string]$Origin,[string]$Endpoint) {
+    if(-not(Test-Path -LiteralPath $Path -PathType Leaf)){return @{status='not_configured'}}
+    $configuration=Get-Content -Raw -LiteralPath $Path|ConvertFrom-Json
+    $existing=$configuration.servers.'laplace-code'
+    if(-not $existing){return @{status='not_configured'}}
+    $identity=$configuration.servers.laplace
+    if($identity.type -cne 'http' -or ([Uri]$identity.url).GetLeftPart([UriPartial]::Authority) -cne $Origin.TrimEnd('/') -or
+        -not $identity.headers.Authorization){throw 'The native MCP client requires the existing same-origin IIS identity.'}
+    if(([Uri]$Endpoint).Scheme -cne 'https' -or ([Uri]$Endpoint).GetLeftPart([UriPartial]::Authority) -cne $Origin.TrimEnd('/')){throw 'The native MCP endpoint must use the declared HTTPS origin.'}
+    if($existing.type -eq 'http' -and $existing.url -cne $Endpoint){throw 'The native MCP client already selects another HTTP endpoint.'}
+    if($existing.type -eq 'stdio' -and (-not @($existing.args|Where-Object {$_ -match '[\\/]Laplace[\\/]bin[\\/]laplace\.py$'}).Count -or 'mcp' -notin $existing.args)){throw 'The stdio client is not the installed Laplace MCP wrapper.'}
+    if($existing.type -notin @('stdio','http')){throw 'Unsupported native MCP client transport.'}
+    $selected=[pscustomobject]@{type='http';url=$Endpoint;headers=$identity.headers;version='0.2.0'}
+    if(($existing|ConvertTo-Json -Depth 20 -Compress) -ceq ($selected|ConvertTo-Json -Depth 20 -Compress)){return @{status='current';transport='http';endpoint=$Endpoint}}
+    $configuration.servers.'laplace-code'=$selected
+    Write-ModularWebFile $Path ($configuration|ConvertTo-Json -Depth 30)
+    return @{status='configured';transport='http';endpoint=$Endpoint}
+}
+
 # Each immutable native release is owned by the operator. Publication grants
 # the already provisioned application identity read/execute on that release.
 function Grant-ModularWebNativeRead([string]$Path,[Security.Principal.SecurityIdentifier]$Principal) {

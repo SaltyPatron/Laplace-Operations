@@ -33,6 +33,20 @@ try {
     try {Restart-ModularWeb $hostDirectory 'https://fixture.invalid/modular/'}catch{$failed=$_.Exception.Message -eq 'fixture transport failure'}
     Require $failed 'The restart swallowed its transport failure.'
     Require (-not(Test-Path -LiteralPath (Join-Path $hostDirectory 'app_offline.htm'))) 'The failed restart left the application offline.'
+    $clientPath=Join-Path $root 'mcp.json'
+    $identity=@{type='http';url='https://fixture.invalid/mcp';headers=@{Authorization='Bearer fixture-identity'}}
+    $fixture=@{servers=@{laplace=$identity;'laplace-code'=@{type='stdio';command='python';args=@('-I','C:/Users/fixture/AppData/Local/Laplace/bin/laplace.py','mcp')};other=@{type='stdio';command='fixture-other'}};inputs=@(@{id='preserved';password=$true})}
+    Write-ModularWebJson $clientPath $fixture
+    $result=Set-ModularMcpClient $clientPath 'https://fixture.invalid' 'https://fixture.invalid/modular/mcp'
+    $client=Get-Content -Raw $clientPath|ConvertFrom-Json
+    Require ($result.status -eq 'configured' -and $client.servers.'laplace-code'.type -eq 'http') 'The native MCP client remained on stdio.'
+    Require ($client.servers.'laplace-code'.url -ceq 'https://fixture.invalid/modular/mcp' -and -not $client.servers.'laplace-code'.command -and -not $client.servers.'laplace-code'.env) 'The HTTP client retained a parallel local launcher.'
+    Require ($client.servers.'laplace-code'.headers.Authorization -ceq $client.servers.laplace.headers.Authorization) 'The existing IIS identity was not preserved.'
+    Require ($client.servers.other.command -ceq 'fixture-other' -and $client.inputs[0].id -ceq 'preserved') 'Migration changed unrelated MCP configuration.'
+    Require ((Set-ModularMcpClient $clientPath 'https://fixture.invalid' 'https://fixture.invalid/modular/mcp').status -eq 'current') 'MCP HTTP migration was not idempotent.'
+    $rejected=$false
+    try{Set-ModularMcpClient $clientPath 'https://fixture.invalid' 'https://another.invalid/mcp'|Out-Null}catch{$rejected=$true}
+    Require $rejected 'MCP credentials could be redirected to another origin.'
     'PASS modular host XML, immutable content path, release identity, atomic pointer, owner native-read grant, unprivileged restart and failure cleanup'
 } finally {
     if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($root)) -ne [IO.Path]::GetTempPath().TrimEnd('\','/')){throw 'Invalid fixture cleanup root.'}

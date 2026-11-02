@@ -11,6 +11,16 @@
   "identity_path": "/v1/auth",
   "operator_declaration": "hart-desktop-operator.json",
   "native": {
+    "code_roots": [
+      "E:/Repositories/Laplace/Laplace",
+      "E:/Repositories/Laplace/Laplace-Engine",
+      "E:/Repositories/Laplace/Laplace-Native",
+      "E:/Repositories/Laplace/Laplace-postgres",
+      "E:/Repositories/Laplace/Laplace-MCP",
+      "E:/Repositories/Laplace/Laplace-Operations",
+      "E:/Repositories/Laplace/Laplace-UCI",
+      "E:/Repositories/Laplace/Laplace-Wiki"
+    ],
     "client_installation": "E:/Data/Laplace/clients/laplace/installation.json",
     "database": "laplace",
     "role": "laplace_modular_web",

@@ -9,9 +9,29 @@ function Get-DesktopClientDeclaration([string]$Path) {
     $declaration
 }
 
+function Get-DesktopServiceReaders {
+    $declaration=Join-Path $PSScriptRoot ($env:COMPUTERNAME.ToLowerInvariant()+'-modular-web.json')
+    if(-not(Test-Path -LiteralPath $declaration)){return @()}
+    try{
+        $web=Get-Content -Raw -LiteralPath $declaration|ConvertFrom-Json
+        $active=Get-Content -Raw -LiteralPath (Join-Path $web.directory 'active.json')|ConvertFrom-Json
+        $origin=$web.origin.TrimEnd('/')+$web.application+'/health'
+        if(([Uri]$origin).Scheme -cne 'https'){return @()}
+        $health=Invoke-RestMethod $origin -TimeoutSec 10
+        $reader=$health.reader
+        if($health.service -cne 'laplace-modular-web' -or $health.release -cne $active.release -or
+            $reader.pid -le 0 -or $reader.parent_pid -le 0 -or
+            $reader.executable_sha256 -cne $active.native_binary_sha256 -or $reader.executable_sha256 -notmatch '^[a-f0-9]{64}$'){return @()}
+        $binary=Join-Path $active.native_resources 'bin/lpm.exe'
+        if((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant() -cne $reader.executable_sha256){return @()}
+        return @([pscustomobject]@{pid=[int]$reader.pid;parent_pid=[int]$reader.parent_pid;started_utc=$reader.started_utc
+            executable_sha256=$reader.executable_sha256;release=$active.native_resources;source='verified-iis-health'})
+    }catch{return @()}
+}
+
 function Get-DesktopClientState {
     [CmdletBinding()]
-    param([Parameter(Mandatory)]$Declaration, [object[]]$Processes)
+    param([Parameter(Mandatory)]$Declaration, [object[]]$Processes, [object[]]$ServiceReaders)
     $installed=Get-Content -LiteralPath $Declaration.installed_config -Raw | ConvertFrom-Json
     $releases=[IO.Path]::GetFullPath((Join-Path $Declaration.prefix 'releases')).TrimEnd('\','/')
     $selected=[IO.Path]::GetFullPath($installed.release).TrimEnd('\','/')
@@ -23,11 +43,22 @@ function Get-DesktopClientState {
     $package=Get-Content -LiteralPath (Join-Path $selected 'package.json') -Raw | ConvertFrom-Json
     if ($package.schema -ne 'laplace.modular-package/v1') { throw 'Selected release is not a modular package.' }
     if (-not $PSBoundParameters.ContainsKey('Processes')) { $Processes=@(Get-CimInstance Win32_Process -ErrorAction Stop) }
+    if (-not $PSBoundParameters.ContainsKey('ServiceReaders')) { $ServiceReaders=@(Get-DesktopServiceReaders) }
     $byId=@{}; foreach ($process in $Processes) { $byId[[int]$process.ProcessId]=$process }
-    $running=@(); $unobservable=@()
+    $running=@(); $unobservable=@();$services=@()
     foreach ($process in $Processes) {
         if (-not $process.ExecutablePath) {
-            if ($process.Name -in @('lpm.exe','laplace.exe')) { $unobservable += [int]$process.ProcessId }
+            if ($process.Name -in @('lpm.exe','laplace.exe')) {
+                $parent=$byId[[int]$process.ParentProcessId]
+                $evidence=@($ServiceReaders|Where-Object {
+                    $_.pid -eq [int]$process.ProcessId -and $_.parent_pid -eq [int]$process.ParentProcessId -and
+                    $_.source -ceq 'verified-iis-health' -and $_.executable_sha256 -match '^[a-f0-9]{64}$' -and
+                    $parent.Name -ieq 'w3wp.exe' -and $parent.CreationDate -le $process.CreationDate -and
+                    $process.CreationDate -and [math]::Abs((([datetimeoffset]$_.started_utc).UtcDateTime-([datetime]$process.CreationDate).ToUniversalTime()).TotalMilliseconds) -lt 10 -and
+                    [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($_.release).TrimEnd('\','/')) -ieq $releases
+                })
+                if($evidence.Count -eq 1){$services+=$evidence[0]}else{$unobservable += [int]$process.ProcessId}
+            }
             continue
         }
         $executable=[IO.Path]::GetFullPath($process.ExecutablePath)
@@ -53,7 +84,7 @@ function Get-DesktopClientState {
     $stale=@($running | Where-Object { -not $_.selected })
     $status=if ($unobservable.Count) {'unverifiable'} elseif ($stale.Count) {'reconnect_required'} else {'current'}
     $retention=foreach ($directory in Get-ChildItem -LiteralPath $releases -Directory) {
-        $holders=@($running | Where-Object { $_.release -ieq $directory.FullName } | ForEach-Object pid)
+        $holders=@(@($running)+@($services) | Where-Object { $_.release -ieq $directory.FullName } | ForEach-Object pid)
         $reasons=@()
         if ($directory.FullName -ieq $selected) { $reasons += 'installed_selection' }
         if ($holders.Count) { $reasons += 'running_process' }
@@ -63,7 +94,7 @@ function Get-DesktopClientState {
             retirement=if ($reasons.Count) {'blocked'} else {'requires_reference_audit'}}
     }
     [ordered]@{schema='laplace.desktop-clients/v1';checked_utc=[DateTime]::UtcNow.ToString('o');host=$Declaration.host;
-        status=$status;selected_release=$selected;revisions=$package.revisions;processes=$running;
+        status=$status;selected_release=$selected;revisions=$package.revisions;processes=$running;service_readers=$services;
         stale_count=$stale.Count;unobservable_pids=$unobservable;releases=@($retention);
         reconnect_policy='Reconnect each reported MCP client to launch the selected release; active stdio sessions remain pinned. Let older native commands finish. Run laplace-ops clients verify afterward. No client application is terminated.'}
 }
