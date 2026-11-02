@@ -75,6 +75,11 @@ if($MyInvocation.InvocationName -ne '.'){
     $ErrorActionPreference='Stop'
     . "$PSScriptRoot/../laplace.env.ps1"
     . "$PSScriptRoot/../development/credentials.ps1"
+    # Clear ambient libpq environment variables (such as lowercase PGREQUIREAUTH=sspi)
+    # before spawning Npgsql processes like laplace-uci.exe.
+    foreach($entry in @(Get-ChildItem Env: | Where-Object { $_.Name.StartsWith('PG',[StringComparison]::OrdinalIgnoreCase) })){
+        Remove-Item -LiteralPath "Env:$($entry.Name)" -ErrorAction SilentlyContinue
+    }
     if(-not $Development){$Development=Join-Path $PSScriptRoot '../development/installation.json'}
     if(-not $IisInstallation){$IisInstallation=$env:LAPLACE_IIS_INSTALLATION}
     . (Join-Path $env:LAPLACE_SRC 'Laplace/deploy/windows/iis-runtime.ps1')
@@ -101,13 +106,44 @@ if($MyInvocation.InvocationName -ne '.'){
         & (Join-Path $env:LAPLACE_SRC 'Laplace-UCI/setup-iis.ps1') -Installation $declaration -Package $package -VerifyProfile $d.uci.profiles -Reload:([bool]$result.reload)
         if($LASTEXITCODE){throw 'Desktop UCI connector publication or serving readback failed.'}
     }elseif($result.status -eq 'configured' -and $result.reload){
-        Add-Type -Path "$env:windir/System32/inetsrv/Microsoft.Web.Administration.dll"
-        $manager=[Microsoft.Web.Administration.ServerManager]::new()
-        try{
-            $pool=$manager.ApplicationPools[$d.uci.service]
-            if(-not $pool){throw 'The installed UCI application pool is missing.'}
-            if($pool.State -eq 'Stopped'){$null=$pool.Start()}else{$null=$pool.Recycle()}
-        }finally{$manager.Dispose()}
+        $principal=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+        if($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
+            Add-Type -Path "$env:windir/System32/inetsrv/Microsoft.Web.Administration.dll"
+            $manager=[Microsoft.Web.Administration.ServerManager]::new()
+            try{
+                $pool=$manager.ApplicationPools[$d.uci.service]
+                if(-not $pool){throw 'The installed UCI application pool is missing.'}
+                if($pool.State -eq 'Stopped'){$null=$pool.Start()}else{$null=$pool.Recycle()}
+            }finally{$manager.Dispose()}
+        }else{
+            $uciDeclaration=Get-Content -LiteralPath (Join-Path $env:LAPLACE_DATA_ROOT ('services/'+$d.uci.service+'/agent/installation.json')) -Raw|ConvertFrom-Json
+            $offline=Join-Path $uciDeclaration.publish 'app_offline.htm'
+            $origin='https://'+$uciDeclaration.hostname
+            $token='laplace-uci-restart-'+[Guid]::NewGuid().ToString('N')
+            $marker="<!doctype html><html><body>UCI connector restarting. <!-- $token --></body></html>"
+            $markerStream=$null;$created=$false;$observed=$false
+            try{
+                $markerStream=[IO.File]::Open($offline,'CreateNew','Write','Read')
+                $created=$true
+                $bytes=[Text.Encoding]::UTF8.GetBytes($marker)
+                $markerStream.Write($bytes,0,$bytes.Length)
+                $markerStream.Flush($true)
+                $markerStream.Dispose()
+                $markerStream=$null
+                for($attempt=0;$attempt -lt 15;$attempt++){
+                    $response=Invoke-WebRequest $origin -NoProxy -SkipHttpErrorCheck -TimeoutSec 10
+                    if($response.Content.Contains($token)){$observed=$true;break}
+                    Start-Sleep -Milliseconds 200
+                }
+                if(-not $observed){throw 'IIS did not serve the restart marker; the selected UCI endpoint has not confirmed the restart.'}
+            }finally{
+                if($markerStream){$markerStream.Dispose()}
+                if($created){
+                    if([IO.File]::ReadAllText($offline) -cne $marker){throw 'The offline marker changed during restart; it was preserved for inspection.'}
+                    Remove-Item -LiteralPath $offline -ErrorAction Stop
+                }
+            }
+        }
     }
     $result|ConvertTo-Json -Depth 6
     }finally{Exit-DesktopStorageOperation -Operation $operation -Iis $c}

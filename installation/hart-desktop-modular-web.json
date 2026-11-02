@@ -11,9 +11,6 @@
   "identity_path": "/v1/auth",
   "operator_declaration": "hart-desktop-operator.json",
   "native": {
-    "binary": "D:/Libraries/build/Laplace/Laplace-MCP/icx-release/lpm.exe",
-    "generator": "D:/Libraries/build/Laplace/Laplace-Engine/icx-release/laplace.exe",
-    "manifest": "E:/Repositories/Laplace/Laplace-Native/manifest",
     "client_installation": "E:/Data/Laplace/clients/laplace/installation.json",
     "database": "laplace",
     "role": "laplace_modular_web",

@@ -2,6 +2,9 @@
 $ErrorActionPreference='Stop'
 $initialOwner=$env:LAPLACE_STORAGE_OWNER_PID
 . "$PSScriptRoot/../installation/storage.ps1"
+$script:readWebReferences=(Get-Command Get-StorageModularWebReferences).ScriptBlock
+$script:webReferenceFixture=''
+function Get-StorageModularWebReferences { & $script:readWebReferences -Configuration $script:webReferenceFixture }
 function Invoke-StorageDatabaseCleanup { return @([pscustomobject]@{database='fixture';status='passed';loads=@()}) }
 $root=Join-Path ([IO.Path]::GetTempPath()) ('laplace-storage-'+[guid]::NewGuid().ToString('N'))
 $null=New-Item -ItemType Directory -Path $root
@@ -83,6 +86,19 @@ try {
     Require (-not ($plan.entries | Where-Object path -EQ $database).retire) 'Database cache reference was retired.'
     Require (-not ($plan.entries | Where-Object path -EQ $rollback).retire) 'Rollback release was retired.'
     Require ($plan.entries | Where-Object { $_.path -eq $old -and $_.retire }) 'Unused old release was not retired.'
+    $consumer=Join-Path $root 'modular-web'
+    $consumerCurrent=Join-Path $consumer 'releases/current'
+    $consumerPrevious=Join-Path $consumer 'releases/previous'
+    $null=New-Item -ItemType Directory -Force -Path $consumerCurrent,$consumerPrevious,(Join-Path $consumer 'state')
+    @{directory=$consumerCurrent;previous=$consumerPrevious}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $consumer 'active.json')
+    @{release=$old}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $consumerCurrent 'native-resources.json')
+    @{release=$held}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $consumerPrevious 'native-resources.json')
+    $script:webReferenceFixture=Join-Path $root 'modular-web.json'
+    @{directory=$consumer}|ConvertTo-Json|Set-Content -LiteralPath $script:webReferenceFixture
+    $consumerPlan=Get-DesktopStoragePlan @args
+    Require (-not ($consumerPlan.entries|Where-Object path -EQ $old).retire) 'The modular browser lost its selected native resources.'
+    Require (@(Get-StorageModularWebReferences) -contains $held) 'The modular browser rollback lost its native resources.'
+    $script:webReferenceFixture=''
     Require (-not ($plan.entries | Where-Object path -EQ $boot).retire) 'web.config selection was retired while active.json lagged.'
     Require (-not ($plan.entries | Where-Object path -EQ $unknown)) 'Unowned directory was classified as a package.'
     $args.Processes=@([pscustomobject]@{pid=22;name='lpm.exe';executable=$null;command='';modules=@();module_error=$false})
