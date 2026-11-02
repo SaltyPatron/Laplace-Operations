@@ -107,7 +107,7 @@ try{
                     if($required -notin @($tools.result.tools.name)){throw "The installed IIS MCP lacks $required."}
                 }
                 $request=@{jsonrpc='2.0';id=2;method='tools/call';params=@{name='code_search';arguments=@{query='NativeRuntime';limit=1}}}|ConvertTo-Json -Depth 8 -Compress
-                $read=Invoke-RestMethod ($base+'mcp') -Method Post -Headers $headers -ContentType 'application/json' -Body $request -TimeoutSec 130
+                $read=Invoke-RestMethod ($base+'mcp') -Method Post -Headers $headers -ContentType 'application/json' -Body $request -TimeoutSec 310
                 if($read.error -or $read.result.isError){throw 'The installed IIS native code search failed.'}
                 $mcpClient=Set-ModularMcpClient $clientPath $c.origin ($base+'mcp')
             }
