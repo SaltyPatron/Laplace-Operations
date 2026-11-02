@@ -52,7 +52,12 @@ install(TARGETS laplace_math ARCHIVE DESTINATION lib)
 add_library(laplace_math_link INTERFACE)
 add_library(laplace::math ALIAS laplace_math_link)
 if(MSVC)
-  target_link_libraries(laplace_math_link INTERFACE laplace_math)
+  # CORE-MATH's int128 conversions (__floattidf and kin) use the compiler's builtins runtime on Windows.
+  execute_process(COMMAND "${CMAKE_C_COMPILER}" -print-resource-dir
+    OUTPUT_VARIABLE _compiler_resource OUTPUT_STRIP_TRAILING_WHITESPACE)
+  find_library(_compiler_builtins NAMES clang_rt.builtins-x86_64
+    PATHS "${_compiler_resource}/lib/windows" NO_DEFAULT_PATH REQUIRED)
+  target_link_libraries(laplace_math_link INTERFACE laplace_math "${_compiler_builtins}")
 else()
   # Then libm itself, for the exact operations laplace-math leaves to it (sqrt, fmax, the fenv calls), after the
   # library so a linker that drops unused libraries (--as-needed) keeps it. Its own imported target: CMake would fold
