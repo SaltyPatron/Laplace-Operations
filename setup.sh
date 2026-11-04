@@ -46,6 +46,10 @@ if [[ ${1:-} == nginx-repair ]]; then
   shift
   exec bash "$here/network/repair-nginx.sh" "$@"
 fi
+if [[ ${1:-} == tailscale-dns ]]; then
+  shift
+  exec bash "$here/network/tailscale-dns.sh" "$@"
+fi
 if [[ ${1:-} == secrets-protection ]]; then
   shift
   exec python3 "$here/secrets/protection.py" "$@"
@@ -784,9 +788,11 @@ database-client(){ part 'OpenBao substrate credentials'
     systemctl stop laplace-knowledge-refresh.service
   fi
   install -d -m 755 /usr/local/libexec
+  install -m 755 "$here/operation-lock.sh" /usr/local/libexec/laplace-operation-lock.sh
+  install -m 755 "$here/network/tailscale-dns.sh" /usr/local/libexec/laplace-tailscale-dns
   install -m 755 "$here/secrets/database-sync.py" /usr/local/libexec/laplace-database-sync.py
   {
-    printf '#!/bin/bash\nset -euo pipefail\nexec python3 /usr/local/libexec/laplace-database-sync.py '
+    printf '#!/bin/bash\nset -euo pipefail\n/usr/local/libexec/laplace-tailscale-dns --apply >/dev/null\n. /usr/local/libexec/laplace-operation-lock.sh\nLAPLACE_HOST_LOCK_WAIT_SECONDS=${LAPLACE_HOST_LOCK_WAIT_SECONDS:-wait} LAPLACE_HOST_LOCK=%q laplace_host_lock exclusive\nexport LAPLACE_HOST_LOCK_FD=8\nexec python3 /usr/local/libexec/laplace-database-sync.py ' "${LAPLACE_HOST_LOCK:-/run/lock/laplace/host-resource.lock}"
     printf '%q ' "${args[@]}"
     printf '\n'
   } > /usr/local/libexec/laplace-database-refresh
@@ -799,6 +805,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/libexec/laplace-database-refresh
+TimeoutStartSec=infinity
 NoNewPrivileges=true
 UMask=0077
 UNIT
