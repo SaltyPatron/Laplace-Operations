@@ -28,7 +28,7 @@ if($Installed){
         $selected=Read-StorageJson $profile.installation
         if($selected.host -ine $declared.host -or $selected.socket -ine $declared.socket -or $selected.database -cne $declared.database){throw 'The installed database differs from the declared modular target.'}
         $receipt.installation=$profile.installation;$receipt.release=$selected.release
-        $options=if($Drop -eq 'drop'){@('--drop')}else{@()}
+        [string[]]$options=if($Drop -eq 'drop'){@('--drop')}else{@()}
         & py -3 "$PSScriptRoot/installation/deploy-client.py" --configuration $declared.operator_client.configuration --psql (Join-Path $env:LAPLACE_PG_DIR 'bin/psql.exe') @options 2>&1 | Tee-Object -FilePath (Join-Path $run 'deploy.log')
         if($LASTEXITCODE){throw "Installed database deployment exited $LASTEXITCODE. See $run/deploy.log"}
         $receipt.completed=$true
