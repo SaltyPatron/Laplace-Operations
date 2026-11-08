@@ -48,6 +48,11 @@ jobs:
           fi
           . Laplace-Operations/laplace.env
           laplace projection --apply
+      - name: Provide the pinned Rust compiler for recipe grammar generation
+        if: inputs.reseed
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: 1.90.0
       - name: the database dropped and deployed again, empty
         if: inputs.reseed
         run: ./Laplace-Operations/deploy.sh drop && ./Laplace-Operations/seed-stamp.sh pending
