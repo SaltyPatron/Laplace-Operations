@@ -2,22 +2,27 @@
 -- histogram is not an exact tier count or a containment/closure check.
 BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL statement_timeout = '20min';
-SET LOCAL max_parallel_workers_per_gather = 2;
+SET LOCAL max_parallel_workers_per_gather = 4;
+SET LOCAL work_mem = '512MB';
+SET LOCAL hash_mem_multiplier = 2.0;
+SET LOCAL enable_partitionwise_join = on;
+SET LOCAL enable_partitionwise_aggregate = on;
+SET LOCAL enable_sort = off;
 
 WITH edge_audit AS (
     SELECT count(*) AS edges,
-           count(*) FILTER (WHERE child.tier >= parent.tier) AS height_violations
+           count(*) FILTER (WHERE child.tier >= p.tier) AS height_violations
     FROM public.physicality p
-    JOIN public.entity parent ON parent.id = p.entity
     CROSS JOIN LATERAL unnest(public.laplace_vertex_ids(p.path)) v(id)
     LEFT JOIN public.entity child ON child.id = v.id
-    WHERE parent.tier > 0
+    WHERE p.tier > 0
 ), missing AS MATERIALIZED (
-    SELECT DISTINCT v.id
+    SELECT v.id
     FROM public.physicality p
     CROSS JOIN LATERAL unnest(public.laplace_vertex_ids(p.path)) v(id)
     LEFT JOIN public.entity child ON child.id = v.id
     WHERE child.id IS NULL
+    GROUP BY v.id
 ), closure_audit AS (
     SELECT count(*) AS missing_entity_rows,
            count(*) FILTER (WHERE public.laplace_codepoint(id) IS NOT NULL) AS virtual_codepoints,
