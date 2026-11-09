@@ -31,6 +31,18 @@ def deploy(configuration, psql, *, drop=False):
                         '-v', 'laplace_database=' + database], env=env, check=True,
                        input="SELECT format('DROP DATABASE IF EXISTS %I', :'laplace_database')\n\\gexec\n", text=True)
     subprocess.run([str(executable), 'deploy', '--configure-server-cache'], env=env, check=True)
+    grants = (
+        "DO $$ BEGIN "
+        "IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'laplace_modular_web') THEN "
+        "EXECUTE format('GRANT CONNECT ON DATABASE %I TO laplace_modular_web', current_database()); "
+        "GRANT USAGE ON SCHEMA public TO laplace_modular_web; "
+        "GRANT SELECT ON ALL TABLES IN SCHEMA public TO laplace_modular_web; "
+        "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO laplace_modular_web; "
+        "END IF; "
+        "END $$;"
+    )
+    subprocess.run([str(psql), '-X', '-w', '-d', environment['LAPLACE_CONNINFO'],
+                    '-v', 'ON_ERROR_STOP=1', '-qc', grants], env=env, check=True)
     return selected
 
 
