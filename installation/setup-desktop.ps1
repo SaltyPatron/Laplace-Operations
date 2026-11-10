@@ -316,18 +316,43 @@ function report {
     if (-not (Test-Path "$PgBin\postgres.exe")) { Say 'server' "MISSING: no server at $PgBin (deps)"; return }
     Say 'server' "$(& "$PgBin\postgres.exe" --version)   $(if (PgReady) { 'accepting connections' } else { 'NOT ACCEPTING CONNECTIONS' })"
     if (-not (PgReady)) { return }
-    $conn = "host=$PgHost port=$PgPort user=$PgRole dbname=postgres"
-    Say 'PostGIS' "$(& "$PgBin\psql.exe" -X $conn -Atq -c "SELECT coalesce(default_version, 'NOT INSTALLED') FROM pg_available_extensions WHERE name = 'postgis'" 2>&1 | Select-Object -Last 1)"
     Say 'listening' ((Get-NetTCPConnection -LocalPort $PgPort -State Listen -ErrorAction SilentlyContinue | ForEach-Object { "$($_.LocalAddress):$PgPort" } | Sort-Object -Unique) -join ' ')
     $net = ($PgLan -split '/')[0] -replace '\.\d+$', ''
     $addr = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -like "$net.*" } | Select-Object -First 1).IPAddress
-    if ($addr) {
-        $r = & "$PgBin\psql.exe" -X "host=$addr port=$PgPort user=$PgRole dbname=postgres sslmode=require" -Atq -c "SELECT 'connected, TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')" 2>&1 | Select-Object -Last 1
-        Say "this database from $PgLan, as $PgRole" "$r"
-    } else { Say "this database from $PgLan" 'this machine has no address on it' }
-    $r = & "$PgBin\psql.exe" -X ($env:LAPLACE_CONNINFO -replace 'dbname=\S+', 'dbname=postgres') -Atq -c "SELECT 'connected to '||coalesce(host(inet_server_addr()), 'local')||' ('||split_part(version(), ',', 1)||') as '||current_user||', TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')" 2>&1 | Select-Object -Last 1
-    Say "LAPLACE_CONNINFO ($(($env:LAPLACE_CONNINFO -split ' ' | Where-Object { $_ -like 'host=*' }) -replace '^host='))" "$r"
-    foreach ($line in (& "$PgBin\psql.exe" -X $conn -Atq -c "SELECT '  '||rpad(name, 46)||current_setting(name) FROM pg_settings WHERE name IN ('shared_buffers','effective_cache_size','max_wal_size','listen_addresses','ssl','data_checksums') ORDER BY name" 2>$null)) { $line }
+    $probe = "SELECT 'connected to '||coalesce(host(inet_server_addr()), 'local')||' as '||current_user||', TLS '||coalesce((SELECT version FROM pg_stat_ssl WHERE pid = pg_backend_pid()), 'off')"
+    # Access is what the access part declared: with an SSPI operator declaration (windows-operator-access.ps1), the
+    # operator's libpq service and Windows identity, TLS verified; otherwise the role and password of the legacy layout.
+    $operatorDeclaration = Join-Path $OpsRoot ('installation/'+$env:COMPUTERNAME.ToLowerInvariant()+'-operator.json')
+    $operator = $null
+    if (Test-Path -LiteralPath $operatorDeclaration) {
+        $declared = Get-Content -LiteralPath $operatorDeclaration -Raw | ConvertFrom-Json -AsHashtable
+        $operator = @($declared.targets | Where-Object { $_['authentication'] -eq 'sspi' }) | Select-Object -First 1
+    }
+    $saved = @{ PGSERVICEFILE = $env:PGSERVICEFILE; OPENSSL_CONF = $env:OPENSSL_CONF }
+    try {
+        if ($operator) {
+            $env:PGSERVICEFILE = Join-Path $declared.state 'operator-services.conf'
+            $env:OPENSSL_CONF = Join-Path $declared.state 'operator-openssl.cnf'
+            $conn = "service=$($operator.service) dbname=postgres"
+            $who = "as $($declared.role) ($($operator.authentication_identity))"
+            $lan = if ($addr) { "service=$($operator.service) hostaddr=$addr dbname=postgres" }
+        } else {
+            $conn = "host=$PgHost port=$PgPort user=$PgRole dbname=postgres"
+            $who = "as $PgRole"
+            $lan = if ($addr) { "host=$addr port=$PgPort user=$PgRole dbname=postgres sslmode=require" }
+        }
+        Say 'PostGIS' "$(& "$PgBin\psql.exe" -X $conn -Atq -c "SELECT coalesce(default_version, 'NOT INSTALLED') FROM pg_available_extensions WHERE name = 'postgis'" 2>&1 | Select-Object -Last 1)"
+        Say "this database, $who" "$(& "$PgBin\psql.exe" -X $conn -Atq -c $probe 2>&1 | Select-Object -Last 1)"
+        if ($lan) { Say "this database from $PgLan, $who" "$(& "$PgBin\psql.exe" -X $lan -Atq -c $probe 2>&1 | Select-Object -Last 1)" }
+        else { Say "this database from $PgLan" 'this machine has no address on it' }
+        if (-not $operator) {
+            $r = & "$PgBin\psql.exe" -X ($env:LAPLACE_CONNINFO -replace 'dbname=\S+', 'dbname=postgres') -Atq -c $probe 2>&1 | Select-Object -Last 1
+            Say "LAPLACE_CONNINFO ($(($env:LAPLACE_CONNINFO -split ' ' | Where-Object { $_ -like 'host=*' }) -replace '^host='))" "$r"
+        }
+        foreach ($line in (& "$PgBin\psql.exe" -X $conn -Atq -c "SELECT '  '||rpad(name, 46)||current_setting(name) FROM pg_settings WHERE name IN ('shared_buffers','effective_cache_size','max_wal_size','listen_addresses','ssl','data_checksums') ORDER BY name" 2>$null)) { $line }
+    } finally {
+        foreach ($name in $saved.Keys) { if ($null -eq $saved[$name]) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue } else { Set-Item "Env:$name" $saved[$name] } }
+    }
     ''; 'next: the Laplace builds (README: Windows); the Linux machine: sudo ./setup.sh, ./deploy.sh'
 }
 
