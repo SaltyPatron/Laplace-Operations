@@ -105,12 +105,12 @@ LOCAL DESKTOP IIS & DATABASE MAINTENANCE (https://dev.hartonomous.com)
   laplace-ops restart-iis             Cleanly recycle the local IIS site (app_offline.htm) and check /health
   laplace-ops repair-postgres         Repair the local PostgreSQL runtime and service; verify its original cluster
   laplace-ops repair-postgres -Plan   Inspect that repair without changing the host
-  laplace-ops db                      Check migration status for both local databases (application + substrate)
-  laplace-ops db [both|application|substrate] [status|migrate|repair|remigrate|recreate] [-Yes]
+  laplace-ops db                      Report drift between the declared schema and the live catalog for both local databases (application + substrate)
+  laplace-ops db [both|application|substrate] [status|migrate|repair|remigrate|recreate] [-Yes]  (remigrate = re-apply the declaration; there is no migration journal)
     Examples:
       laplace-ops db                              Check status of both local databases
-      laplace-ops db migrate                      Apply pending migrations + grants to both local databases
-      laplace-ops db repair                       Recreate any dropped local database and apply migrations + grants
+      laplace-ops db migrate                      Apply the declared schema + grants to both local databases (idempotent, every time)
+      laplace-ops db repair                       Recreate any dropped local database and apply the declared schema + grants
       laplace-ops db recreate -Yes                DROP and recreate both local databases from scratch
       laplace-ops db substrate recreate -Yes      DROP and recreate only the local substrate database (laplace-mono)
       laplace-ops db application recreate -Yes    DROP and recreate only the local app database (laplace-desktop-app)
