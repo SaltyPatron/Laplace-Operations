@@ -32,6 +32,13 @@ $nativeConfig=Get-Content -LiteralPath (Join-Path $root 'state/native.json') -Ra
 $nativeConfig.release=$nativeRoot
 $nativeConfig|Add-Member code_roots @($c.native.code_roots) -Force
 $nativeConfig|Add-Member work (Join-Path $root 'state/logs/native') -Force
+# Source declarations root at $LAPLACE_DATA / $LAPLACE_SRC / $LAPLACE_MODELS (Engine recipes/*/source):
+# the reader resolves them for recipe_plan, ingest_status and ingest, from this machine's declaration.
+foreach($name in 'LAPLACE_DATA','LAPLACE_SRC','LAPLACE_MODELS'){
+    $value=[Environment]::GetEnvironmentVariable($name)
+    if(-not $value){throw "$name is not declared for this machine (C:\ProgramData\Laplace\machine.env)."}
+    $nativeConfig|Add-Member ($name.Substring(8).ToLowerInvariant()) ([IO.Path]::GetFullPath($value)) -Force
+}
 $operation=Enter-DesktopStorageOperation
 $publicationLock=$null
 try{
