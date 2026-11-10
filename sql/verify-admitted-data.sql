@@ -54,6 +54,6 @@ SELECT jsonb_build_object(
     'edges', (SELECT to_jsonb(edge_audit) FROM edge_audit),
     'closure', (SELECT to_jsonb(closure_audit) FROM closure_audit),
     'physicality', (SELECT to_jsonb(physicality_audit) FROM physicality_audit),
-    'witnesses', (SELECT coalesce(jsonb_agg(id::text ORDER BY id), '[]'::jsonb) FROM public.witness)
+    'witnesses', (SELECT coalesce(jsonb_agg(witness::text ORDER BY witness), '[]'::jsonb) FROM (SELECT DISTINCT witness FROM public.attestation) w)
 );
 COMMIT;

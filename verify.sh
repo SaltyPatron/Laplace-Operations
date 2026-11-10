@@ -37,7 +37,7 @@ deployment(){
   if ! "$LAPLACE_PG_DIR/bin/psql" "$LAPLACE_CONNINFO" -XAt -v ON_ERROR_STOP=1 -F '|' -c "
     SELECT e.extversion, laplace_fingerprint(), laplace_highway_fingerprint(),
       to_regclass('entity') IS NOT NULL AND to_regclass('physicality') IS NOT NULL
-      AND to_regclass('witness') IS NOT NULL AND to_regclass('consensus') IS NOT NULL
+      AND to_regclass('attestation') IS NOT NULL AND to_regclass('consensus') IS NOT NULL
     FROM pg_extension e WHERE e.extname='laplace'" > "$log/database.txt" 2> "$log/database.err"; then
     bad 'database extension readback failed'; block "$log/database.err"; return
   fi

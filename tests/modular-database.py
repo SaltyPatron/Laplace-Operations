@@ -44,7 +44,7 @@ REVOKE ALL ON FUNCTION "native runtime".laplace_clean_pending_list(regclass) FRO
 SET LOCAL session_replication_role=replica;
 UPDATE "native runtime".entity SET tier=tier WHERE false;
 DELETE FROM "native runtime".entity WHERE false;
-TRUNCATE "native runtime".physicality,"native runtime".consensus,"native runtime".witness,"native runtime".entity;
+TRUNCATE "native runtime".physicality,"native runtime".consensus,"native runtime".attestation,"native runtime".entity;
 CREATE TABLE stage.runtime_batch(id int); INSERT INTO stage.runtime_batch VALUES(1); ROLLBACK;''')
     for forbidden in ('SELECT * FROM app.private;', 'SELECT * FROM public.entity;', 'INSERT INTO public.entity VALUES(2);', 'SET ROLE laplace;',
                       'CREATE TABLE public.forbidden(id int);', 'ALTER ROLE laplace SUPERUSER;'):
