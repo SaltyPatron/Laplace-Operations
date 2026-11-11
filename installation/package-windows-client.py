@@ -60,6 +60,58 @@ def verify_frozen_manifest(config, candidate):
                              ' versus '.join(fingerprints) + '). Prepare it with this Engine and Native manifest before installation.')
 
 
+def highway_environment(config, manifest):
+    environment = {key: value for key, value in os.environ.items() if not key.startswith('LAPLACE_')}
+    environment.update(LAPLACE_TIER0=str(Path(config['prepared']) / 'tier0.bin'),
+                       LAPLACE_MANIFEST=str(manifest),
+                       LAPLACE_CONNINFO='host=127.0.0.1 port=1 connect_timeout=1 dbname=unused')
+    environment['PATH'] = os.pathsep.join([*config['runtime_directories'], environment.get('PATH', '')])
+    return environment
+
+
+def prepare_highway(config):
+    """Write the prepared Highway from this Engine and the Native frozen manifests.
+
+    The prepared Highway ($LAPLACE_HIGHWAY) is generated, never hand-placed: when the
+    Native manifests move, the copy made from the old ones no longer matches and every
+    package built over it fails verification. Linux delivery regenerates it on each
+    deployment (deploy.sh prepared-highway); this is the same step for Windows. The
+    file is replaced only when its fingerprint differs, so an unchanged Highway keeps
+    its bytes and the previous release stays reusable.
+    """
+    executable = runtime_binaries(config)['bin/laplace.exe']
+    prepared = Path(config['prepared'])
+    target = prepared / 'tier0.highway'
+    environment = highway_environment(config, Path(config['native']) / 'manifest')
+    fresh = prepared / f'.tier0.highway.{os.getpid()}.tmp'
+    try:
+        result = subprocess.run([str(executable), 'highway', '-o', str(fresh)], env=environment,
+                                capture_output=True, text=True, timeout=300)
+        if result.returncode:
+            raise ValueError('Native frozen manifests could not produce Highway: ' + (result.stderr or result.stdout))
+
+        def fingerprint(path):
+            result = subprocess.run([str(executable), 'highway', '--fingerprint', '-o', str(path)],
+                                    env=environment, capture_output=True, text=True, timeout=60)
+            if result.returncode:
+                raise ValueError('Native could not fingerprint Highway ' + str(path) + ': ' + result.stderr)
+            return result.stdout.strip()
+
+        current = fingerprint(target) if target.is_file() else None
+        generated = fingerprint(fresh)
+        if current == generated:
+            return {'highway': str(target), 'fingerprint': generated, 'replaced': False}
+        os.replace(fresh, target)
+        listing = prepared / 'manifest.json'
+        if listing.is_file():
+            entries = json.loads(listing.read_text())
+            entries['tier0.highway'] = {'sha256': digest(target), 'bytes': target.stat().st_size}
+            listing.write_text(json.dumps(entries, indent=2) + '\n')
+        return {'highway': str(target), 'fingerprint': generated, 'replaced': True, 'previous': current}
+    finally:
+        fresh.unlink(missing_ok=True)
+
+
 def run(argv):
     result = subprocess.run(list(map(str, argv)), capture_output=True, text=True)
     if result.returncode:
@@ -273,6 +325,7 @@ def main():
             build_run(['pwsh', '-NoProfile', '-File', str(builder), '-Source', str(definitions),
                        '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['mcp_build'] if has_mcp else config['build']) / 'grammars'),
                        *(['-Force'] if args.force else [])])
+        print(json.dumps({'prepared_highway': prepare_highway(config)}), flush=True)
         reusable = reusable_release(config, revisions) if not args.force else None
         if reusable is not None:
             ensure_release_access(config, reusable, operator_sid)
