@@ -324,7 +324,7 @@ deps(){ part dependencies
   done
   # PostgreSQL's contrib modules Laplace uses, each known by its library: pg_stat_statements and auto_explain are
   # preloaded (the settings), pg_buffercache inspects the cache, pg_walinspect reads the log while an ingest runs,
-  # file_fdw is what the monorepo's ops schema reads its log files through (db/migrations/*_ops_*.sql)
+  # file_fdw is what the monorepo's ops schema reads its log files through (db/schema/10_substrate.sql)
   for m in pg_stat_statements pg_buffercache auto_explain pg_walinspect file_fdw; do
     if [ -e "$LAPLACE_PG_DIR/lib/$m.so" ]; then say "contrib $m" "installed"; continue; fi
     [ -d "$LAPLACE_WORK/postgresql/contrib/$m" ] && make -C "$LAPLACE_WORK/postgresql/contrib/$m" install >/dev/null 2>&1
