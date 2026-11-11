@@ -4,7 +4,7 @@ set -euo pipefail
 fail() { echo "$*" >&2; exit 1; }
 digest() { local value; value=$(sha256sum < "$1") || return; printf '%s' "${value%% *}"; }
 resolve() {
-  local owner=$1 revision=$2 runs eligible run jobs artifacts passed available
+  local owner=$1 revision=$2 runs eligible run jobs artifacts passed available pending
   [[ $owner =~ ^[A-Za-z0-9-]+$ && $revision =~ ^[0-9a-f]{40}$ ]] || fail 'Expected repository owner and full Native revision'
   runs=$(gh api --paginate "repos/$owner/Laplace-Native/actions/runs?head_sha=$revision&per_page=100") || return
   eligible=$(jq -sr --arg revision "$revision" '[.[].workflow_runs[] | select(.head_sha == $revision and
@@ -23,6 +23,12 @@ resolve() {
       return
     fi
   done <<< "$eligible"
+  # Siblings build from Native main; its run for this revision may still be going. Wait for it rather than fail.
+  pending=$(jq -sr --arg revision "$revision" '[.[].workflow_runs[] | select(.head_sha == $revision and
+    .head_branch == "main" and .path == ".github/workflows/laplace.yml" and .status != "completed")] | length' <<< "$runs") || return
+  if (( pending > 0 && SECONDS < ${LAPLACE_NATIVE_WAIT:-5400} )); then
+    echo "Native run for $revision still in progress; waiting" >&2; sleep 60; resolve "$owner" "$revision"; return
+  fi
   fail "No verified Native cache artifact for revision $revision"
 }
 verify() {
