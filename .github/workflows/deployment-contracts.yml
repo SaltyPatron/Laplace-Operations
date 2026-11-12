@@ -1,6 +1,8 @@
 name: Deployment failure boundaries
-# Development checks run locally on HART-DESKTOP. Hosted fixture replay is
-# an explicit operator choice; ordinary edits do not allocate hosted runners.
+# Development checks run locally on HART-DESKTOP. Fixture replay is an explicit
+# operator choice. The Linux jobs run on this repository's own staging runner,
+# without root and in the runner's temp directory. windows-backup is the one job
+# still on a GitHub-hosted image: no self-hosted Windows runner exists.
 on:
   workflow_dispatch:
     inputs:
@@ -38,12 +40,16 @@ jobs:
           SYSTEMD_UNIT_PATH="$unit_root" systemd-analyze verify --man=no "$unit_root/rsyslog.service"
   configuration-index:
     if: ${{ !inputs.logging_only }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: Laplace-Operations
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          path: Laplace-Operations
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
@@ -122,12 +128,18 @@ jobs:
           if-no-files-found: error
   boundaries:
     if: ${{ !inputs.logging_only }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: Laplace-Operations
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          path: Laplace-Operations
+      - name: Provide the pinned PowerShell in the runner's tool cache
+        run: bash .github/scripts/provide-pwsh.sh
       - name: Check deployment sequencing and failure propagation
         shell: bash
         run: |
@@ -181,8 +193,8 @@ jobs:
           name: acceptance-linux-${{ github.sha }}
           path: ${{ runner.temp }}/acceptance-linux.json
           if-no-files-found: error
-      - name: Install SQLite for backup recovery checks
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3
+      - name: Require the host's SQLite for backup recovery checks
+        run: sqlite3 --version
       - name: Check secrets backup failure and recovery behavior
         run: TMPDIR="$RUNNER_TEMP" pwsh -NoProfile -File acceptance/verify.ps1 -Check secrets-backup-isolation -Output "$RUNNER_TEMP/acceptance-secrets-backup.json"
       - name: Preserve secrets backup acceptance evidence

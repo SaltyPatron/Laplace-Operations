@@ -13,13 +13,16 @@ permissions:
   id-token: write
 jobs:
   lease:
-    runs-on: ubuntu-24.04
+    # The lease is taken and released from the staging runner, as Laplace-Native's
+    # cloud-lease.yml does; the cloud worker itself may be stopped.
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - uses: ./cloud
+          path: Laplace-Operations
+      - uses: ./Laplace-Operations/cloud
         with:
           operation: ${{ inputs.operation }}
           minutes: ${{ inputs.minutes }}
