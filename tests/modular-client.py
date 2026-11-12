@@ -180,9 +180,15 @@ class ClientInputs(unittest.TestCase):
         executable, environment, psql = self.deployment()
         with patch.object(deploy_client.subprocess, 'run') as run:
             deploy_client.deploy(self.configuration, psql)
-        self.assertEqual(run.call_count, 1)
-        self.assertEqual(run.call_args.args[0], [str(executable), 'deploy', '--configure-server-cache'])
-        self.assertEqual(run.call_args.kwargs['env']['LAPLACE_CONNINFO'], environment['LAPLACE_CONNINFO'])
+        # The installed deployment, then the web reader's grants through the declared client: no drop, no build.
+        self.assertEqual(run.call_count, 2)
+        migration, grants = run.call_args_list
+        self.assertEqual(migration.args[0], [str(executable), 'deploy', '--configure-server-cache'])
+        self.assertEqual(migration.kwargs['env']['LAPLACE_CONNINFO'], environment['LAPLACE_CONNINFO'])
+        self.assertEqual(grants.args[0][:4], [str(psql), '-X', '-w', '-d'])
+        self.assertEqual(grants.args[0][4], environment['LAPLACE_CONNINFO'])
+        self.assertIn('laplace_modular_web', grants.args[0][-1])
+        self.assertNotIn('DROP', grants.args[0][-1])
 
     def test_recreate_refuses_missing_artifacts_before_database_calls(self):
         executable, environment, psql = self.deployment()

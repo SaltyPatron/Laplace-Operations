@@ -8,7 +8,7 @@ mkdir -p "$work/bin" "$work/locks" "$work/work" "$work/grammars" "$work/installa
 cp "$ROOT/deploy.sh" "$work/deploy.sh"
 cp "$ROOT/operation-lock.sh" "$work/operation-lock.sh"
 cp "$ROOT/machine-env.py" "$work/machine-env.py"
-cp "$ROOT/installation/modular.py" "$ROOT/installation/database.py" "$work/installation/"
+cp "$ROOT/installation/modular.py" "$ROOT/installation/modular_steps.py" "$ROOT/installation/database.py" "$work/installation/"
 printf '' > "$work/machine.env"
 printf 'grammar\n' > "$work/grammars/fixture"
 cat > "$work/laplace.env" <<'ENV'
