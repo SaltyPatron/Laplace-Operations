@@ -1,5 +1,5 @@
 name: GPU host eligibility
-# This exercises policy fixtures, not desktop GPU workloads. Hosted replay is opt-in.
+# This exercises policy fixtures, not GPU workloads, on this repository's own staging runner. Replay is opt-in.
 on:
   workflow_dispatch:
 permissions:
@@ -9,10 +9,12 @@ concurrency:
   cancel-in-progress: true
 jobs:
   refusal:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - run: bash tests/chess-gpu-policy.sh
+          path: Laplace-Operations
+      - run: TMPDIR="$RUNNER_TEMP" bash tests/chess-gpu-policy.sh
+        working-directory: Laplace-Operations
