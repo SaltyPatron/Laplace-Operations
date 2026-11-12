@@ -88,9 +88,20 @@ class EngineQualification(unittest.TestCase):
             ('/repos/owner/Laplace-Engine/actions/workflows/laplace.yml/dispatches', 'POST', {'ref': 'main'})])
 
     def test_failed_or_skipped_engine_is_rejected(self):
-        for conclusion in ('failure', 'skipped', 'cancelled', 'timed_out'):
+        for conclusion in ('failure', 'skipped', 'timed_out'):
             with self.subTest(conclusion=conclusion), self.assertRaisesRegex(ValueError, 'qualification failed'):
                 self.qualify(conclusion=conclusion)
+
+    def test_cancelled_engine_run_is_run_again_while_its_revision_is_main(self):
+        with self.assertRaises(TimeoutError):
+            self.qualify(conclusion='cancelled')
+        self.assertEqual(self.mutations, [
+            ('/repos/owner/Laplace-Engine/actions/workflows/laplace.yml/dispatches', 'POST', {'ref': 'main'})])
+
+    def test_cancelled_engine_run_of_a_superseded_revision_cannot_qualify(self):
+        with self.assertRaisesRegex(ValueError, 'no longer main'):
+            self.qualify(conclusion='cancelled', main='b' * 40)
+        self.assertEqual(self.mutations, [])
 
     def test_invalid_workflow_run_without_jobs_is_rejected(self):
         self.run['status'] = 'completed'

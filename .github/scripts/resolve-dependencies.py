@@ -70,9 +70,15 @@ def qualify_engine(owner, revision, request, mutate, sleep=time.sleep, attempts=
             if engine and engine.get('conclusion') == 'success':
                 print(f'Engine {revision} qualified: {run["html_url"]}', flush=True)
                 return run['id']
-            if (engine and engine.get('status') == 'completed') or run.get('status') == 'completed':
+            finished = (engine and engine.get('status') == 'completed') or run.get('status') == 'completed'
+            # Engine cancels a run when a later push supersedes it: a cancelled run tested nothing, so it neither
+            # qualifies the revision nor fails it. The revision is run again while it is still main.
+            cancelled = 'cancelled' in ((engine or {}).get('conclusion'), run.get('conclusion'))
+            if finished and not cancelled:
                 raise ValueError('Engine build/test qualification failed: ' + run['html_url'])
-        elif not dispatched:
+            if cancelled and not dispatched:
+                runs = []
+        if not runs and not dispatched:
             if request(repository + '/commits/main')['sha'] != revision:
                 raise ValueError('Selected Engine revision has no CI run and is no longer main: ' + revision)
             mutate(workflow + '/dispatches', 'POST', {'ref': 'main'})
