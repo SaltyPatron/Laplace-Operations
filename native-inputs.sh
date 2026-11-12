@@ -23,9 +23,9 @@ resolve() {
       return
     fi
   done <<< "$eligible"
-  # Siblings build from Native main; its run for this revision may still be going. Wait for it rather than fail.
+  # Siblings build from Native main; wait only while its run executes. A queued run cannot start while this job holds the runner.
   pending=$(jq -sr --arg revision "$revision" '[.[].workflow_runs[] | select(.head_sha == $revision and
-    .head_branch == "main" and .path == ".github/workflows/laplace.yml" and .status != "completed")] | length' <<< "$runs") || return
+    .head_branch == "main" and .path == ".github/workflows/laplace.yml" and .status == "in_progress")] | length' <<< "$runs") || return
   if (( pending > 0 && SECONDS < ${LAPLACE_NATIVE_WAIT:-5400} )); then
     echo "Native run for $revision still in progress; waiting" >&2; sleep 60; resolve "$owner" "$revision"; return
   fi
