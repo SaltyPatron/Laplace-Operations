@@ -64,6 +64,8 @@ class EngineQualification(unittest.TestCase):
             if path.endswith('/actions/workflows/laplace.yml'):
                 return {'state': state}
             if '/actions/runs?' in path:
+                if any(m[0].endswith('/rerun-failed-jobs') for m in self.mutations):
+                    self.run['run_attempt'] = 2
                 return {'workflow_runs': [self.run] if runs is None else runs(calls)}
             if '/jobs?' in path:
                 return {'jobs': [{'name': 'engine', 'status': 'completed' if conclusion else 'in_progress',
@@ -87,10 +89,13 @@ class EngineQualification(unittest.TestCase):
             ('/repos/owner/Laplace-Engine/actions/workflows/laplace.yml/enable', 'PUT', None),
             ('/repos/owner/Laplace-Engine/actions/workflows/laplace.yml/dispatches', 'POST', {'ref': 'main'})])
 
-    def test_failed_or_skipped_engine_is_rejected(self):
+    def test_failed_or_skipped_engine_is_rerun_once_then_rejected(self):
         for conclusion in ('failure', 'skipped', 'timed_out'):
-            with self.subTest(conclusion=conclusion), self.assertRaisesRegex(ValueError, 'qualification failed'):
+            self.mutations.clear(); self.run.pop('run_attempt', None)
+            with self.subTest(conclusion=conclusion), self.assertRaisesRegex(ValueError, 'after one rerun'):
                 self.qualify(conclusion=conclusion)
+            self.assertEqual(self.mutations, [
+                ('/repos/owner/Laplace-Engine/actions/runs/9/rerun-failed-jobs', 'POST', None)])
 
     def test_cancelled_engine_run_is_run_again_while_its_revision_is_main(self):
         with self.assertRaises(TimeoutError):
@@ -107,6 +112,27 @@ class EngineQualification(unittest.TestCase):
         self.run['status'] = 'completed'
         with self.assertRaisesRegex(ValueError, 'qualification failed'):
             self.qualify(conclusion=None)
+
+    def test_rerun_that_passes_qualifies(self):
+        def request_runs(_):
+            if self.mutations:
+                self.run['run_attempt'] = 2
+            return [self.run]
+        conclusions = iter(['failure', 'success'])
+        self.run['status'] = 'completed'
+        state = {'c': None}
+        def request(path):
+            if path.endswith('/actions/workflows/laplace.yml'):
+                return {'state': 'active'}
+            if '/actions/runs?' in path:
+                return {'workflow_runs': request_runs(path)}
+            if '/jobs?' in path:
+                state['c'] = next(conclusions)
+                return {'jobs': [{'name': 'engine', 'status': 'completed', 'conclusion': state['c']}]}
+            self.fail('Unexpected endpoint: ' + path)
+        self.assertEqual(resolver.qualify_engine('owner', 'a' * 40, request,
+            lambda path, method, body: self.mutations.append((path, method, body)),
+            sleep=lambda _: None, attempts=3), 9)
 
     def test_other_revision_cannot_qualify_selected_revision(self):
         self.run['head_sha'] = 'b' * 40

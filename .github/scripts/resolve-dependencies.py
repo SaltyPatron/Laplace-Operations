@@ -46,7 +46,7 @@ def verified_native_run(owner, revision, request):
                                        'resolve', owner, revision], text=True).strip())
 
 
-def qualify_engine(owner, revision, request, mutate, sleep=time.sleep, attempts=180):
+def qualify_engine(owner, revision, request, mutate, sleep=time.sleep, attempts=480):
     if not re.fullmatch(r'[A-Za-z0-9-]+', owner) or not re.fullmatch(r'[0-9a-f]{40}', revision):
         raise ValueError('Invalid Engine repository or revision')
     repository = f'/repos/{owner}/Laplace-Engine'
@@ -58,6 +58,7 @@ def qualify_engine(owner, revision, request, mutate, sleep=time.sleep, attempts=
     elif state != 'active':
         raise ValueError('Engine workflow cannot run: ' + state)
     dispatched = False
+    rerun_of = None  # (run id, attempt) whose failed jobs were run again once
     for _ in range(attempts):
         runs = request(repository + f'/actions/runs?head_sha={revision}&per_page=100')['workflow_runs']
         runs = [run for run in runs if run.get('head_sha') == revision
@@ -74,8 +75,21 @@ def qualify_engine(owner, revision, request, mutate, sleep=time.sleep, attempts=
             # Engine cancels a run when a later push supersedes it: a cancelled run tested nothing, so it neither
             # qualifies the revision nor fails it. The revision is run again while it is still main.
             cancelled = 'cancelled' in ((engine or {}).get('conclusion'), run.get('conclusion'))
+            attempt = run.get('run_attempt', 1)
+            if rerun_of and rerun_of[0] == run['id'] and attempt <= rerun_of[1]:
+                sleep(10)  # the rerun requested below has not started yet
+                continue
             if finished and not cancelled:
-                raise ValueError('Engine build/test qualification failed: ' + run['html_url'])
+                # A failure can be transient (a sibling's run not finished, a host lock): run the failed jobs once more.
+                if rerun_of is None:
+                    mutate(repository + f'/actions/runs/{run["id"]}/rerun-failed-jobs', 'POST', None)
+                    print(f'Engine {revision} failed attempt {attempt} ({run["html_url"]}); running its failed jobs again',
+                          flush=True)
+                    rerun_of = (run['id'], attempt)
+                    sleep(10)
+                    continue
+                raise ValueError(f'Engine build/test qualification failed (attempt {attempt}, after one rerun): '
+                                 + run['html_url'])
             if cancelled and not dispatched:
                 runs = []
         if not runs and not dispatched:

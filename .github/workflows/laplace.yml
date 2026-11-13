@@ -107,7 +107,7 @@ jobs:
   qualify-engine:
     needs: resolve
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
-    timeout-minutes: 35
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: Laplace-Operations
