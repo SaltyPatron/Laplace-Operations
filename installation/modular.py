@@ -49,10 +49,13 @@ def config_load(path):
             raise ValueError('Invalid modular identity: ' + key)
     if config['runtime_user'] in (config['operator'], config['pg_os_user'], 'root', 'laplace-runner'):
         raise ValueError('Runtime identity must be independent of operator, deployer and database administrator')
-    for key in ('threads', 'build_jobs', 'connection_limit', 'batch_mb', 'http_port', 'port'):
+    if not re.fullmatch(r'/[a-z][a-z0-9-]*', config['web_path']) or not re.fullmatch(r'https://[a-z0-9.-]+', config['web_origin']):
+        raise ValueError('Invalid modular web declaration')
+    for key in ('threads', 'build_jobs', 'connection_limit', 'batch_mb', 'http_port', 'port', 'web_port'):
         if type(config[key]) is not int or config[key] <= 0:
             raise ValueError('Invalid modular allocation: ' + key)
-    if config['bind'] != '127.0.0.1' or max(config['http_port'], config['port']) > 65535:
+    if config['bind'] != '127.0.0.1' or max(config['http_port'], config['port'], config['web_port']) > 65535 \
+            or config['web_port'] in (config['http_port'], config['port']):
         raise ValueError('Invalid listener declaration')
     if config['connection_limit'] < 3 * config['threads'] + 2:
         raise ValueError('Connection allocation cannot fit the resident reader and Engine bulk writer')
@@ -531,6 +534,7 @@ def main():
             if installing:
                 restart_units(config)
                 install_credential_helper(config)
+                install_web(config)
                 client = config.get('operator_client')
                 if client:
                     checked(['runuser', '-u', config['operator'], '--', 'python3',
@@ -539,6 +543,9 @@ def main():
                                for value in ('--' + key, client[key])],
                              *[value for key in ('source', 'models') if key in client
                                for value in ('--' + key, client[key])]])
+            # The /modular host is part of the installation: a deployment that cannot read through it has failed.
+            web = verify_web(config)
+            atomic(receipt_path / 'web.json', json.dumps(web, indent=2) + '\n')
             atomic(receipt_path / 'acceptance.json', json.dumps({'scope': 'modular MCP installed runtime', 'host': config['host'],
                 'release': str(release), 'unit': UNIT, 'runtime_user': config['runtime_user'], 'database_role': config['role'],
                 'result': 'passed', 'database_prepared_paths': prepared_paths,
