@@ -122,6 +122,8 @@ jobs:
     if: needs.resolve.outputs.current != 'true'
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 90
+    outputs:
+      superseded: ${{ steps.qualify.outputs.superseded }}
     defaults:
       run:
         working-directory: Laplace-Operations
@@ -131,12 +133,15 @@ jobs:
           persist-credentials: false
           path: Laplace-Operations
       - name: Require the selected Engine revision to build and pass its tests
+        id: qualify
         env:
           GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
           ENGINE_SHA: ${{ needs.resolve.outputs.engine }}
         run: python3 .github/scripts/resolve-dependencies.py qualify-engine "$ENGINE_SHA"
   deploy:
     needs: [resolve, qualify-engine]
+    # a superseded Engine revision yields to the deployment its successor's push starts
+    if: needs.qualify-engine.outputs.superseded != 'true'
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 240
     outputs:

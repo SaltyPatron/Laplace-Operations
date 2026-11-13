@@ -94,7 +94,11 @@ def qualify_engine(owner, revision, request, mutate, sleep=time.sleep, attempts=
                 runs = []
         if not runs and not dispatched:
             if request(repository + '/commits/main')['sha'] != revision:
-                raise ValueError('Selected Engine revision has no CI run and is no longer main: ' + revision)
+                # A later push superseded it (its run cancelled or never started): that push's own deployment
+                # follows; this one has nothing to deploy.
+                print(f'Engine {revision} is superseded on main and has no run of its own; this deployment yields',
+                      flush=True)
+                return None
             mutate(workflow + '/dispatches', 'POST', {'ref': 'main'})
             print(f'Dispatched required Engine build/tests for {revision}', flush=True)
             dispatched = True
@@ -116,7 +120,10 @@ def main():
             raise RuntimeError(f'GitHub {method} {path}: HTTP {error.code}: '
                                + error.read().decode(errors='replace')[:2000]) from error
     if len(sys.argv) == 3 and sys.argv[1] == 'qualify-engine':
-        qualify_engine(os.environ['GITHUB_REPOSITORY_OWNER'], sys.argv[2], request, request)
+        qualified = qualify_engine(os.environ['GITHUB_REPOSITORY_OWNER'], sys.argv[2], request, request)
+        if os.environ.get('GITHUB_OUTPUT'):
+            with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+                output.write(f'superseded={"true" if qualified is None else "false"}\n')
         return
     revisions = resolve(os.environ['GITHUB_REPOSITORY_OWNER'], os.environ['GITHUB_EVENT_NAME'],
         json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text()), request)

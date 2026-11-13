@@ -103,9 +103,8 @@ class EngineQualification(unittest.TestCase):
         self.assertEqual(self.mutations, [
             ('/repos/owner/Laplace-Engine/actions/workflows/laplace.yml/dispatches', 'POST', {'ref': 'main'})])
 
-    def test_cancelled_engine_run_of_a_superseded_revision_cannot_qualify(self):
-        with self.assertRaisesRegex(ValueError, 'no longer main'):
-            self.qualify(conclusion='cancelled', main='b' * 40)
+    def test_cancelled_engine_run_of_a_superseded_revision_yields(self):
+        self.assertIsNone(self.qualify(conclusion='cancelled', main='b' * 40))
         self.assertEqual(self.mutations, [])
 
     def test_invalid_workflow_run_without_jobs_is_rejected(self):
@@ -136,8 +135,7 @@ class EngineQualification(unittest.TestCase):
 
     def test_other_revision_cannot_qualify_selected_revision(self):
         self.run['head_sha'] = 'b' * 40
-        with self.assertRaisesRegex(ValueError, 'no longer main'):
-            self.qualify(main='b' * 40)
+        self.assertIsNone(self.qualify(main='b' * 40))
 
     def test_queued_engine_cannot_qualify_release(self):
         with self.assertRaises(TimeoutError):
