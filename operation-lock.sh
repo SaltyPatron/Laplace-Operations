@@ -23,6 +23,25 @@ laplace_host_lock_notice() {
   else
     echo "Waiting up to ${laplace_host_lock_wait}s for $laplace_host_lock_path (${1:-exclusive})" >&2
   fi
+  laplace_host_lock_holders
+}
+# Who has the lock open: pid, start time and command line of every process with a descriptor on it (/proc/locks names
+# the short-lived flock child, not the holder). Processes of accounts this one cannot inspect are counted, not named.
+laplace_host_lock_holders() {
+  [ -d /proc/self/fd ] || return 0
+  laplace_host_lock_seen=$(find /proc/[0-9]*/fd -maxdepth 1 -lname "$laplace_host_lock_path" 2>/dev/null |
+    cut -d/ -f3 | sort -un | grep -vx "$$")
+  if [ -z "$laplace_host_lock_seen" ]; then
+    echo "  holder not visible to $(id -un) (another account's process): ls -l /proc/*/fd as root, or laplace-ops runs" >&2
+    return 0
+  fi
+  for laplace_host_lock_pid in $laplace_host_lock_seen; do
+    # this waiter's own children inherit the descriptor; they are not holders
+    [ "$(ps -o ppid= -p "$laplace_host_lock_pid" 2>/dev/null | tr -d ' ')" = "$$" ] && continue
+    laplace_host_lock_who=$(ps -o lstart= -o args= -p "$laplace_host_lock_pid" 2>/dev/null | cut -c1-200)
+    [ -n "$laplace_host_lock_who" ] && echo "  open in pid $laplace_host_lock_pid: $laplace_host_lock_who" >&2
+  done
+  return 0
 }
 laplace_host_lock() {
   laplace_host_lock_wait=${LAPLACE_HOST_LOCK_WAIT_SECONDS:-0}
@@ -62,7 +81,7 @@ laplace_host_lock() {
     laplace_host_lock_said=1
     laplace_host_lock_await -x 7 || {
       exec 7>&-
-      echo "host lock not acquired: $laplace_host_lock_path; no shared-runtime changes performed" >&2
+      echo "host lock not acquired: $laplace_host_lock_path; no shared-runtime changes performed" >&2; laplace_host_lock_holders
       return 3
     }
   fi
@@ -70,7 +89,7 @@ laplace_host_lock() {
     [ "$laplace_host_lock_said" = 1 ] || laplace_host_lock_notice "${1:-exclusive}"
     laplace_host_lock_await "$laplace_host_lock_mode" 8 || {
       exec 7>&-
-      echo "host lock not acquired: $laplace_host_lock_path; no shared-runtime changes performed" >&2
+      echo "host lock not acquired: $laplace_host_lock_path; no shared-runtime changes performed" >&2; laplace_host_lock_holders
       return 3
     }
   fi

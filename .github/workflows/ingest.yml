@@ -31,7 +31,7 @@ env:
   LAPLACE_CONNINFO: ""   # the database is laplace.env's, never a copy a runner kept from when it was registered
 jobs:
   ingest:
-    runs-on: [self-hosted, laplace, Laplace-Operations]
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 7200
     steps:
       - uses: actions/checkout@v4

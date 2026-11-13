@@ -28,7 +28,7 @@ log=$LAPLACE_WORK/logs/verify/$(date -u +%Y%m%dT%H%M%SZ)-${1:-build}; mkdir -p "
 summary=${GITHUB_STEP_SUMMARY:-}
 md(){ if [ -n "$summary" ]; then printf '%s\n' "$*" >> "$summary"; else printf '%s\n' "$*"; fi; }
 block(){ md '```'; if [ -n "$summary" ]; then cat "$1" >> "$summary"; else cat "$1"; fi; md '```'; }
-rc=0; bad(){ rc=1; md "- **FAIL** $*"; }; good(){ md "- ok: $*"; }
+rc=0; bad(){ rc=1; md "- **FAIL** $*"; [ -z "$summary" ] || printf 'FAIL %s\n' "$*"; }; good(){ md "- ok: $*"; }
 
 deployment(){
   md "## $(hostname): deployment readback"

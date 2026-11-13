@@ -69,7 +69,7 @@ concurrency:
 env:
   # Cross-repository deployments coordinate on the actual host, beyond GitHub's
   # repository-local concurrency groups. Wait before touching the shared runtime.
-  LAPLACE_HOST_LOCK_WAIT_SECONDS: ${{ vars.LAPLACE_HOST_LOCK_WAIT_SECONDS || 'wait' }}
+  LAPLACE_HOST_LOCK_WAIT_SECONDS: ${{ vars.LAPLACE_HOST_LOCK_WAIT_SECONDS || '7200' }}
   LAPLACE_SRC: ${{ github.workspace }}
   LAPLACE_CONNINFO: ""   # the database is laplace.env's, never a copy a runner kept from when it was registered
   LAPLACE_RESEED: ${{ vars.LAPLACE_RESEED || 'auto' }}
@@ -81,7 +81,8 @@ jobs:
     # Only trusted main pushes, repository dispatches and explicit operations
     # enter this workflow. Orchestration uses the existing delivery runner.
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
-    timeout-minutes: 5
+    # native-inputs.sh waits up to LAPLACE_NATIVE_WAIT (90 min) for Native's run of the resolved revision
+    timeout-minutes: 100
     defaults:
       run:
         working-directory: Laplace-Operations

@@ -4,7 +4,7 @@ set -euo pipefail
 fail() { echo "$*" >&2; exit 1; }
 digest() { local value; value=$(sha256sum < "$1") || return; printf '%s' "${value%% *}"; }
 resolve() {
-  local owner=$1 revision=$2 runs eligible run jobs artifacts passed available pending
+  local owner=$1 revision=$2 runs eligible run jobs artifacts passed available pending expired=
   [[ $owner =~ ^[A-Za-z0-9-]+$ && $revision =~ ^[0-9a-f]{40}$ ]] || fail 'Expected repository owner and full Native revision'
   runs=$(gh api --paginate "repos/$owner/Laplace-Native/actions/runs?head_sha=$revision&per_page=100") || return
   eligible=$(jq -sr --arg revision "$revision" '[.[].workflow_runs[] | select(.head_sha == $revision and
@@ -22,14 +22,21 @@ resolve() {
       printf '%s\n' "$run"
       return
     fi
+    expired=$run
   done <<< "$eligible"
+  # A passing run whose inputs expired (Native keeps them 7 days): run it again for the same revision, once, and wait.
+  if [[ -n ${expired:-} && -z ${NATIVE_INPUTS_RERUN:-} ]]; then
+    echo "Native inputs of run $expired for $revision expired; running it again to regenerate them" >&2
+    gh run rerun "$expired" --repo "$owner/Laplace-Native" >&2 || fail "Native inputs for $revision expired and run $expired could not be rerun"
+    export NATIVE_INPUTS_RERUN=$expired; sleep 30; resolve "$owner" "$revision"; return
+  fi
   # Siblings build from Native main; wait while its run for this revision is queued or executing (Native has its own runner).
   pending=$(jq -sr --arg revision "$revision" '[.[].workflow_runs[] | select(.head_sha == $revision and
     .head_branch == "main" and .path == ".github/workflows/laplace.yml" and (.status == "in_progress" or .status == "queued" or .status == "waiting" or .status == "pending" or .status == "requested"))] | length' <<< "$runs") || return
   if (( pending > 0 && SECONDS < ${LAPLACE_NATIVE_WAIT:-5400} )); then
     echo "Native run for $revision not finished; waiting" >&2; sleep 60; resolve "$owner" "$revision"; return
   fi
-  fail "No verified Native cache artifact for revision $revision"
+  fail "No verified Native cache artifact for revision $revision: no passing Native main run for it$([[ -n ${NATIVE_INPUTS_RERUN:-} ]] && echo " (rerun of $NATIVE_INPUTS_RERUN did not finish within ${LAPLACE_NATIVE_WAIT:-5400} s)")"
 }
 verify() {
   local directory=$1 name expected bytes
