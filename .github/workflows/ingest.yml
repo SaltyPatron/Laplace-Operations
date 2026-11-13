@@ -14,7 +14,7 @@ on:
         default: ""
         required: false
       reseed:
-        description: "drop the database first and seed it again from empty (sources are then every source of LAPLACE_SOURCES)"
+        description: "refused: reseed through laplace.yml reseed=true (laplace-ops seed staging -Yes), which also activates the release"
         type: boolean
         default: false
       repair_projection:
@@ -53,9 +53,12 @@ jobs:
         uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
         with:
           toolchain: 1.90.0
-      - name: the database dropped and deployed again, empty
+      - name: a reseed is the deployment's own path
         if: inputs.reseed
-        run: ./Laplace-Operations/deploy.sh drop && ./Laplace-Operations/seed-stamp.sh pending
+        run: |
+          # Dropping here skipped modular activation, so the recreated database lost its cache bindings.
+          echo '::error::Reseed through the deployment, which drops, deploys, activates and then ingests: laplace-ops seed staging -Yes, or gh workflow run laplace.yml --repo SaltyPatron/Laplace-Operations -f reseed=true'
+          exit 2
       - name: Installed ingestion sources, aliases, content and decomposers
         run: |
           . Laplace-Operations/laplace.env

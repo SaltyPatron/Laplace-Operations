@@ -357,9 +357,12 @@ if ($Operation -in @('ingest','seed','sources','data')) {
         exit $LASTEXITCODE
     }
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required; sign in with gh auth login.' }
-    $ingestInputs = if ($Operation -eq 'seed') { @('-f','reseed=true') } else { @('-f',"sources=$($Names -join ' ')",'-f','reseed=false') }
-    Write-Host ($(if ($Operation -eq 'seed') { 'Reseed hart-server: drop, deploy empty, ingest every source of LAPLACE_SOURCES.' } elseif ($Names) { "Ingest on hart-server: $($Names -join ' ')." } else { 'Ingest on hart-server: every source of LAPLACE_SOURCES.' }))
-    $output = & gh workflow run 'ingest.yml' --repo 'SaltyPatron/Laplace-Operations' --ref main @ingestInputs 2>&1
+    # A reseed is the deployment's own path (laplace.yml reseed=true): drop, deploy, modular activation and cache
+    # bindings, stamp, then every source. ingest.yml only ingests into the deployed database.
+    $workflow = if ($Operation -eq 'seed') { 'laplace.yml' } else { 'ingest.yml' }
+    $ingestInputs = if ($Operation -eq 'seed') { @('-f','reseed=true','-f','drop=false','-f','cloud=false') } else { @('-f',"sources=$($Names -join ' ')",'-f','reseed=false') }
+    Write-Host ($(if ($Operation -eq 'seed') { 'Reseed hart-server: drop, deploy, activate, ingest every source of LAPLACE_SOURCES.' } elseif ($Names) { "Ingest on hart-server: $($Names -join ' ')." } else { 'Ingest on hart-server: every source of LAPLACE_SOURCES.' }))
+    $output = & gh workflow run $workflow --repo 'SaltyPatron/Laplace-Operations' --ref main @ingestInputs 2>&1
     if ($LASTEXITCODE -ne 0) { throw ($output -join "`n") }
     $text = $output -join "`n"; Write-Output $text
     if ($Wait -and $text -match '/actions/runs/(\d+)') { & gh run watch $Matches[1] --repo 'SaltyPatron/Laplace-Operations' --exit-status --interval 10; exit $LASTEXITCODE }

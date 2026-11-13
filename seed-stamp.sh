@@ -27,8 +27,10 @@ tree(){ r=$LAPLACE_SRC/$1; [ -d "$r/.git" ] || [ -f "$r/.git" ] || { echo "none 
 stamp(){ for r in Laplace-Native Laplace-Engine Laplace-postgres Laplace-Operations; do echo "$r $(tree $r)"; done; }
 want(){ stamp | awk '{print $2}' | sha256sum | cut -c1-16; }
 commits(){ stamp | awk '{split($1, n, "-"); printf "%s=%s ", tolower(n[2]), $3}'; }
-recorded(){ psql -X "$admin" -Atc "SELECT coalesce(shobj_description(oid, 'pg_database'), '') FROM pg_database WHERE datname = '$db'" 2>/dev/null; }
-exists(){ [ "$(psql -X "$admin" -Atc "SELECT count(*) FROM pg_database WHERE datname = '$db'" 2>/dev/null)" = 1 ]; }
+# A server that cannot be asked is not a server without the database: its own error is said and the policy stops.
+ask(){ local out; out=$(psql -X "$admin" -v ON_ERROR_STOP=1 -Atc "$1" 2>&1) || { echo "seed-stamp: cannot ask the server about $db: $out" >&2; exit 1; }; printf '%s\n' "$out"; }
+recorded(){ ask "SELECT coalesce(shobj_description(oid, 'pg_database'), '') FROM pg_database WHERE datname = '$db'"; }
+exists(){ local n; n=$(ask "SELECT count(*) FROM pg_database WHERE datname = '$db'") || exit 1; [ "$n" = 1 ]; }
 comment(){ psql -X "$LAPLACE_CONNINFO" -v ON_ERROR_STOP=1 -qc "COMMENT ON DATABASE \"$db\" IS '$1'"; }
 out(){ echo "$1=$2"; [ -z "${GITHUB_OUTPUT:-}" ] || echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 

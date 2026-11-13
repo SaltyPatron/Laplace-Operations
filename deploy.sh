@@ -106,7 +106,9 @@ if [ -n "${LAPLACE_PREPARED_INPUTS:-}" ]; then
   step prepared-highway env LAPLACE_TIER0="$LAPLACE_PREPARED_INPUTS/tier0.bin" LAPLACE_FLAGS="$LAPLACE_PREPARED_INPUTS/tier0.flags" LAPLACE_HIGHWAY="$LAPLACE_PREPARED_INPUTS/tier0.highway" laplace highway --fingerprint
   install_prepared_inputs "$LAPLACE_PREPARED_INPUTS"
 fi
-[ -n "$(ls "$LAPLACE_GRAMMARS" 2>/dev/null)" ] || step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"   # compiled grammar dependencies; no resource admission
+# Every deployment: build_grammars.sh reuses each grammar whose inputs and binary match its stamp, and rebuilds a changed
+# one (it was built only into an empty directory, so a grammar change never reached the host).
+step grammars "$LAPLACE_SRC/Laplace-Engine/tools/build_grammars.sh" "$LAPLACE_GRAMMAR_SRC" "$LAPLACE_GRAMMARS"   # compiled grammar dependencies; no resource admission
 step highway-fingerprint laplace highway --fingerprint
 modular_manifest=$(python3 "$here/installation/modular.py" select --database "$db")
 if [ -n "$modular_manifest" ]; then
