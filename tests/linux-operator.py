@@ -47,6 +47,29 @@ class Operator(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertEqual(calls, [])
 
+    def test_staging_ingest_seed_and_db_dispatch_their_workflows(self):
+        result, calls = self.invoke('ingest', 'staging', 'wiktionary', 'tatoeba', '--wait')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls[-2], ['workflow', 'run', 'ingest.yml', '-f', 'sources=wiktionary tatoeba', '-f', 'reseed=false',
+            '--repo', 'SaltyPatron/Laplace-Operations', '--ref', 'main'])
+        self.assertIn('12345', calls[-1])
+        result, calls = self.invoke('seed', '--target', 'staging', '--yes')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls[-1], ['workflow', 'run', 'laplace.yml', '-f', 'reseed=true', '-f', 'drop=false',
+            '--repo', 'SaltyPatron/Laplace-Operations', '--ref', 'main'])
+        result, calls = self.invoke('db', '--target', 'staging', 'substrate', 'reindex')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls[-1], ['workflow', 'run', 'db-ops.yml', '-f', 'target=staging', '-f', 'operation=reindex',
+            '-f', 'database=substrate', '--repo', 'SaltyPatron/Laplace', '--ref', 'main'])
+
+    def test_unconfirmed_or_incomplete_maintenance_never_dispatches(self):
+        for arguments in (('seed', 'staging'), ('seed', 'staging', '--yes', 'wordnet'), ('db', 'staging', 'status'),
+                          ('db', 'production', 'substrate', 'status'), ('db', 'staging', 'substrate', 'drop'),
+                          ('ingest', 'production', 'wordnet'), ('ingest', 'staging', '--yes'), ('sources', 'staging')):
+            result, calls = self.invoke(*arguments)
+            self.assertEqual(result.returncode, 2, arguments)
+            self.assertEqual(calls, [], arguments)
+
     def test_recent_runs_cover_every_declared_delivery_repository(self):
         result, calls = self.invoke('runs')
         self.assertEqual(result.returncode, 0, result.stderr)

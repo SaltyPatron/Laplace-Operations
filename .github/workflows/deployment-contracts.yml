@@ -158,6 +158,7 @@ jobs:
           bash tests/modular-activation.sh
           bash tests/native-inputs.sh
           bash tests/deployment-readback.sh
+          bash tests/deployment-reads.sh
           bash tests/fingerprint-comparison.sh
           ruby tests/secrets-setup.rb
           bash tests/appdb-secrets.sh

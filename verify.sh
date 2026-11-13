@@ -101,7 +101,12 @@ reads(){
     if grep -q DIFFERS "$log/status.txt"; then bad "laplace status: the database's tier 0 or highway DIFFERS from this engine's"; else good "laplace status"; fi
   else bad "laplace status failed"; fi
   block "$log/status.txt"
-  empty=0; grep -q 'consensus  *[1-9]' "$log/status.txt" || empty=1        # a standing for every claim a witness's records say (provenance is containment: no attestation table)
+  # Whether any witness has attested anything, asked of the table itself (status counts planner estimates, which say
+  # "not counted yet" right after a load): only a database that holds attestations is required to answer the hop.
+  if ! held=$("$LAPLACE_PG_DIR/bin/psql" "$LAPLACE_CONNINFO" -XAt -v ON_ERROR_STOP=1 -c 'SELECT EXISTS (SELECT 1 FROM attestation)' 2> "$log/held.err"); then
+    bad 'could not ask the database whether it holds attestations'; block "$log/held.err"; return
+  fi
+  case $held in t|f) ;; *) bad "the database answered '$held' to whether it holds attestations"; return ;; esac
   md "### Reads"; md "| read | exit | ms | first lines |"; md "|---|---|---|---|"
   for r in "text|30|text hello" "hop|120|hop -n 5 dog" "translate|120|translate dog en fr"; do
     name=${r%%|*}; rest=${r#*|}; limit=${rest%%|*}; args=${rest#*|}
@@ -109,9 +114,17 @@ reads(){
     set -- $(read_one "$name" "$limit" $args); e=$1 ms=$2
     first=$(grep -v '^\s*$' "$log/$name.txt" | head -3 | cut -c1-90 | tr '|' '/' | sed 's/$/<br>/' | tr -d '\n')
     md "| laplace $args | $e | $ms | $first |"
-    [ "$e" = 0 ] || bad "laplace $args exited $e"
+    [ "$e" = 0 ] || { bad "laplace $args exited $e"; continue; }
+    case $name in
+      text) grep -Eq '^entity +[0-9a-f]{32} +tier [0-9]+' "$log/$name.txt" || bad "laplace $args named no entity" ;;
+      hop) claims=$(sed -n 's/^attested: \([0-9][0-9]*\) claim.*/\1/p' "$log/$name.txt")
+        if [ -z "$claims" ]; then bad "laplace $args printed no attested count"
+        elif [ "$held" = t ] && [ "$claims" = 0 ]; then bad "laplace $args: the database holds attestations, and none about dog was read"
+        else good "laplace $args: $claims claims attested"; fi ;;
+      translate) grep -q ' steps, each one set ' "$log/$name.txt" || bad "laplace $args did not finish its steps" ;;
+    esac
   done
-  [ "$empty" = 0 ] || md "- the database holds no standings yet: reads say nothing until a source is in"
+  [ "$held" = t ] || md "- **EMPTY**: the database holds no attestations: the reads ran and prove nothing until a source is in"
 }
 
 tests(){
@@ -119,11 +132,19 @@ tests(){
   md "## $(hostname): the database checks of the deployed revisions ($db)"
   scratch=$(mktemp -d "$LAPLACE_WORK/tmp-checks.XXXXXX") || { bad 'no scratch directory under LAPLACE_WORK'; return; }
   # The deployed MCP service's release, where this host declares one (installation/<host>-modular.json).
-  manifest=$(python3 "$here/installation/modular.py" select --database "$db" 2>/dev/null) || manifest=
-  lpm=; [ -z "$manifest" ] || lpm=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["prefix"])' "$manifest")/current/bin/lpm
+  # A host with no declaration at all runs no MCP; a host that declares one must declare it for the database under test.
+  declared=$(python3 "$here/installation/modular.py" select 2> "$log/select.err") || { bad 'modular declaration selection failed'; block "$log/select.err"; rm -rf "$scratch"; return; }
+  lpm=
+  if [ -n "$declared" ]; then
+    manifest=$(python3 "$here/installation/modular.py" select --database "$db" 2> "$log/select.err") || { bad 'modular declaration selection failed'; block "$log/select.err"; rm -rf "$scratch"; return; }
+    if [ -z "$manifest" ]; then bad "this host declares a modular runtime ($declared) for another database than $db: its MCP checks cannot run"
+    else lpm=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["prefix"])' "$manifest")/current/bin/lpm || { bad "the prefix of $manifest cannot be read"; lpm=; }
+      [ -z "$lpm" ] || [ -x "$lpm" ] || bad "this host declares a modular runtime ($manifest) and no release is installed at $lpm"; fi
+  fi
   for component in "Laplace-postgres|tests/deployed.sh" "Laplace-Engine|tests/deployed/run.sh" "Laplace-MCP|tests/deployed/run.sh"; do
     repo=${component%%|*}; runner=$LAPLACE_SRC/$repo/${component#*|}
-    if [ "$repo" = Laplace-MCP ] && [ ! -x "$lpm" ]; then md "- $repo: no modular release declared on this host: its checks are not run"; continue; fi
+    if [ "$repo" = Laplace-MCP ] && [ -z "$declared" ]; then md "- $repo: SKIPPED: this host declares no modular runtime (no LAPLACE_MODULAR_MANIFEST and no installation/$(hostname | tr '[:upper:]' '[:lower:]')-modular.json), so no MCP is checked"; continue; fi
+    if [ "$repo" = Laplace-MCP ] && [ ! -x "$lpm" ]; then continue; fi    # its failure is said above
     [ -f "$runner" ] || { bad "$repo has no $runner"; continue; }
     if TMPDIR=$scratch LAPLACE_PROGRAM=$L LAPLACE_ENGINE_BUILD=$LAPLACE_BUILD/Laplace-Engine/icx-release \
        LAPLACE_ENGINE_SOURCE=$LAPLACE_SRC/Laplace-Engine LAPLACE_LPM=$lpm \
