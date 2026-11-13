@@ -23,11 +23,11 @@ resolve() {
       return
     fi
   done <<< "$eligible"
-  # Siblings build from Native main; wait only while its run executes. A queued run cannot start while this job holds the runner.
+  # Siblings build from Native main; wait while its run for this revision is queued or executing (Native has its own runner).
   pending=$(jq -sr --arg revision "$revision" '[.[].workflow_runs[] | select(.head_sha == $revision and
-    .head_branch == "main" and .path == ".github/workflows/laplace.yml" and .status == "in_progress")] | length' <<< "$runs") || return
+    .head_branch == "main" and .path == ".github/workflows/laplace.yml" and (.status == "in_progress" or .status == "queued" or .status == "waiting" or .status == "pending" or .status == "requested"))] | length' <<< "$runs") || return
   if (( pending > 0 && SECONDS < ${LAPLACE_NATIVE_WAIT:-5400} )); then
-    echo "Native run for $revision still in progress; waiting" >&2; sleep 60; resolve "$owner" "$revision"; return
+    echo "Native run for $revision not finished; waiting" >&2; sleep 60; resolve "$owner" "$revision"; return
   fi
   fail "No verified Native cache artifact for revision $revision"
 }
