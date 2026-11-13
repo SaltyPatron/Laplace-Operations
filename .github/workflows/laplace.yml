@@ -92,6 +92,7 @@ jobs:
       postgres: ${{ steps.refs.outputs.postgres }}
       engine: ${{ steps.refs.outputs.engine }}
       mcp: ${{ steps.refs.outputs.mcp }}
+      current: ${{ steps.current.outputs.current }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -104,8 +105,25 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
         run: python3 .github/scripts/resolve-dependencies.py
+      # Every queued run deploys every repository at its main, so a run whose revisions are already deployed and
+      # verified (the tests job records them) has nothing to do. A manual dispatch always runs.
+      - name: Are these exact revisions already deployed and verified?
+        id: current
+        env:
+          EVENT: ${{ github.event_name }}
+          KEY: "operations=${{ github.sha }} native=${{ steps.refs.outputs.native }} postgres=${{ steps.refs.outputs.postgres }} engine=${{ steps.refs.outputs.engine }} mcp=${{ steps.refs.outputs.mcp }}"
+        run: |
+          . ./laplace.env
+          record="$LAPLACE_WORK/deployed-revisions"
+          if [ "$EVENT" != workflow_dispatch ] && [ -f "$record" ] && [ "$(cat "$record")" = "$KEY" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+            echo "Already deployed and verified: $KEY; nothing to do" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
   qualify-engine:
     needs: resolve
+    if: needs.resolve.outputs.current != 'true'
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
     timeout-minutes: 90
     defaults:
@@ -253,6 +271,12 @@ jobs:
         with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-MCP", ref: "${{ needs.resolve.outputs.mcp }}", path: Laplace-MCP, token: "${{ secrets.LAPLACE_CHECKOUT }}", clean: false }
       - name: the database checks of the deployed revisions, against the deployed database
         run: ./Laplace-Operations/verify.sh tests
+      - name: Record the revisions this deployment verified
+        env:
+          KEY: "operations=${{ github.sha }} native=${{ needs.resolve.outputs.native }} postgres=${{ needs.resolve.outputs.postgres }} engine=${{ needs.resolve.outputs.engine }} mcp=${{ needs.resolve.outputs.mcp }}"
+        run: |
+          . ./Laplace-Operations/laplace.env
+          printf '%s' "$KEY" > "$LAPLACE_WORK/deployed-revisions.tmp" && mv "$LAPLACE_WORK/deployed-revisions.tmp" "$LAPLACE_WORK/deployed-revisions"
   reads:
     needs: [deploy, checks, ingest]
     if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.ingest.result != 'failure' && needs.ingest.result != 'cancelled'
