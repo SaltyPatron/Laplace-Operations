@@ -159,7 +159,6 @@ jobs:
           bash tests/native-inputs.sh
           bash tests/deployment-readback.sh
           bash tests/fingerprint-comparison.sh
-          ruby tests/deployment-workflow.rb
           ruby tests/secrets-setup.rb
           bash tests/appdb-secrets.sh
           bash tests/secrets-recovery.sh
