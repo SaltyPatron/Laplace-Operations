@@ -360,7 +360,7 @@ if ($Operation -in @('ingest','seed','sources','data')) {
     # A reseed is the deployment's own path (laplace.yml reseed=true): drop, deploy, modular activation and cache
     # bindings, stamp, then every source. ingest.yml only ingests into the deployed database.
     $workflow = if ($Operation -eq 'seed') { 'laplace.yml' } else { 'ingest.yml' }
-    $ingestInputs = if ($Operation -eq 'seed') { @('-f','reseed=true','-f','drop=false','-f','cloud=false') } else { @('-f',"sources=$($Names -join ' ')",'-f','reseed=false') }
+    $ingestInputs = if ($Operation -eq 'seed') { @('-f','reseed=true','-f','drop=false') } else { @('-f',"sources=$($Names -join ' ')",'-f','reseed=false') }
     Write-Host ($(if ($Operation -eq 'seed') { 'Reseed hart-server: drop, deploy, activate, ingest every source of LAPLACE_SOURCES.' } elseif ($Names) { "Ingest on hart-server: $($Names -join ' ')." } else { 'Ingest on hart-server: every source of LAPLACE_SOURCES.' }))
     $output = & gh workflow run $workflow --repo 'SaltyPatron/Laplace-Operations' --ref main @ingestInputs 2>&1
     if ($LASTEXITCODE -ne 0) { throw ($output -join "`n") }
@@ -454,7 +454,7 @@ if ($Operation -eq 'components') {
     if ($Target -eq 'production') { throw 'Use deploy for public production delivery; components supports staging and on-demand cloud-host verification.' }
     if (-not $PSBoundParameters.ContainsKey('Repository')) { $Repository = 'SaltyPatron/Laplace-Operations' }
     $workflow = 'laplace.yml'
-    $inputs = @('-f','drop=false','-f','reseed=false','-f',"cloud=$($Target -eq 'cloud')".ToLowerInvariant())
+    $inputs = @('-f','drop=false','-f','reseed=false')
     if ($Force) { $inputs += @('-f','rebuild_runtime=true') }
     Write-Host "Verify component deployment from $Revision on $Target."
 } elseif ($Operation -eq 'deploy') {

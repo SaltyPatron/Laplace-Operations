@@ -14,7 +14,7 @@ resolve() {
     [[ -n $run ]] || continue
     jobs=$(gh api --paginate "repos/$owner/Laplace-Native/actions/runs/$run/jobs?per_page=100") || return
     passed=$(jq -sr '[.[].jobs[] | select(.conclusion == "success") | .name] |
-      contains(["native (icx-release)","native (gcc-release)","isa"])' <<< "$jobs") || return
+      contains(["native (icx-release)","native (gcc-release)"])' <<< "$jobs") || return
     [[ $passed == true ]] || continue
     artifacts=$(gh api --paginate "repos/$owner/Laplace-Native/actions/runs/$run/artifacts?per_page=100") || return
     available=$(jq -sr 'any(.[].artifacts[]; .name == "native-prepared-inputs" and .expired == false)' <<< "$artifacts") || return

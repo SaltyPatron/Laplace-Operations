@@ -44,8 +44,7 @@ if [[ "$target" != local ]]; then
     components)
       [[ "$target" != production ]] || { echo 'Production receives verified application packages; no build was dispatched' >&2; exit 2; }
       repository="${LAPLACE_GITHUB:-SaltyPatron}/Laplace-Operations"
-      cloud=false; [[ "$target" != cloud ]] || cloud=true
-      dispatch=(laplace.yml -f drop=false -f reseed=false -f "cloud=$cloud" -f "rebuild_runtime=$force") ;;
+      dispatch=(laplace.yml -f drop=false -f reseed=false -f "rebuild_runtime=$force") ;;
     *) usage >&2; exit 2 ;;
   esac
   output=$(gh workflow run "${dispatch[@]}" --repo "$repository" --ref main)

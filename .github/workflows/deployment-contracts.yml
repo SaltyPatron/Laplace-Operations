@@ -165,7 +165,6 @@ jobs:
           python3 tests/database-compatibility.py
           python3 tests/dependency-revisions.py
           python3 tests/cloud-idle.py
-          python3 tests/cloud-lease.py
           python3 tests/development-database.py
           python3 tests/substrate-maintain.py
           python3 tests/host-repair.py

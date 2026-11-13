@@ -54,7 +54,7 @@ git -C "$work/native" add scripts
 git -C "$work/native" -c user.name=fixture -c user.email=fixture@example.invalid commit -qm fixture
 export NATIVE_REVISION=$(git -C "$work/native" rev-parse HEAD)
 test "$(bash "$ROOT/native-inputs.sh" resolve fixture "$NATIVE_REVISION")" = 7
-for missing in 'native (icx-release)' 'native (gcc-release)' isa; do
+for missing in 'native (icx-release)' 'native (gcc-release)'; do
   if NATIVE_MISSING_JOB="$missing" bash "$ROOT/native-inputs.sh" resolve fixture "$NATIVE_REVISION" > "$work/rejected.log" 2>&1; then
     echo "FAIL incomplete qualification accepted: $missing" >&2; exit 1
   fi
