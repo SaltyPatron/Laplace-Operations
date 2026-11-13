@@ -49,6 +49,10 @@ def config_load(path):
             raise ValueError('Invalid modular identity: ' + key)
     if config['runtime_user'] in (config['operator'], config['pg_os_user'], 'root', 'laplace-runner'):
         raise ValueError('Runtime identity must be independent of operator, deployer and database administrator')
+    runs = config.get('ingest_runs')
+    if runs is not None and (not isinstance(runs, str) or not Path(runs).is_absolute() or '..' in Path(runs).parts
+                             or any(c in runs for c in '\n\r\0"')):
+        raise ValueError('Invalid modular path: ingest_runs')
     if not re.fullmatch(r'/[a-z][a-z0-9-]*', config['web_path']) or not re.fullmatch(r'https://[a-z0-9.-]+', config['web_origin']):
         raise ValueError('Invalid modular web declaration')
     for key in ('threads', 'build_jobs', 'connection_limit', 'batch_mb', 'http_port', 'port', 'web_port'):

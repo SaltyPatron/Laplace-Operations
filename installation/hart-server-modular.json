@@ -27,6 +27,7 @@
   "web_port": 5193,
   "web_path": "/modular",
   "web_origin": "https://staging.hartonomous.com",
+  "ingest_runs": "/repos/work/agents/Laplace-Operations/logs/ingest-runs",
   "tier0": "/repos/work/tier0/tier0.bin",
   "flags": "/repos/work/tier0/tier0.flags",
   "highway": "/repos/work/tier0/tier0.highway",
