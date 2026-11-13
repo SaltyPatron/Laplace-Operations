@@ -3,18 +3,29 @@
 set -euo pipefail
 here=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
 operation=${1:-help}; shift || true
-target=local; wait=0; force=false; arguments=()
+target=local; wait=0; force=false; yes=0; json=0; arguments=()
 usage() {
   echo 'laplace-ops runs'
   echo 'laplace-ops status|verify|deploy --target staging|production [--wait]'
   echo 'laplace-ops components --target staging|cloud [--wait] [--force]'
   echo 'laplace-ops clean|cleanup|storage [--target staging|production] [--receipt PATH]'
+  echo 'laplace-ops db --target staging|cloud substrate|application status|migrate|repair|remigrate|recreate|reindex [--wait]'
+  echo 'laplace-ops ingest [--target staging] [SOURCE...] [--wait]     ingest.sh here; ingest.yml on staging'
+  echo 'laplace-ops seed --target staging --yes [--wait]               laplace.yml with reseed on staging'
+  echo 'laplace-ops data [--target staging] [status|fetch|record] [SET...]   data.sh here, or on $LAPLACE_PEER over SSH'
+  echo 'laplace-ops sources [--json]                                   this machine: laplace sources (--json: laplace ingest --catalog)'
 }
 while (($#)); do
   case "$1" in
     --target|-Target) (($# >= 2)) || { usage >&2; exit 2; }; target=$2; shift 2 ;;
     --wait|-Wait) wait=1; shift ;;
     --force|-Force) force=true; shift ;;
+    --yes|-Yes|-y) yes=1; shift ;;
+    --json|-Json) json=1; shift ;;
+    --database|-Database|--database-operation|-DatabaseOperation) (($# >= 2)) || { usage >&2; exit 2; }; arguments+=("$2"); shift 2 ;;
+    staging|production|cloud) target=$1; shift ;;             # as laplace.ps1: the target may be named as a word
+    yes) yes=1; shift ;;
+    wait) wait=1; shift ;;
     *) arguments+=("$1"); shift ;;
   esac
 done
@@ -29,6 +40,85 @@ if [[ "$operation" == runs ]]; then
 fi
 if [[ "$force" == true && ( "$operation" != components || "$target" != staging ) ]]; then
   echo '--force explicitly replaces staging native releases; use components --target staging' >&2; exit 2
+fi
+if [[ "$yes" == 1 && "$operation" != seed ]]; then echo '--yes confirms seed only; nothing was run' >&2; exit 2; fi
+if [[ "$json" == 1 && "$operation" != sources ]]; then echo '--json applies to sources only; nothing was run' >&2; exit 2; fi
+dispatch_and_watch() {    # repository, then the workflow and its inputs
+  local repository=$1 output run; shift
+  output=$(gh workflow run "$@" --repo "$repository" --ref main)
+  printf '%s\n' "$output"
+  if [[ "$wait" == 1 ]]; then
+    run=$(printf '%s\n' "$output" | sed -n 's|.*/actions/runs/\([0-9][0-9]*\).*|\1|p')
+    [[ -n "$run" ]] || { echo "GitHub returned no run ID; inspect gh run list --repo $repository" >&2; exit 1; }
+    gh run watch "$run" --repo "$repository" --exit-status --interval 10
+  fi
+  exit 0
+}
+if [[ "$operation" == data ]]; then
+  data_operation=status
+  if ((${#arguments[@]})) && [[ "${arguments[0]}" == status || "${arguments[0]}" == fetch || "${arguments[0]}" == record ]]; then
+    data_operation=${arguments[0]}; arguments=("${arguments[@]:1}")
+  fi
+  [[ "$wait" == 0 ]] || { echo '--wait applies to dispatched workflows; data runs in the foreground' >&2; exit 2; }
+  case "$target" in
+    local) exec bash "$here/data.sh" "$data_operation" "${arguments[@]}" ;;
+    staging)
+      peer=${LAPLACE_PEER:-$(bash -c '. "$1/laplace.env" >/dev/null && printf %s "${LAPLACE_PEER:-}"' _ "$here")}
+      [[ -n "$peer" ]] || { echo 'data staging reaches the deployment target over SSH: LAPLACE_PEER (machine.env) names it' >&2; exit 1; }
+      # the target's own checkout, at the LAPLACE_SRC laplace.env gives hart-server
+      remote=; for word in /repos/src/Laplace-Operations/data.sh "$data_operation" "${arguments[@]}"; do
+        quoted=${word//\'/\'\\\'\'}; remote+="'$quoted' "; done
+      exec ssh -o BatchMode=yes "$peer" "$remote" ;;
+    *) echo 'data supports this machine or --target staging' >&2; exit 2 ;;
+  esac
+fi
+if [[ "$operation" == sources ]]; then
+  [[ "$target" == local && "$wait" == 0 && ${#arguments[@]} == 0 ]] || { echo 'sources reads this machine; on hart-server run it there' >&2; exit 2; }
+  program=${LAPLACE_PROGRAM:-$(command -v laplace || true)}
+  [[ -n "$program" && -x "$program" ]] || { echo 'no laplace program: set LAPLACE_PROGRAM or install the modular client' >&2; exit 1; }
+  if [[ "$json" == 1 ]]; then exec "$program" ingest --catalog; else exec "$program" sources; fi
+fi
+if [[ "$operation" == ingest || "$operation" == seed ]]; then
+  if [[ "$operation" == seed ]]; then
+    [[ "$yes" == 1 ]] || { echo 'seed drops the database first: pass --yes' >&2; exit 2; }
+    [[ "$target" == staging ]] || { echo 'seed supports --target staging; on this machine run deploy.sh drop, then ingest.sh' >&2; exit 2; }
+    ((${#arguments[@]} == 0)) || { echo 'seed ingests every source of LAPLACE_SOURCES; it takes no names' >&2; exit 2; }
+  fi
+  case "$target" in
+    local) [[ "$wait" == 0 ]] || { echo '--wait applies to dispatched workflows; ingest runs in the foreground' >&2; exit 2; }
+           exec bash "$here/ingest.sh" "${arguments[@]}" ;;
+    staging) ;;
+    *) echo "$operation supports this machine or --target staging" >&2; exit 2 ;;
+  esac
+  for name in "${arguments[@]}"; do [[ "$name" != -* ]] || { echo "Unexpected argument $name; no workflow dispatched" >&2; exit 2; }; done
+  repository="${LAPLACE_GITHUB:-SaltyPatron}/Laplace-Operations"
+  # A reseed is the deployment's own path (laplace.yml reseed=true): drop, deploy, modular activation and cache
+  # bindings, stamp, then every source. ingest.yml only ingests into the deployed database.
+  if [[ "$operation" == seed ]]; then
+    echo 'Reseed hart-server: drop, deploy, activate, ingest every source of LAPLACE_SOURCES.'
+    dispatch_and_watch "$repository" laplace.yml -f reseed=true -f drop=false
+  fi
+  if ((${#arguments[@]})); then echo "Ingest on hart-server: ${arguments[*]}."; else echo 'Ingest on hart-server: every source of LAPLACE_SOURCES.'; fi
+  dispatch_and_watch "$repository" ingest.yml -f "sources=${arguments[*]}" -f reseed=false
+fi
+if [[ "$operation" == db ]]; then
+  case "$target" in staging|cloud) ;; production) echo 'Use --target staging or cloud for remote database maintenance' >&2; exit 2 ;;
+    *) echo 'db on Linux dispatches db-ops.yml: --target staging or cloud' >&2; exit 2 ;; esac
+  database=; db_operation=status
+  for word in "${arguments[@]}"; do
+    case "$word" in
+      substrate|application) database=$word ;;
+      app) database=application ;;
+      status|migrate|repair|remigrate|recreate|reindex) db_operation=$word ;;
+      up) db_operation=migrate ;;
+      reset) db_operation=remigrate ;;
+      nuke) db_operation=recreate ;;
+      *) echo "Unrecognized db argument '$word'; no workflow dispatched" >&2; exit 2 ;;
+    esac
+  done
+  [[ -n "$database" ]] || { echo 'Remote database maintenance requires substrate or application' >&2; exit 2; }
+  echo "Dispatching db-ops.yml ($database / $db_operation) on $target from main."
+  dispatch_and_watch "${LAPLACE_GITHUB:-SaltyPatron}/Laplace" db-ops.yml -f "target=$target" -f "operation=$db_operation" -f "database=$database"
 fi
 if [[ "$target" != local ]]; then
   ((${#arguments[@]} == 0)) || { echo 'Unexpected hosted-operation arguments; no workflow dispatched' >&2; exit 2; }
@@ -47,14 +137,7 @@ if [[ "$target" != local ]]; then
       dispatch=(laplace.yml -f drop=false -f reseed=false -f "rebuild_runtime=$force") ;;
     *) usage >&2; exit 2 ;;
   esac
-  output=$(gh workflow run "${dispatch[@]}" --repo "$repository" --ref main)
-  printf '%s\n' "$output"
-  if [[ "$wait" == 1 ]]; then
-    run=$(printf '%s\n' "$output" | sed -n 's|.*/actions/runs/\([0-9][0-9]*\).*|\1|p')
-    [[ -n "$run" ]] || { echo "GitHub returned no run ID; inspect gh run list --repo $repository" >&2; exit 1; }
-    gh run watch "$run" --repo "$repository" --exit-status --interval 10
-  fi
-  exit 0
+  dispatch_and_watch "$repository" "${dispatch[@]}"
 fi
 case "$operation" in
   clean|cleanup) exec bash "$here/storage.sh" clean --finish-job "${arguments[@]}" ;;

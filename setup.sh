@@ -397,7 +397,10 @@ rights(){ part rights
     systemctl disable --now -q "$u" 2>/dev/null || true; rm -rf "/etc/systemd/system/$u" "/etc/systemd/system/$u.d"; say "unit" "removed $u"; done
   systemctl daemon-reload
   for pth in $LEGACY_PATHS; do [ -e "$pth" ] || [ -L "$pth" ] || continue; rm -rf "$pth"; say "removed" "$pth"; done
-  command -v nginx >/dev/null && nginx -t -q 2>/dev/null && systemctl reload nginx 2>/dev/null || true
+  if command -v nginx >/dev/null; then
+    nginx -t -q || { say "nginx" "REFUSED: the configuration does not pass nginx -t (above)"; exit 1; }
+    systemctl reload nginx || { say "nginx" "reload FAILED: systemctl status nginx"; exit 1; }
+  fi
   for u in $LEGACY_USERS; do id "$u" >/dev/null 2>&1 && { userdel "$u" 2>/dev/null; say "user" "removed $u"; }; done
   # The restart controller is installed after PostgreSQL has established its
   # actual service/cluster identity, by the restart-controller setup stage.
