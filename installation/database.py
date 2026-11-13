@@ -13,6 +13,13 @@ ALTER ROLE "{role}" NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRL
 GRANT CONNECT,TEMPORARY ON DATABASE "{database}" TO "{role}";
 GRANT SET ON PARAMETER session_replication_role TO "{role}";
 CREATE SCHEMA IF NOT EXISTS stage;
+-- The stage templates are otherwise made lazily by the first ingest, after this grant, owned by whoever ingested
+-- first: a recreated database then refused the runtime its own staging ("permission denied for table entity").
+DO $$ DECLARE native name; BEGIN
+ SELECT n.nspname INTO native FROM pg_catalog.pg_extension e
+ JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace WHERE e.extname='laplace';
+ IF native IS NOT NULL THEN EXECUTE format('SELECT %I.laplace_ensure_stage()', native); END IF;
+END $$;
 GRANT USAGE,CREATE ON SCHEMA stage TO "{role}";
 GRANT SELECT,INSERT,UPDATE,DELETE,TRUNCATE,MAINTAIN ON ALL TABLES IN SCHEMA stage TO "{role}";
 DO $$ DECLARE item record; native name; BEGIN

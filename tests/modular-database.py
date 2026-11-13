@@ -45,7 +45,8 @@ SET LOCAL session_replication_role=replica;
 UPDATE "native runtime".entity SET tier=tier WHERE false;
 DELETE FROM "native runtime".entity WHERE false;
 TRUNCATE "native runtime".physicality,"native runtime".consensus,"native runtime".attestation,"native runtime".entity;
-CREATE TABLE stage.runtime_batch(id int); INSERT INTO stage.runtime_batch VALUES(1); ROLLBACK;''')
+CREATE TABLE stage.runtime_batch(id int); INSERT INTO stage.runtime_batch VALUES(1);
+CREATE UNLOGGED TABLE stage.runtime_entities (LIKE stage.entity INCLUDING DEFAULTS); ROLLBACK;''')
     for forbidden in ('SELECT * FROM app.private;', 'SELECT * FROM public.entity;', 'INSERT INTO public.entity VALUES(2);', 'SET ROLE laplace;',
                       'CREATE TABLE public.forbidden(id int);', 'ALTER ROLE laplace SUPERUSER;'):
         sql(name, f'SET SESSION AUTHORIZATION "{name}"; BEGIN; {forbidden} ROLLBACK;', succeeds=False)
