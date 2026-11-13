@@ -16,8 +16,8 @@ class DeploymentWorkflow < Minitest::Test
   end
   def test_cloud_waits_for_staging_runtime_results
     cloud=@jobs.fetch('deploy-cloud')
-    assert_equal %w[deploy checks reads cloud-acquire], cloud.fetch('needs')
-    %w[deploy checks reads].each { |job| assert_includes cloud.fetch('if'), "needs.#{job}.result == 'success'" }
+    assert_equal %w[deploy checks tests reads cloud-acquire], cloud.fetch('needs')
+    %w[deploy checks tests reads].each { |job| assert_includes cloud.fetch('if'), "needs.#{job}.result == 'success'" }
     assert_includes cloud.fetch('if'), 'inputs.cloud == true'
   end
   def test_trusted_deployment_orchestration_uses_the_existing_host_without_replacing_sibling_checkouts
@@ -53,6 +53,18 @@ class DeploymentWorkflow < Minitest::Test
       assert_includes @jobs.fetch(readback).fetch('needs'), delivery
     end
     refute @jobs.fetch('reads').fetch('steps').any? { |step| step['run']&.include?('modular.py deploy') }
+  end
+  def test_database_checks_run_against_the_deployed_revisions_after_readback
+    tests=@jobs.fetch('tests')
+    assert_equal %w[resolve deploy checks ingest], tests.fetch('needs')
+    %w[deploy checks].each { |job| assert_includes tests.fetch('if'), "needs.#{job}.result == 'success'" }
+    steps=tests.fetch('steps')
+    assert_equal './Laplace-Operations/verify.sh tests', steps.filter_map { |step| step['run'] }.join("\n")
+    refute steps.any? { |step| step['continue-on-error'] }
+    refs=steps.filter_map { |step| step.dig('with', 'repository') && [step.dig('with', 'path'), step.dig('with', 'ref')] }.to_h
+    assert_equal '${{ needs.deploy.outputs.postgres }}', refs.fetch('Laplace-postgres')
+    assert_equal '${{ needs.deploy.outputs.engine }}', refs.fetch('Laplace-Engine')
+    assert_equal '${{ needs.resolve.outputs.mcp }}', refs.fetch('Laplace-MCP')
   end
   def test_explicit_ingestion_requires_successful_readback
     assert_includes @jobs.fetch('ingest').fetch('if'), "needs.checks.result == 'success'"

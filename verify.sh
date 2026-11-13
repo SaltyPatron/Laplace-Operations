@@ -8,6 +8,11 @@
 #                        against the one this build makes, and the record laid beside every other machine's for the same
 #                        commits (HART-DESKTOP's, from fingerprint.ps1); published on the branch fingerprints
 #   ./verify.sh reads    the database: laplace status, and reads through the indexes (text, hop, translate)
+#   ./verify.sh tests    the database checks of the deployed revisions, against the deployed database through the deployed
+#                        programs and the installed extension: Laplace-postgres tests/deployed.sh (its regression cases,
+#                        each in a transaction it rolls back), Laplace-Engine tests/deployed/run.sh and Laplace-MCP
+#                        tests/deployed/run.sh (each check ingests its own sources, asserts on what is under its own
+#                        witnesses, and forgets them). Nothing is made, dropped or emptied
 #
 # Exit 1 when something that must hold does not: two decompositions of one source differ, the installed tier 0 is not
 # this build's, a result differs from another machine's that had the same inputs (or its ICU or Unicode version does), the
@@ -16,7 +21,7 @@ set -e
 here=$(cd "$(dirname "$0")" && pwd)
 . "$here/laplace.env"
 case ${1:-build} in
-  deployment|reads) . "$here/operation-lock.sh"; laplace_host_lock shared ;;
+  deployment|reads|tests) . "$here/operation-lock.sh"; laplace_host_lock shared ;;
 esac
 L=${LAPLACE_PROGRAM:-$LAPLACE_BUILD/Laplace-Engine/icx-release/laplace}
 log=$LAPLACE_WORK/logs/verify/$(date -u +%Y%m%dT%H%M%SZ)-${1:-build}; mkdir -p "$log"
@@ -109,11 +114,33 @@ reads(){
   [ "$empty" = 0 ] || md "- the database holds no standings yet: reads say nothing until a source is in"
 }
 
+tests(){
+  db=$(echo "$LAPLACE_CONNINFO" | sed -n 's/.*dbname=\([^ ]*\).*/\1/p')
+  md "## $(hostname): the database checks of the deployed revisions ($db)"
+  scratch=$(mktemp -d "$LAPLACE_WORK/tmp-checks.XXXXXX") || { bad 'no scratch directory under LAPLACE_WORK'; return; }
+  # The deployed MCP service's release, where this host declares one (installation/<host>-modular.json).
+  manifest=$(python3 "$here/installation/modular.py" select --database "$db" 2>/dev/null) || manifest=
+  lpm=; [ -z "$manifest" ] || lpm=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["prefix"])' "$manifest")/current/bin/lpm
+  for component in "Laplace-postgres|tests/deployed.sh" "Laplace-Engine|tests/deployed/run.sh" "Laplace-MCP|tests/deployed/run.sh"; do
+    repo=${component%%|*}; runner=$LAPLACE_SRC/$repo/${component#*|}
+    if [ "$repo" = Laplace-MCP ] && [ ! -x "$lpm" ]; then md "- $repo: no modular release declared on this host: its checks are not run"; continue; fi
+    [ -f "$runner" ] || { bad "$repo has no $runner"; continue; }
+    if TMPDIR=$scratch LAPLACE_PROGRAM=$L LAPLACE_ENGINE_BUILD=$LAPLACE_BUILD/Laplace-Engine/icx-release \
+       LAPLACE_ENGINE_SOURCE=$LAPLACE_SRC/Laplace-Engine LAPLACE_LPM=$lpm \
+       bash "$runner" > "$log/$repo.log" 2>&1; then good "$repo: $(tail -1 "$log/$repo.log")"
+    else bad "$repo: $(tail -1 "$log/$repo.log")"; fi
+    grep -E '^(engine|mcp|postgres) check ' "$log/$repo.log" > "$log/$repo.checks" || true
+    if [ -s "$log/$repo.checks" ]; then block "$log/$repo.checks"; else md '```'; tail -40 "$log/$repo.log" >> "${summary:-/dev/stdout}"; md '```'; fi
+  done
+  rm -rf "$scratch"
+}
+
 case ${1:-build} in
   deployment) deployment ;;
   build) build ;;
   reads) reads ;;
-  *) echo "verify.sh deployment|build|reads"; exit 2 ;;
+  tests) tests ;;
+  *) echo "verify.sh deployment|build|reads|tests"; exit 2 ;;
 esac
 echo "verify.sh ${1:-build}: $( [ $rc = 0 ] && echo passed || echo FAILED ); kept in $log"
 exit $rc

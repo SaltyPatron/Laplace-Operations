@@ -8,6 +8,10 @@
 #   ingest   only when run by hand with `reseed`: ingest.sh, every source of $LAPLACE_SOURCES (laplace.env), and the
 #            stamp written. Deployments on a push or main-merged dispatch never ingest;
 #            the run summary reports the seed-stamp policy.
+#   tests    verify.sh tests: every database check of the deployed revisions (Laplace-postgres's regression cases,
+#            Laplace-Engine's and Laplace-MCP's tests/deployed), against the deployed database through the deployed
+#            programs and the installed extension. The components' own CI has no database; this is where their database
+#            checks run. Each check works under witnesses of its own and forgets them: nothing is made, dropped or emptied
 #   reads    verify.sh reads: laplace status and reads through the indexes
 # The reseed policy: a database carries the stamp of the code it was seeded from (seed-stamp.sh); when Laplace-Native,
 # Laplace-Engine's source or recipes, Laplace-postgres or Operations' floating-point contract change, the stamp
@@ -231,6 +235,23 @@ jobs:
         run: ./Laplace-Operations/ingest.sh
       - name: the database holds the stamp it was seeded from
         run: ./Laplace-Operations/seed-stamp.sh seeded
+  tests:
+    needs: [resolve, deploy, checks, ingest]
+    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.ingest.result != 'failure' && needs.ingest.result != 'cancelled'
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, path: Laplace-Operations, clean: false }
+      # The checks are the deployed revisions' own: the same commits deploy built and installed.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-postgres", ref: "${{ needs.deploy.outputs.postgres }}", path: Laplace-postgres, token: "${{ secrets.LAPLACE_CHECKOUT }}", clean: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-Engine", ref: "${{ needs.deploy.outputs.engine }}", path: Laplace-Engine, token: "${{ secrets.LAPLACE_CHECKOUT }}", clean: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, repository: "${{ github.repository_owner }}/Laplace-MCP", ref: "${{ needs.resolve.outputs.mcp }}", path: Laplace-MCP, token: "${{ secrets.LAPLACE_CHECKOUT }}", clean: false }
+      - name: the database checks of the deployed revisions, against the deployed database
+        run: ./Laplace-Operations/verify.sh tests
   reads:
     needs: [deploy, checks, ingest]
     if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.ingest.result != 'failure' && needs.ingest.result != 'cancelled'
@@ -242,16 +263,16 @@ jobs:
       - name: the database, read
         run: ./Laplace-Operations/verify.sh reads
   # Cloud verification uses the exact dependency revisions captured in staging. It runs only
-  # after deployment readback AND staging runtime reads pass, on explicit cloud dispatch.
+  # after deployment readback, the staging database checks AND staging runtime reads pass, on explicit cloud dispatch.
   cloud-acquire:
-    needs: [deploy, checks, reads]
-    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.reads.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.cloud == true
+    needs: [deploy, checks, tests, reads]
+    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.tests.result == 'success' && needs.reads.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.cloud == true
     uses: ./.github/workflows/cloud-lease.yml
     with:
       operation: acquire
   deploy-cloud:
-    needs: [deploy, checks, reads, cloud-acquire]
-    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.reads.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.cloud == true && needs.cloud-acquire.result == 'success'
+    needs: [deploy, checks, tests, reads, cloud-acquire]
+    if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.tests.result == 'success' && needs.reads.result == 'success' && github.event_name == 'workflow_dispatch' && inputs.cloud == true && needs.cloud-acquire.result == 'success'
     runs-on: [self-hosted, laplace, Laplace-Operations, cloud]
     timeout-minutes: 240
     steps:
