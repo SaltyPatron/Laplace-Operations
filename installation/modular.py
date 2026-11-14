@@ -371,7 +371,8 @@ def database_prepared_paths(config, release):
             or release.parent.resolve() != (Path(config['prefix']) / 'releases').resolve()):
         raise ValueError('Database caches must belong to the selected installed release')
     expected = {'laplace.' + key: str(release / 'share/prepared' / filename)
-                for key, filename in (('tier0', 'tier0.bin'), ('flags', 'tier0.flags'), ('highway', 'tier0.highway'))}
+                for key, filename in (('tier0', 'tier0.bin'), ('flags', 'tier0.flags'), ('highway', 'tier0.highway'),
+                                      ('chess', 'tier0.chess'))}
     if any(not Path(path).is_file() or not Path(path).stat().st_size for path in expected.values()):
         raise ValueError('The installed release lacks its database caches')
     literal = lambda value: "'" + str(value).replace("'", "''") + "'"

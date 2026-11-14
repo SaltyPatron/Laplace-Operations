@@ -61,7 +61,7 @@ CREATE UNLOGGED TABLE stage.runtime_entities (LIKE stage.entity INCLUDING DEFAUL
         release = Path(temporary) / 'releases/verified'
         prepared = release / 'share/prepared'
         prepared.mkdir(parents=True)
-        for filename in ('tier0.bin', 'tier0.flags', 'tier0.highway'):
+        for filename in ('tier0.bin', 'tier0.flags', 'tier0.highway', 'tier0.chess'):
             (prepared / filename).write_bytes(b'configuration-only presence fixture')
         # The real PostgreSQL transport is retained; only the configuration
         # owner is given this disposable database instead of the application.
@@ -70,7 +70,8 @@ CREATE UNLOGGED TABLE stage.runtime_entities (LIKE stage.entity INCLUDING DEFAUL
         try:
             def observed():
                 return json.loads(sql(name, "SELECT json_build_object('laplace.tier0',current_setting('laplace.tier0',true),"
-                    "'laplace.flags',current_setting('laplace.flags',true),'laplace.highway',current_setting('laplace.highway',true));"))
+                    "'laplace.flags',current_setting('laplace.flags',true),'laplace.highway',current_setting('laplace.highway',true),"
+                    "'laplace.chess',current_setting('laplace.chess',true));"))
             before = observed()
             try:
                 with owner.database_prepared_paths(cache_config, release) as paths:

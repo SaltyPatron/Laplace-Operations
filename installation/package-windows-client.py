@@ -27,11 +27,16 @@ def stage_file(source, target):
     return str(target)
 
 
+# The caches a release carries beside its tier 0: the extension and Engine map each from there
+# (laplace.tier0/flags/highway/chess, LAPLACE_CHESS beside tier 0).
+PREPARED = ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway', 'tier0.chess')
+
+
 def copy_prepared(source, destination):
     # Flags need their property layout. Highway identifier dumps and other
     # build diagnostics beside the caches are not runtime dependencies.
     destination.mkdir(parents=True)
-    for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway'):
+    for name in PREPARED:
         stage_file(source / name, destination / name)
 
 
@@ -108,6 +113,44 @@ def prepare_highway(config):
             entries['tier0.highway'] = {'sha256': digest(target), 'bytes': target.stat().st_size}
             listing.write_text(json.dumps(entries, indent=2) + '\n')
         return {'highway': str(target), 'fingerprint': generated, 'replaced': True, 'previous': current}
+    finally:
+        fresh.unlink(missing_ok=True)
+
+
+def prepare_chess(config):
+    """Write the chess perf-cache beside the prepared tier 0 from this Engine and the openings source.
+
+    The same step Linux packaging runs (Laplace-MCP deployment.py prepare_chess): `laplace chess` composes the
+    piece, square, castling and move vocabulary and the positions and moves the openings play, then `--verify`
+    replays every one. The bytes depend only on the Engine, tier 0 and the openings, so the file is replaced only
+    when they differ and an unchanged release stays reusable.
+    """
+    executable = runtime_binaries(config)['bin/laplace.exe']
+    prepared = Path(config['prepared'])
+    target = prepared / 'tier0.chess'
+    data = os.environ.get('LAPLACE_DATA')
+    if not data:
+        raise ValueError('LAPLACE_DATA is not declared: the chess perf-cache is written from the openings source under it')
+    environment = highway_environment(config, Path(config['native']) / 'manifest')
+    environment.update(LAPLACE_RECIPES=str(Path(config['engine']) / 'recipes'), LAPLACE_GRAMMARS=str(config['grammars']),
+                       LAPLACE_DATA=data)
+    fresh = prepared / f'.tier0.chess.{os.getpid()}.tmp'
+    try:
+        for arguments in (['chess', '-o', str(fresh), 'openings'], ['chess', '-o', str(fresh), '--verify']):
+            result = subprocess.run([str(executable), *arguments], env=environment, capture_output=True, text=True,
+                                    timeout=600)
+            if result.returncode:
+                raise ValueError('laplace ' + ' '.join(arguments[:1] + arguments[3:]) + ' failed: '
+                                 + (result.stderr or result.stdout))
+        if target.is_file() and digest(target) == digest(fresh):
+            return {'chess': str(target), 'replaced': False}
+        os.replace(fresh, target)
+        listing = prepared / 'manifest.json'
+        if listing.is_file():
+            entries = json.loads(listing.read_text())
+            entries['tier0.chess'] = {'sha256': digest(target), 'bytes': target.stat().st_size}
+            listing.write_text(json.dumps(entries, indent=2) + '\n')
+        return {'chess': str(target), 'replaced': True}
     finally:
         fresh.unlink(missing_ok=True)
 
@@ -210,8 +253,7 @@ def reusable_release(config, revisions):
                              (Path(config['native']) / 'manifest', 'share/manifest')):
             inputs.update({target + '/' + file.relative_to(root).as_posix(): file for file in root.rglob('*')
                            if file.is_file() and not (target == 'share/recipes' and file.relative_to(root).as_posix().startswith('formats/grammars/'))})
-        inputs.update({'share/prepared/' + name: Path(config['prepared']) / name
-                       for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway')})
+        inputs.update({'share/prepared/' + name: Path(config['prepared']) / name for name in PREPARED})
         grammars = sorted(Path(config['grammars']).glob('*.dll'))
         if not grammars:
             return None
@@ -326,6 +368,7 @@ def main():
                        '-Output', str(grammar_source), '-BuildDirectory', str(Path(config['mcp_build'] if has_mcp else config['build']) / 'grammars'),
                        *(['-Force'] if args.force else [])])
         print(json.dumps({'prepared_highway': prepare_highway(config)}), flush=True)
+        print(json.dumps({'prepared_chess': prepare_chess(config)}), flush=True)
         reusable = reusable_release(config, revisions) if not args.force else None
         if reusable is not None:
             ensure_release_access(config, reusable, operator_sid)

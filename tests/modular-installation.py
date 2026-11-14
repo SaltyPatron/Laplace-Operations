@@ -526,10 +526,11 @@ class Installation(unittest.TestCase):
         config['database'] = 'selected_database'
         prepared = release / 'share/prepared'
         prepared.mkdir(parents=True)
-        for name in ('tier0.bin', 'tier0.flags', 'tier0.highway'):
+        caches = ('tier0.bin', 'tier0.flags', 'tier0.highway', 'tier0.chess')
+        for name in caches:
             (prepared / name).write_bytes(b'cache presence fixture')
-        expected = dict(zip(('laplace.tier0', 'laplace.flags', 'laplace.highway'),
-                            map(str, (prepared / name for name in ('tier0.bin', 'tier0.flags', 'tier0.highway')))))
+        expected = dict(zip(('laplace.tier0', 'laplace.flags', 'laplace.highway', 'laplace.chess'),
+                            map(str, (prepared / name for name in caches))))
         previous = {'laplace.tier0': "/prior/owner's/tier0.bin"}
         with patch.object(modular, 'sql', side_effect=[json.dumps(previous), '', json.dumps(expected), '']) as execute:
             with self.assertRaisesRegex(RuntimeError, 'activation failed'):

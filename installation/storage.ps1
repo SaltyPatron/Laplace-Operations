@@ -117,10 +117,10 @@ function Get-StorageDatabaseReferences([string]$Configuration="$PSScriptRoot/har
 SELECT DISTINCT path FROM (
  SELECT pg_catalog.substr(setting,pg_catalog.strpos(setting,'=')+1) AS path
  FROM pg_catalog.pg_db_role_setting r CROSS JOIN LATERAL pg_catalog.unnest(r.setconfig) setting
- WHERE pg_catalog.split_part(setting,'=',1) IN ('laplace.tier0','laplace.flags','laplace.highway')
+ WHERE pg_catalog.split_part(setting,'=',1) IN ('laplace.tier0','laplace.flags','laplace.highway','laplace.chess')
  UNION ALL
  SELECT setting FROM pg_catalog.pg_file_settings
- WHERE name IN ('laplace.tier0','laplace.flags','laplace.highway') AND error IS NULL
+ WHERE name IN ('laplace.tier0','laplace.flags','laplace.highway','laplace.chess') AND error IS NULL
 ) config_paths WHERE path <> '';
 '@
     foreach ($argument in @('-X','-w','-h',[string]$target.host,'-p',[string]$target.port,'-U',[string]$config.role,

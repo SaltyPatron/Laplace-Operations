@@ -251,10 +251,11 @@ class ClientInputs(unittest.TestCase):
         spec.loader.exec_module(package)
         source, destination = self.root / 'prepared', self.root / 'packaged'
         source.mkdir()
-        for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway', 'tier0.highway.nodes'):
+        for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway', 'tier0.chess', 'tier0.highway.nodes'):
             (source / name).write_bytes(name.encode())
         package.copy_prepared(source, destination)
-        self.assertEqual({p.name for p in destination.iterdir()}, {'tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway'})
+        self.assertEqual({p.name for p in destination.iterdir()},
+                         {'tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway', 'tier0.chess'})
         for file in destination.iterdir():
             self.assertEqual(file.read_bytes(), (source / file.name).read_bytes())
 
@@ -317,7 +318,7 @@ class PackageReuse(unittest.TestCase):
             'share/manifest/banks.tsv': self.root / 'native/manifest/banks.tsv',
             'share/grammars/test.dll': self.root / 'grammars/test.dll',
             **{'share/prepared/' + name: self.root / 'prepared' / name
-               for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway')},
+               for name in ('tier0.bin', 'tier0.flags', 'tier0.flags.layout', 'tier0.highway', 'tier0.chess')},
         }
         for key, source in self.sources.items():
             source.parent.mkdir(parents=True, exist_ok=True)
