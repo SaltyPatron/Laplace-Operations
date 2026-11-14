@@ -493,7 +493,7 @@ def installed_database_proof(configuration, psql, work):
         finally:
             subprocess.run([str(psql), '-X', '-w', '-d', maintenance, '-v', 'ON_ERROR_STOP=1',
                             '-v', 'laplace_database=' + database], env=env, check=True, text=True,
-                           input="SELECT format('DROP DATABASE IF EXISTS %I', :'laplace_database')\n\\gexec\n")
+                           input="SELECT format('DROP DATABASE IF EXISTS %I WITH (FORCE)', :'laplace_database')\n\\gexec\n")
 
 
 if __name__ == '__main__':

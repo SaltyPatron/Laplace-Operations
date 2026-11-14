@@ -29,7 +29,7 @@ def deploy(configuration, psql, *, drop=False):
         maintenance = environment['LAPLACE_CONNINFO'] + " dbname='postgres'"
         subprocess.run([str(psql), '-X', '-w', '-d', maintenance, '-v', 'ON_ERROR_STOP=1',
                         '-v', 'laplace_database=' + database], env=env, check=True,
-                       input="SELECT format('DROP DATABASE IF EXISTS %I', :'laplace_database')\n\\gexec\n", text=True)
+                       input="SELECT format('DROP DATABASE IF EXISTS %I WITH (FORCE)', :'laplace_database')\n\\gexec\n", text=True)
     subprocess.run([str(executable), 'deploy', '--configure-server-cache'], env=env, check=True)
     grants = (
         "DO $$ BEGIN "
