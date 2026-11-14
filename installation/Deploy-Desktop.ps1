@@ -83,7 +83,10 @@ if($selected.Contains('modular')){
     $steps+=@{name='Package modular Native, Engine and MCP; update installed client';script="$PSScriptRoot/install-windows-client.ps1";arguments=$arguments}
 }
 if($selected.Contains('modular')){
-    $steps+=@{name='Migrate the installed modular substrate and select server-local caches';command=(Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd');arguments=@('deploy','--configure-server-cache')}
+    # deploy-client.py: laplace deploy --configure-server-cache, then the modular browser's read grants. A changed
+    # extension recreates the database (no upgrade path), and a recreated database holds no grant for
+    # laplace_modular_web until they are given again; Linux grants in the same step (deploy.sh modular-grants).
+    $steps+=@{name='Migrate the installed modular substrate, select server-local caches and grant its readers';command='py';arguments=@('-3',"$PSScriptRoot/deploy-client.py",'--configuration',$modular.operator_client.configuration,'--psql',(Join-Path $env:LAPLACE_PG_DIR 'bin/psql.exe'))}
 }
 if($selected.Contains('uci')){
     $steps+=@{name='Publish the desktop UCI connector and bind its engine to the selected local substrate';script="$PSScriptRoot/desktop-uci.ps1";arguments=@('-IisInstallation',$installation,'-Publish')}
