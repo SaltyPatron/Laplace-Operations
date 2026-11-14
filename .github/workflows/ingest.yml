@@ -36,6 +36,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { path: Laplace-Operations, clean: false }
+      # laplace-operational reads $LAPLACE_SRC/Laplace/seeds/operational (its Laplace-Engine source declaration), and
+      # LAPLACE_SRC is this workspace: without the monorepo's seeds here the source was "at none of its roots" on every
+      # run. Only that directory is checked out, at the monorepo's main.
+      - uses: actions/checkout@v4
+        with: { repository: "${{ github.repository_owner }}/Laplace", path: Laplace, token: "${{ secrets.LAPLACE_CHECKOUT }}",
+                persist-credentials: false, sparse-checkout: seeds/operational, sparse-checkout-cone-mode: true }
       - name: Explicitly repair the installed canonical projection
         if: inputs.repair_projection
         env:
