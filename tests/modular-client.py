@@ -195,7 +195,9 @@ class ClientInputs(unittest.TestCase):
         self.assertEqual(run.call_count, 1)
         self.assertTrue(run.call_args.args[0][4].endswith(" dbname='postgres'"))
         self.assertIn('laplace_database=selected', run.call_args.args[0])
-        self.assertNotIn('FORCE', run.call_args.kwargs['input'])
+        # A requested recreate of a greenfield database ends the sessions holding it (an orphaned sweep, a
+        # client that died) rather than failing on them.
+        self.assertIn('WITH (FORCE)', run.call_args.kwargs['input'])
 
     def test_installed_migration_does_not_drop_or_build(self):
         executable, environment, psql = self.deployment()
