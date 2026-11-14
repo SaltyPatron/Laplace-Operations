@@ -135,9 +135,9 @@ def database_references(config):
     environment = {key: value for key, value in os.environ.items() if not key.startswith('PG')}
     query = """SELECT pg_catalog.substr(setting,pg_catalog.strpos(setting,'=')+1)
 FROM pg_catalog.pg_db_role_setting r CROSS JOIN LATERAL pg_catalog.unnest(r.setconfig) setting
-WHERE pg_catalog.split_part(setting,'=',1) IN ('laplace.tier0','laplace.flags','laplace.highway')
+WHERE pg_catalog.split_part(setting,'=',1) IN ('laplace.tier0','laplace.flags','laplace.highway','laplace.chess')
 UNION SELECT pg_catalog.current_setting(name,true) FROM
-(VALUES ('laplace.tier0'),('laplace.flags'),('laplace.highway')) settings(name);"""
+(VALUES ('laplace.tier0'),('laplace.flags'),('laplace.highway'),('laplace.chess')) settings(name);"""
     role = (config.get('operator_client') or {}).get('role') or os.environ.get('LAPLACE_ROLE', 'laplace')
     command = [str(Path(config['pgbin']) / 'psql'), '-X', '-w', '-Atq', '-v', 'ON_ERROR_STOP=1',
                '-h', config['socket'], '-p', str(config['port']), '-U', role, '-d', 'postgres', '-c', query]
