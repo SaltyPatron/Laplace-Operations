@@ -35,7 +35,33 @@ class Installation(unittest.TestCase):
         release = prefix / 'releases/selected'
         release.mkdir(parents=True)
         (prefix / 'current').symlink_to(release, target_is_directory=True)
-        return {'prefix': str(prefix), 'source': str(self.directory / 'mutable-source')}, release
+        receipts = self.directory / 'receipts'
+        receipts.mkdir(exist_ok=True)
+        return {'prefix': str(prefix), 'source': str(self.directory / 'mutable-source'), 'receipts': str(receipts)}, release
+
+    def test_prepared_package_reuses_a_deployment_package_of_the_same_revisions(self):
+        config, current = self.prepared_release()
+        built = current.parent / 'deployed'
+        built.mkdir()
+        source = Path(config['source']) / 'Laplace-MCP'
+        source.mkdir(parents=True)
+        subprocess.run(['git', 'init', '-q', str(source)], check=True)
+        subprocess.run(['git', '-C', str(source), '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q',
+                        '--allow-empty', '-m', 'c'], check=True)
+        head = subprocess.run(['git', '-C', str(source), 'rev-parse', 'HEAD'], capture_output=True, text=True,
+                              check=True).stdout.strip()
+        receipt = Path(config['receipts']) / '20260101T000000Z-deploy'
+        receipt.mkdir()
+        # The deployment's checkout is elsewhere: only that differs from this installation's selection.
+        (receipt / 'selection.json').write_text(json.dumps(dict(config, source='/elsewhere')))
+        relative = 'libexec/laplace-mcp-deployment.py'
+        api = SimpleNamespace(verify_package=Mock(return_value={'files': {relative: 'v'}, 'revisions': {'Laplace-MCP': head}}))
+        with patch.object(modular, 'package_api', return_value=api):
+            (receipt / 'package.json').write_text(json.dumps({'release': str(built), 'revisions': {'Laplace-MCP': head}}))
+            self.assertEqual(modular.prepared_package(config, 'checkout-controller')['release'], str(built))
+            # Another revision is another package: the installed release is repaired instead.
+            (receipt / 'package.json').write_text(json.dumps({'release': str(built), 'revisions': {'Laplace-MCP': '0' * 40}}))
+            self.assertEqual(modular.prepared_package(config, 'checkout-controller')['release'], str(current))
 
     def test_controller_is_selected_from_the_verified_release(self):
         config, release = self.prepared_release()

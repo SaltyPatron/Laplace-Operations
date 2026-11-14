@@ -30,34 +30,50 @@ def release_controller(config, release):
 
 
 def prepared_package(config, program):
-    """Repair the installed release, or resume the last matching prepared install."""
+    """A verified package of this installation's checkouts that a deployment already prepared, else the installed
+    release to repair; None when neither is usable and a package must be built."""
     prefix = Path(config['prefix'])
     current = prefix / 'current'
-    if current.is_symlink():
-        release = current.resolve(strict=True)
-    elif current.exists():
+    if current.exists() and not current.is_symlink():
         raise ValueError('Active release path must be a symlink')
-    else:
-        release = None
-        for prior in sorted(Path(config['receipts']).glob('*/package.json'), reverse=True):
-            selection = prior.with_name('selection.json')
-            if selection.is_file() and json.loads(selection.read_text()) == config:
-                release = Path(json.loads(prior.read_text())['release'])
-                break
-        if release is None:
-            return None
-    if release.parent.resolve() != (prefix / 'releases').resolve() or release.is_symlink():
-        raise ValueError('Prepared release is outside the declared installation')
     delivery = package_api(program)
-    try:
-        receipt = delivery.verify_package(release)
-    except ValueError as error:
-        if isinstance(error, getattr(delivery, 'PackageUpgradeRequired', ())):
+
+    def usable(release):
+        if release.parent.resolve() != (prefix / 'releases').resolve() or release.is_symlink():
+            raise ValueError('Prepared release is outside the declared installation')
+        try:
+            receipt = delivery.verify_package(release)
+        except ValueError as error:
+            if isinstance(error, getattr(delivery, 'PackageUpgradeRequired', ())):
+                return None
+            raise
+        if 'libexec/laplace-mcp-deployment.py' not in receipt['files']:
             return None
-        raise
-    if 'libexec/laplace-mcp-deployment.py' not in receipt['files']:
-        return None
-    return {'release': str(release), 'package_id': release.name, 'revisions': receipt['revisions']}
+        return {'release': str(release), 'package_id': release.name, 'revisions': receipt['revisions']}
+
+    # A package is content addressed: one a staging deployment prepared (as the CI runner) from the same selection
+    # and the same revisions is this one; only where its sources were checked out differs. So the selection is
+    # compared without that, and the revisions it records against this installation's checkouts. The host's
+    # installation then never rebuilds, as another account, what a deployment built in the tree that account owns.
+    def selected(value):
+        return {key: item for key, item in value.items() if key != 'source'}
+
+    def revision(name):
+        result = subprocess.run(['git', '-C', str(Path(config['source']) / name), 'rev-parse', 'HEAD'],
+                                capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    for prior in sorted(Path(config['receipts']).glob('*/package.json'), reverse=True):
+        selection = prior.with_name('selection.json')
+        if not selection.is_file() or selected(json.loads(selection.read_text())) != selected(config):
+            continue
+        prepared = json.loads(prior.read_text())
+        revisions = prepared.get('revisions') or {}
+        if revisions and all(revision(name) == commit for name, commit in revisions.items()):
+            found = usable(Path(prepared['release']))
+            if found:
+                return found
+    return usable(current.resolve(strict=True)) if current.is_symlink() else None
 
 
 def package(config, receipt_path, repair=False, rebuild=False):
