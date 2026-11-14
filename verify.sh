@@ -37,17 +37,17 @@ deployment(){
   t0=$(sed -n 's/^tier 0  *\([0-9a-f]\{64\}\).*/\1/p' "$log/engine-tier0.txt")
   hw=$(sed -n 's/^fingerprint  *\([0-9a-f]\{64\}\).*/\1/p' "$log/engine-highway.txt")
   if [ "${#t0}" != 64 ] || [ "${#hw}" != 64 ]; then bad 'Engine did not return both artifact fingerprints'; return; fi
-  expected=$(sed -n "s/^default_version = '\([^']*\)'.*/\1/p" "$LAPLACE_SRC/Laplace-postgres/laplace.control")
-  [ -n "$expected" ] || { bad 'candidate extension version is missing'; return; }
   if ! "$LAPLACE_PG_DIR/bin/psql" "$LAPLACE_CONNINFO" -XAt -v ON_ERROR_STOP=1 -F '|' -c "
-    SELECT e.extversion, laplace_fingerprint(), laplace_highway_fingerprint(),
+    SELECT e.extversion, a.default_version, laplace_fingerprint(), laplace_highway_fingerprint(),
       to_regclass('entity') IS NOT NULL AND to_regclass('physicality') IS NOT NULL
       AND to_regclass('attestation') IS NOT NULL AND to_regclass('consensus') IS NOT NULL
-    FROM pg_extension e WHERE e.extname='laplace'" > "$log/database.txt" 2> "$log/database.err"; then
+    FROM pg_extension e JOIN pg_available_extensions a ON a.name = e.extname WHERE e.extname='laplace'" > "$log/database.txt" 2> "$log/database.err"; then
     bad 'database extension readback failed'; block "$log/database.err"; return
   fi
-  IFS='|' read -r version database_t0 database_hw schema < "$log/database.txt" || { bad 'database extension is absent'; return; }
-  [ "$version" = "$expected" ] && good "extension version $version" || bad "extension version $version; candidate requires $expected"
+  # The extension's version is the content hash of its install script (Laplace-postgres): the server's installed
+  # candidate is its default_version, and a database made from any other script holds another version.
+  IFS='|' read -r version expected database_t0 database_hw schema < "$log/database.txt" || { bad 'database extension is absent'; return; }
+  [ -n "$expected" ] && [ "$version" = "$expected" ] && good "extension version $version" || bad "extension version $version; the installed extension is ${expected:-missing}"
   [ "$schema" = t ] && good 'required extension tables exist' || bad 'required extension tables are missing'
   [ "$database_t0" = "$t0" ] && good 'Engine and PostgreSQL use the same tier-0 artifact' || bad 'Engine/PostgreSQL tier-0 fingerprints differ or are missing'
   [ "$database_hw" = "$hw" ] && good 'Engine and PostgreSQL use the same highway artifact' || bad 'Engine/PostgreSQL highway fingerprints differ or are missing'
