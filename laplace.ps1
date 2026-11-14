@@ -29,6 +29,7 @@ param(
     [string]$Components='all',
     [string]$Package,
     [switch]$Force,
+    [switch]$AsIs,
     [switch]$Json,
     [string]$Check,
     [switch]$List,
@@ -375,7 +376,7 @@ if ($Operation -eq 'restart-iis') {
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'deploy' -and $Target -eq 'desktop') {
-    & pwsh -NoProfile -File "$PSScriptRoot/installation/Deploy-Desktop.ps1" -SourcePath $SourcePath -ModularInstallation $Installation -Plan:$Plan -Components $Components -Force:$Force -Package $Package
+    & pwsh -NoProfile -File "$PSScriptRoot/installation/Deploy-Desktop.ps1" -SourcePath $SourcePath -ModularInstallation $Installation -Plan:$Plan -Components $Components -Force:$Force -Package $Package -AsIs:$AsIs
     exit $LASTEXITCODE
 }
 if ($Operation -eq 'components' -and $Target -eq 'desktop') {
