@@ -3,11 +3,45 @@
    workflow converges tuning on the existing installation and records every delivery stage. #>
 [CmdletBinding()]
 param([string]$SourcePath, [string]$ModularInstallation, [switch]$Plan,
-    [string]$Components='all',[switch]$Force,[string]$Package)
+    [string]$Components='all',[switch]$Force,[string]$Package,[switch]$AsIs)
 $ErrorActionPreference = 'Stop'
 $operations = Split-Path -Parent $PSScriptRoot
 . "$operations/laplace.env.ps1"
 $source = if ($SourcePath) { [IO.Path]::GetFullPath($SourcePath) } else { Join-Path $env:LAPLACE_SRC 'Laplace' }
+
+# Never from old sources, as deploy.sh: every checkout this builds from (Operations, Native, postgres, Engine, MCP, the
+# application) is brought to its upstream first. The desktop built whatever its sibling checkouts held, so a
+# Laplace-postgres days behind installed an extension older than the Engine and the application expected. A checkout on
+# no branch is an exact revision someone chose and is left as it is; one with changed tracked files, commits of its own,
+# or an upstream that cannot be fetched stops the deployment before anything is built. -AsIs deploys what is here.
+if (-not $Plan -and -not $Package -and -not $AsIs -and -not $env:LAPLACE_DEPLOY_CURRENT) {
+    $moved = $false
+    $checkouts = [ordered]@{ 'Laplace-Operations'=$operations; 'Laplace'=$source }
+    foreach ($name in 'Laplace-Native','Laplace-postgres','Laplace-Engine','Laplace-MCP') { $checkouts[$name] = Join-Path $env:LAPLACE_SRC $name }
+    foreach ($entry in $checkouts.GetEnumerator()) {
+        $name = $entry.Key; $path = $entry.Value
+        if (-not (Test-Path -LiteralPath (Join-Path $path '.git'))) { throw "$path is not a git checkout: nothing says what revision it is (-AsIs deploys it anyway)" }
+        $git = @('-c',"safe.directory=$path",'-C',$path)
+        $branch = & git @git symbolic-ref -q --short HEAD
+        if ($LASTEXITCODE) { Write-Host "  ${name}: at $((& git @git rev-parse --short=12 HEAD)), on no branch: an exact revision, left as it is"; continue }
+        $null = & git @git rev-parse -q --verify '@{upstream}' 2>$null
+        if ($LASTEXITCODE) { throw "${path}: $branch follows no upstream (-AsIs deploys it anyway)" }
+        $changed = @(& git @git status --porcelain --untracked-files=no)
+        if ($changed.Count) { throw "$path has changed files:`n$($changed | Select-Object -First 10 | Out-String)commit or drop them, or deploy -AsIs" }
+        $was = (& git @git rev-parse HEAD).Trim()
+        & git @git fetch -q; if ($LASTEXITCODE) { throw "${path}: its upstream could not be fetched, so whether it is current is not known (-AsIs deploys it anyway)" }
+        & git @git merge -q --ff-only '@{upstream}'; if ($LASTEXITCODE) { throw "${path}: $branch has commits its upstream does not (-AsIs deploys it anyway)" }
+        $now = (& git @git rev-parse HEAD).Trim()
+        if ($was -eq $now) { Write-Host "  ${name}: at its upstream, $($now.Substring(0,12)) ($branch)" }
+        else { Write-Host "  ${name}: brought from $($was.Substring(0,12)) to $($now.Substring(0,12)) ($branch)"; if ($name -eq 'Laplace-Operations') { $moved = $true } }
+    }
+    if ($moved) {
+        Write-Host '  this script changed: running what arrived'
+        $env:LAPLACE_DEPLOY_CURRENT = '1'
+        & pwsh -NoProfile -File $PSCommandPath @PSBoundParameters
+        exit $LASTEXITCODE
+    }
+} elseif ($AsIs) { Write-Host '  deploying what is here, not checked against any upstream (-AsIs)' }
 $installation = $env:LAPLACE_IIS_INSTALLATION
 . "$PSScriptRoot/desktop-clients.ps1"
 if (-not $ModularInstallation) { $ModularInstallation=Join-Path $PSScriptRoot ($env:COMPUTERNAME.ToLowerInvariant()+'-modular-client.json') }
