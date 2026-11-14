@@ -26,18 +26,39 @@ install_spec = importlib.util.spec_from_file_location('install_client', ROOT / '
 installer = importlib.util.module_from_spec(install_spec)
 install_spec.loader.exec_module(installer)
 
+# `laplace status` as it reads when the database's caches are this Engine's: tier 0, highway and the chess perf-cache.
+AGREES = ("\ndatabase   laplace, 53 MB\nextension  laplace 0123456789abcdef; cpu: avx2\n"
+          "tier 0     /release/share/prepared/tier0.bin\n           ece5\n           the same as this engine's\n"
+          "highway    /release/share/prepared/tier0.highway\n           1841\n           the same as this engine's\n"
+          "chess      /release/share/prepared/tier0.chess\n           6940\n           the same as this engine's\n")
+
+
+class StatusAgreement(unittest.TestCase):
+    def test_every_matching_cache_agrees_however_many_there_are(self):
+        self.assertTrue(client.artifacts_agree(AGREES))
+        without_chess = AGREES.split('chess ')[0] + "chess      (the extension's default)\n           (not generated: laplace chess)\n"
+        self.assertTrue(client.artifacts_agree(without_chess))
+
+    def test_a_cache_that_differs_or_is_missing_does_not_agree(self):
+        self.assertFalse(client.artifacts_agree(AGREES.replace(
+            "6940\n           the same as this engine's",
+            "6940\n           DIFFERS from this engine's chess perf-cache: the two hold other positions or another vocabulary")))
+        self.assertFalse(client.artifacts_agree(AGREES.replace(
+            "1841\n           the same as this engine's", "(not generated: laplace highway)")))
+        self.assertFalse(client.artifacts_agree("the same as this engine's\nthe same as this engine's\n"))
+
 
 class InstallationReadback(unittest.TestCase):
     def test_host_preparation_precedes_mandatory_compatibility_readback(self):
         def run(arguments, **kwargs):
-            return SimpleNamespace(returncode=0, stderr='', stdout="the same as this engine's\nthe same as this engine's\n")
+            return SimpleNamespace(returncode=0, stderr='', stdout=AGREES)
         with patch.object(client.subprocess, 'run', side_effect=run) as execute:
             client.verify_engine(Path('laplace'), {}, configure_database=True, database_host=socket.gethostname())
         self.assertEqual([call.args[0][1:] for call in execute.call_args_list],
                          [['deploy', '--configure-server-cache'], ['text', 'Laplace'], ['status'], ['sources']])
 
     def test_ordinary_client_installation_does_not_mutate_server_selection(self):
-        result = SimpleNamespace(returncode=0, stderr='', stdout="the same as this engine's\nthe same as this engine's\n")
+        result = SimpleNamespace(returncode=0, stderr='', stdout=AGREES)
         with patch.object(client.subprocess, 'run', return_value=result) as execute:
             client.verify_engine(Path('laplace'), {})
         self.assertEqual([call.args[0][1:] for call in execute.call_args_list],
@@ -91,7 +112,7 @@ class ClientInputs(unittest.TestCase):
                 selected = True
             if operation == ['status'] and not selected:
                 return SimpleNamespace(returncode=0, stderr='', stdout='old database fingerprint')
-            return SimpleNamespace(returncode=0, stderr='', stdout="the same as this engine's\nthe same as this engine's\n")
+            return SimpleNamespace(returncode=0, stderr='', stdout=AGREES)
         with patch.dict(sys.modules, {'client': client}), patch.dict(os.environ, {'SystemRoot': str(self.root)}), \
              patch.object(client.subprocess, 'run', side_effect=engine):
             with self.assertRaisesRegex(ValueError, 'must match both Engine artifact fingerprints'):

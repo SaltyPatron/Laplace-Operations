@@ -124,7 +124,16 @@ WHERE e.extname='laplace';
         $substrates+=@{database=$database;native_ingest_api='passed'}
         if($name -eq 'laplace'){
             $status=Invoke-InstalledClient $command @('status')
-            if(@($status|Where-Object {$_ -match "the same as this engine's"}).Count -ne 2){
+            # By section, as client.py artifacts_agree: tier 0 and highway each the same as this Engine's, nothing
+            # DIFFERS; other caches (chess) are compared by status itself.
+            $sections=@{};$current=$null
+            foreach($line in @($status|ForEach-Object {[string]$_})){
+                if($line -and $line -notmatch '^\s'){$current=($line -split '  ')[0].Trim();$sections[$current]=@()}
+                elseif($null -ne $current){$sections[$current]+=$line.Trim()}
+            }
+            $agree=-not (@($status|Where-Object {"$_" -match 'DIFFERS'}).Count) -and
+                @('tier 0','highway' | Where-Object { $sections.ContainsKey($_) -and ($sections[$_] -contains "the same as this engine's") }).Count -eq 2
+            if(-not $agree){
                 foreach($line in $status){Write-Host ([string]$line)}
                 throw 'Modular SQL and client artifacts do not agree.'
             }
