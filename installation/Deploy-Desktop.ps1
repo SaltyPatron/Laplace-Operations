@@ -68,31 +68,31 @@ $mono=@($selected | Where-Object {$_ -notin @('modular','modular-web')} | Sort-O
 $modular=if($selected.Contains('modular') -or $selected.Contains('modular-web')){Get-DesktopClientDeclaration $ModularInstallation}else{$null}
 $scope=if($modular){if($mono.Count){'all'}else{'modular'}}else{'monorepo'}
 $steps=@()
-if($selected.Contains('postgres')){$steps+=@{name='Apply and verify PostgreSQL tuning';script="$operations/tune-pg.ps1";arguments=@()}}
+if($selected.Contains('postgres')){$steps+=@{name='Apply and verify PostgreSQL tuning';script="$operations/tune-pg.ps1";arguments=@();inputs=@('Laplace-Operations')}}
 if($mono.Count){
     if($Package){
         $steps+=@{name='Activate verified prepared IIS package';script="$source/deploy/windows/Publish-IisRuntime.ps1";arguments=@('-Package',$Package)}
     }else{
         $arguments=@('-Publish','-ComponentSelection',($mono -join ','))
         if($Force){$arguments+='-Force'}
-        $steps+=@{name='Build selected components, compose and activate IIS';script="$source/deploy/windows/Build-IisPackage.ps1";arguments=$arguments;component_receipt=$true}
+        $steps+=@{name='Build selected components, compose and activate IIS';script="$source/deploy/windows/Build-IisPackage.ps1";arguments=$arguments;component_receipt=$true;inputs=@('Laplace','Laplace-Native','Laplace-postgres','Laplace-Engine','Laplace-Operations')}
     }
 }
 if($selected.Contains('modular')){
     $arguments=@('-Installation',$ModularInstallation,'-ConfigureDatabase');if($Force){$arguments+='-Force'}
-    $steps+=@{name='Package modular Native, Engine and MCP; update installed client';script="$PSScriptRoot/install-windows-client.ps1";arguments=$arguments}
+    $steps+=@{name='Package modular Native, Engine and MCP; update installed client';script="$PSScriptRoot/install-windows-client.ps1";arguments=$arguments;inputs=@('Laplace-Native','Laplace-postgres','Laplace-Engine','Laplace-MCP','Laplace-Operations')}
 }
 if($selected.Contains('modular')){
     # deploy-client.py: laplace deploy --configure-server-cache, then the modular browser's read grants. A changed
     # extension recreates the database (no upgrade path), and a recreated database holds no grant for
     # laplace_modular_web until they are given again; Linux grants in the same step (deploy.sh modular-grants).
-    $steps+=@{name='Migrate the installed modular substrate, select server-local caches and grant its readers';command='py';arguments=@('-3',"$PSScriptRoot/deploy-client.py",'--configuration',$modular.operator_client.configuration,'--psql',(Join-Path $env:LAPLACE_PG_DIR 'bin/psql.exe'))}
+    $steps+=@{name='Migrate the installed modular substrate, select server-local caches and grant its readers';command='py';arguments=@('-3',"$PSScriptRoot/deploy-client.py",'--configuration',$modular.operator_client.configuration,'--psql',(Join-Path $env:LAPLACE_PG_DIR 'bin/psql.exe'));inputs=@('Laplace-Native','Laplace-postgres','Laplace-Engine','Laplace-MCP','Laplace-Operations')}
 }
 if($selected.Contains('uci')){
-    $steps+=@{name='Publish the desktop UCI connector and bind its engine to the selected local substrate';script="$PSScriptRoot/desktop-uci.ps1";arguments=@('-IisInstallation',$installation,'-Publish')}
+    $steps+=@{name='Publish the desktop UCI connector and bind its engine to the selected local substrate';script="$PSScriptRoot/desktop-uci.ps1";arguments=@('-IisInstallation',$installation,'-Publish');inputs=@('Laplace','Laplace-Operations')}
 }
 if($selected.Contains('modular-web')){
-    $steps+=@{name='Publish and verify the modular browser';script="$PSScriptRoot/Publish-ModularWeb.ps1";arguments=@()}
+    $steps+=@{name='Publish and verify the modular browser';script="$PSScriptRoot/Publish-ModularWeb.ps1";arguments=@();inputs=@('Laplace-MCP','Laplace-Native','Laplace-Engine','Laplace-Operations')}
 }
 $steps+=@{name='Verify selected installed components';script="$PSScriptRoot/Verify-DesktopDatabases.ps1";arguments=@('-ModularInstallation',$ModularInstallation,'-Scope',$scope)}
 Write-Host 'Laplace desktop deployment' -ForegroundColor Cyan
@@ -108,6 +108,28 @@ if ($Plan) {
     Write-Host 'Plan only. Installation access and live checks have not run.'
     exit 0
 }
+
+# A step's result is identified by the content of its inputs: the revision of every checkout it reads and any
+# uncommitted change in them, its arguments, and its own name. A step whose inputs are the ones of its last passing
+# run has nothing to produce, and is not run again (-Force runs every step). The installation's verification has no
+# declared inputs and always runs, so a skipped step's output is still checked.
+function Get-StepDigest($step) {
+    $parts = [Collections.Generic.List[string]]::new()
+    $parts.Add("step=$($step.name)"); $parts.Add("arguments=$($step.arguments -join "`u{1f}")")
+    foreach ($repo in $step.inputs) {
+        $path = switch ($repo) { 'Laplace-Operations' { $operations } 'Laplace' { $source } default { Join-Path $env:LAPLACE_SRC $repo } }
+        $git = @('-c',"safe.directory=$path",'-C',$path)
+        $head = (& git @git rev-parse HEAD 2>$null); if ($LASTEXITCODE) { return $null }
+        $parts.Add("$repo=$("$head".Trim())")
+        $diff = (& git @git diff HEAD --no-ext-diff --binary 2>$null) -join "`n"
+        if ($diff) { $parts.Add("$repo-uncommitted=$diff") }
+    }
+    $bytes = [Text.Encoding]::UTF8.GetBytes(($parts -join "`n"))
+    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+}
+$digestsPath = Join-Path $env:LAPLACE_WORK 'operations/desktop-step-digests.json'
+$digests = @{}
+if (Test-Path -LiteralPath $digestsPath) { (Get-Content -LiteralPath $digestsPath -Raw | ConvertFrom-Json -AsHashtable).GetEnumerator() | ForEach-Object { $digests[$_.Key] = $_.Value } }
 
 $receiptPath = $null
 $result = [ordered]@{
@@ -174,6 +196,13 @@ try {
         $record = [ordered]@{name=$step.name; status='running'; started_utc=[DateTime]::UtcNow.ToString('o'); log=$log; exit_code=$null}
         $result.steps += $record
         Write-Host "`n[$($i+1)/$($steps.Count)] $($step.name)" -ForegroundColor Cyan
+        $digest = if ($step.inputs -and -not $Force -and -not $Package) { Get-StepDigest $step } else { $null }
+        $record.inputs_digest = $digest
+        if ($digest -and $digests[$step.name] -eq $digest) {
+            $record.status = 'unchanged'; $record.finished_utc = [DateTime]::UtcNow.ToString('o'); $record.seconds = 0; $record.exit_code = 0
+            Write-Host "Unchanged inputs ($($digest.Substring(0,12))): already produced; not run." -ForegroundColor Green
+            continue
+        }
         $clock = [Diagnostics.Stopwatch]::StartNew()
         $script = $step.script
         $executable=if($step.command){$step.command}else{'pwsh'}
@@ -196,6 +225,11 @@ try {
             throw "$($step.name) failed (exit $exitCode). Log: $log"
         }
         $record.status = 'passed'
+        if ($digest) {
+            $digests[$step.name] = $digest
+            $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $digestsPath)
+            $digests | ConvertTo-Json | Set-Content -LiteralPath $digestsPath
+        }
         Write-Host "Completed in $($record.seconds)s." -ForegroundColor Green
     }
     if($mono.Count){
