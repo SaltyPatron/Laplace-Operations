@@ -14,11 +14,11 @@ spec.loader.exec_module(client)
 class ClientEnvironment(unittest.TestCase):
     def test_search_settings_survive_without_overriding_the_selected_runtime(self):
         search = {
-            'LAPLACE_CODE_ROOTS': '/workspace/native;/workspace/wiki',
-            'LAPLACE_CODE_RECORDS': '/work/workspace.lpm',
-            'LAPLACE_CODE_SEMANTIC': '1',
-            'LAPLACE_CODE_EMBED_KEY': 'embedding-test-key',
-            'LAPLACE_CODE_QDRANT_KEY': 'qdrant-test-key',
+            'LAPLACE_CODE_SOURCE': 'Laplace Workspace',
+            'LAPLACE_CODE_HUB': '2048',
+            'LAPLACE_CODE_NODES': '200000',
+            'LAPLACE_CODE_BRIDGE': '1',
+            'LAPLACE_CODE_INGEST': 'workspace-code',
         }
         inherited = dict(search, LAPLACE_CONNINFO='wrong database',
                          LAPLACE_TIER0='/wrong/tier0.bin', LAPLACE_UNKNOWN='discard',
@@ -32,10 +32,10 @@ class ClientEnvironment(unittest.TestCase):
 
     def test_sspi_still_removes_inherited_postgres_credentials(self):
         inherited = {'PGPASSWORD': 'wrong-password', 'PGUSER': 'wrong-user',
-                     'LAPLACE_CODE_ROOTS': '/workspace/wiki'}
+                     'LAPLACE_CODE_SOURCE': 'Laplace Workspace'}
         with patch.dict(os.environ, inherited, clear=True):
             actual = client.process_environment({'LAPLACE_DATABASE_AUTHENTICATION': 'sspi'})
-        self.assertEqual(actual['LAPLACE_CODE_ROOTS'], inherited['LAPLACE_CODE_ROOTS'])
+        self.assertEqual(actual['LAPLACE_CODE_SOURCE'], inherited['LAPLACE_CODE_SOURCE'])
         self.assertFalse(any(key.upper().startswith('PG') for key in actual))
 
 

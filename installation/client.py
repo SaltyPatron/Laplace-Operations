@@ -177,7 +177,7 @@ def verify_mcp(executable, environment, *, database):
 def process_environment(environment):
     # The named client controls selection; do not inherit another implementation's
     # LAPLACE_* values from a developer shell. libpq uses the human's own credential store.
-    # Code-search settings configure retrieval and its saved index, not the
+    # Code-search settings configure what code_search reads and how far it walks, not the
     # selected Engine or database. Keep the MCP host's explicit search settings.
     inherited = {k: v for k, v in os.environ.items()
                  if not k.startswith('LAPLACE_') or k.startswith('LAPLACE_CODE_')}

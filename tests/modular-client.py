@@ -246,11 +246,11 @@ class ClientInputs(unittest.TestCase):
         self.assertNotIn('LAPLACE_MODELS', child)
 
     def test_code_search_configuration_survives_client_isolation(self):
-        search = {'LAPLACE_CODE_ROOTS': str(self.root / 'documentation'),
-                  'LAPLACE_CODE_RECORDS': str(self.root / 'saved-index.lpm'),
-                  'LAPLACE_CODE_SEMANTIC': '1',
-                  'LAPLACE_CODE_TEXT_COLLECTIONS': 'prose',
-                  'LAPLACE_CODE_TEXT_EMBED_URL': 'http://localhost:8713/v1/embeddings'}
+        search = {'LAPLACE_CODE_SOURCE': 'Laplace Workspace',
+                  'LAPLACE_CODE_HUB': '2048',
+                  'LAPLACE_CODE_NODES': '200000',
+                  'LAPLACE_CODE_BRIDGE': '1',
+                  'LAPLACE_CODE_INGEST': 'workspace-code'}
         with patch.dict(os.environ, {**search, 'LAPLACE_CONNINFO': 'wrong database',
                                      'LAPLACE_ENGINE': 'wrong engine'}):
             executable, environment, _ = self.select()
