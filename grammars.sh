@@ -32,12 +32,15 @@ grammar_git(){
 }
 case $op in
   fetch)
-    mkdir -p "$dir"; n=0; bad=0
+    # The grammar directory is shared by the operator and the CI runner through its setgid group: what either
+    # creates stays group-writable, and a lock is taken on a read-only descriptor so a lock file the other
+    # account created (whatever its mode) still serializes instead of refusing the run.
+    umask 002; mkdir -p "$dir"; n=0; bad=0
     while IFS=$'\t' read -r name origin commit; do
       d=$dir/$name
       [[ "$name" =~ ^[A-Za-z0-9_-]+$ && "$commit" =~ ^[0-9a-f]{40}$ && "$origin" == https://* ]] || { echo 'Invalid locked grammar record' >&2; exit 1; }
-      mkdir -p "$dir"
-      exec {grammar_lock}>"$dir/.$name.lock"; flock -xn "$grammar_lock" || { echo "$name is being updated" >&2; exit 1; }
+      [ -e "$dir/.$name.lock" ] || : >>"$dir/.$name.lock"
+      exec {grammar_lock}<"$dir/.$name.lock"; flock -xn "$grammar_lock" || { echo "$name is being updated" >&2; exit 1; }
       if [ ! -d "$d/.git" ]; then
         [[ ! -e "$d" || -z "$(ls -A "$d")" ]] || { echo "Nonempty source directory: $d" >&2; exit 1; }
         git init -q "$d"; grammar_git "$d" remote add origin "$origin"
