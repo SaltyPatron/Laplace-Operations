@@ -38,7 +38,14 @@ if (-not $Plan -and -not $Package -and -not $AsIs -and -not $env:LAPLACE_DEPLOY_
     if ($moved) {
         Write-Host '  this script changed: running what arrived'
         $env:LAPLACE_DEPLOY_CURRENT = '1'
-        & pwsh -NoProfile -File $PSCommandPath @PSBoundParameters
+        # Arguments spelled out: splatting the bound parameters into a native pwsh call passes an empty string as a
+        # bare "-Name:" token, which shifts every argument after it.
+        $again = @()
+        foreach ($entry in $PSBoundParameters.GetEnumerator()) {
+            if ($entry.Value -is [System.Management.Automation.SwitchParameter]) { if ($entry.Value.IsPresent) { $again += '-' + $entry.Key } }
+            elseif ("$($entry.Value)") { $again += @('-' + $entry.Key, [string]$entry.Value) }
+        }
+        & pwsh -NoProfile -File $PSCommandPath @again
         exit $LASTEXITCODE
     }
 } elseif ($AsIs) { Write-Host '  deploying what is here, not checked against any upstream (-AsIs)' }
