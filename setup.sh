@@ -236,7 +236,8 @@ logging(){ part logging
   install -o root -g root -m 644 "$here/installation/syslog.logrotate" /etc/logrotate.d/laplace-syslog
   install -d -o root -g root -m 755 /etc/systemd/system/logrotate.timer.d
   install -o root -g root -m 644 "$here/installation/logrotate.timer.conf" /etc/systemd/system/logrotate.timer.d/laplace.conf
-  logrotate --debug /etc/logrotate.conf
+  # The whole configuration parses (a dry run); its listing is shown only when it does not
+  local check; check=$(logrotate --debug /etc/logrotate.conf 2>&1) || { printf '%s\n' "$check" >&2; echo "logrotate configuration is invalid" >&2; exit 1; }
   systemctl daemon-reload
   if ((syslog_changed)); then systemctl try-restart rsyslog.service; fi
   systemctl restart logrotate.timer
