@@ -111,8 +111,23 @@ def verify_engine(executable, environment, *, configure_database=False, database
                              (verification.stderr or verification.stdout).strip())
         if operation == ['sources'] and verification.stderr.strip():
             raise ValueError('Installed recipe resources failed: ' + verification.stderr.strip())
-        if operation == ['status'] and verification.stdout.count("the same as this engine's") != 2:
+        if operation == ['status'] and not artifacts_agree(verification.stdout):
             raise ValueError('Installed modular database must match both Engine artifact fingerprints: ' + verification.stdout.strip())
+
+
+def artifacts_agree(status):
+    """`laplace status` read by section: each artifact is a header (`tier 0     <path>`, `highway    <path>`,
+    `chess      <path>`) followed by its indented lines. Tier 0 and highway must each be the same as this Engine's,
+    and nothing may differ; other caches (the chess perf-cache) are compared by status itself, which says DIFFERS."""
+    sections, current = {}, None
+    for line in status.splitlines():
+        if line and not line[0].isspace():
+            current = line.split('  ')[0].strip()
+            sections[current] = []
+        elif current is not None:
+            sections[current].append(line.strip())
+    return 'DIFFERS' not in status and all("the same as this engine's" in sections.get(name, ())
+                                           for name in ('tier 0', 'highway'))
 
 
 def verify_mcp(executable, environment, *, database):
