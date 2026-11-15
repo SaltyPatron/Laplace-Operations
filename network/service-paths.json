@@ -2,6 +2,6 @@
   "routes": [
     {"environment": "desktop-iis", "browser_origin": "http://localhost:8080", "providers": ["google", "microsoft"]},
     {"environment": "staging-nginx", "browser_origin": "http://hart-server:8080", "providers": ["google", "microsoft"]},
-    {"environment": "production", "browser_origin": "https://api.hartonomous.com", "providers": ["google", "microsoft"]}
+    {"environment": "production", "browser_origin": "https://www.hartonomous.com", "providers": ["google", "microsoft"]}
   ]
 }

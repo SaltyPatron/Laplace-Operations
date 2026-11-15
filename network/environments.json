@@ -28,7 +28,7 @@
     },
     {
       "name": "production",
-      "browser_origin": "https://api.hartonomous.com",
+      "browser_origin": "https://www.hartonomous.com",
       "host": "hart-prod",
       "hosting": "cloudflare-nginx"
     }
