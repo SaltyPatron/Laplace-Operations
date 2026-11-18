@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Package the Windows modular Engine with installed resources and native dependencies."""
 import argparse
+import functools
 import hashlib
 import importlib.util
 import json
@@ -192,20 +193,32 @@ def build_run(argv):
 def runtime_binaries(config):
     if config.get('mcp'):
         root = Path(config['mcp_build'])
-        return {'bin/laplace.exe': root / 'engine/laplace.exe',
+        return {'bin/laplace.exe': engine_package(config) / 'bin/laplace.exe',
                 **{'bin/' + name: root / name for name in ('lpm.exe', 'lpm.dll')}}
     return {'bin/laplace.exe': Path(config['build']) / 'laplace.exe'}
 
 
-def native_package(config):
-    """The LaplaceNative package directory for the declared Native source (native-package.ps1, once per revision)."""
-    script = Path(__file__).resolve().parent.parent / 'native-package.ps1'
-    result = subprocess.run(['pwsh', '-NoProfile', '-File', str(script), str(config['native'])],
+@functools.lru_cache(maxsize=None)
+def component_package(name, source, *settings):
+    """A Laplace repository's installed CMake package prefix (package.ps1: built once per revision and settings)."""
+    script = Path(__file__).resolve().parent.parent / 'package.ps1'
+    result = subprocess.run(['pwsh', '-NoProfile', '-File', str(script), name, str(source), *settings],
                             stdout=subprocess.PIPE, text=True)
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     if result.returncode or not lines:
-        raise RuntimeError('native-package.ps1 failed: ' + result.stdout)
-    return Path(lines[-1].strip()) / 'lib/cmake/LaplaceNative'
+        raise RuntimeError('package.ps1 ' + name + ' failed: ' + result.stdout)
+    return Path(lines[-1].strip())
+
+
+def native_package(config):
+    """The LaplaceNative package directory for the declared Native source."""
+    return component_package('laplace-native', str(config['native']), 'LAPLACE_NATIVE_TESTS=OFF') / 'lib/cmake/LaplaceNative'
+
+
+def engine_package(config):
+    """The LaplaceEngine package prefix for the declared Engine source, built against the declared Native's package."""
+    return component_package('laplace-engine', str(config['engine']), 'LaplaceNative_DIR=' + native_package(config).as_posix(),
+                             'LAPLACE_INSTALL_RECIPE_RESOURCES=OFF', 'LAPLACE_CONNINFO=')
 
 
 def prepare_runtime(config, force=False):
@@ -213,18 +226,15 @@ def prepare_runtime(config, force=False):
     package = native_package(config)
     if config.get('mcp'):
         root = Path(config['mcp_build'])
-        # LAPLACE_NATIVE stays for a consumer that still builds Native from source; one on the package reads
-        # LaplaceNative_DIR.
-        options = ['-UCMAKE_RUNTIME_OUTPUT_DIRECTORY', '-DLAPLACE_BUNDLE_ENGINE=ON',
-                   '-DLAPLACE_INSTALL_RECIPE_RESOURCES=OFF',
-                   '-DLAPLACE_ENGINE_SRC=' + (Path(config['engine']) / 'src').as_posix(),
+        # The service links the Engine's reader from its package and runs the package's program.
+        options = ['-UCMAKE_RUNTIME_OUTPUT_DIRECTORY',
                    '-DLaplaceNative_DIR=' + package.as_posix(),
-                   '-DLAPLACE_NATIVE=' + Path(config['native']).as_posix()]
+                   '-DLaplaceEngine_DIR=' + (engine_package(config) / 'lib/cmake/LaplaceEngine').as_posix()]
         if not (root / 'CMakeCache.txt').is_file():
             toolchain = Path(__file__).resolve().parent.parent / 'toolchain/laplace.cmake'
             options += ['-G', 'Ninja', '-DCMAKE_TOOLCHAIN_FILE=' + str(toolchain), '-DCMAKE_BUILD_TYPE=RelWithDebInfo']
         build_run(['cmake', '-S', config['mcp'], '-B', root, *options])
-        build_run(['cmake', '--build', root, *clean, '--target', 'laplace_engine', 'lpm_program', 'lpm_lib'])
+        build_run(['cmake', '--build', root, *clean, '--target', 'lpm_program', 'lpm_lib'])
     else:
         cache = (Path(config['build']) / 'CMakeCache.txt').read_text()
         # An Engine on the package must be configured with the declared Native's package; one still building Native
