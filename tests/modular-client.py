@@ -362,18 +362,21 @@ class PackageReuse(unittest.TestCase):
         config = dict(self.config, mcp=str(self.root / 'mcp-source'), mcp_build=str(self.root / 'shared-build'),
                       build=str(self.root / 'absent-legacy-engine-build'))
         package = self.root / 'packages/laplace-native/revision/lib/cmake/LaplaceNative'
+        engine = self.root / 'packages/laplace-engine/revision'
         with patch.object(self.package, 'build_run') as build, \
-             patch.object(self.package, 'native_package', return_value=package) as native:
+             patch.object(self.package, 'native_package', return_value=package) as native, \
+             patch.object(self.package, 'engine_package', return_value=engine):
             self.package.prepare_runtime(config)
-        native.assert_called_once_with(config)
+            binaries = self.package.runtime_binaries(config)
+        native.assert_called_with(config)
         commands = [[str(value) for value in call.args[0]] for call in build.call_args_list]
         self.assertEqual(len(commands), 2)
-        self.assertIn('-DLAPLACE_BUNDLE_ENGINE=ON', commands[0])
         self.assertIn('-DLaplaceNative_DIR=' + package.as_posix(), commands[0])
-        self.assertEqual(commands[1][-3:], ['laplace_engine', 'lpm_program', 'lpm_lib'])
+        self.assertIn('-DLaplaceEngine_DIR=' + (engine / 'lib/cmake/LaplaceEngine').as_posix(), commands[0])
+        self.assertFalse(any('BUNDLE' in value or 'ENGINE_SRC' in value for value in commands[0]))
+        self.assertEqual(commands[1][-2:], ['lpm_program', 'lpm_lib'])
         self.assertFalse(any(config['build'] in command for command in commands))
-        self.assertEqual(self.package.runtime_binaries(config)['bin/laplace.exe'],
-                         self.root / 'shared-build/engine/laplace.exe')
+        self.assertEqual(binaries['bin/laplace.exe'], engine / 'bin/laplace.exe')
 
     def test_unchanged_release_is_reused_without_writing_it(self):
         timestamps = {path: path.stat().st_mtime_ns for path in self.release.rglob('*') if path.is_file()}
