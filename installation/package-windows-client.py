@@ -197,13 +197,28 @@ def runtime_binaries(config):
     return {'bin/laplace.exe': Path(config['build']) / 'laplace.exe'}
 
 
+def native_package(config):
+    """The LaplaceNative package directory for the declared Native source (native-package.ps1, once per revision)."""
+    script = Path(__file__).resolve().parent.parent / 'native-package.ps1'
+    result = subprocess.run(['pwsh', '-NoProfile', '-File', str(script), str(config['native'])],
+                            stdout=subprocess.PIPE, text=True)
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    if result.returncode or not lines:
+        raise RuntimeError('native-package.ps1 failed: ' + result.stdout)
+    return Path(lines[-1].strip()) / 'lib/cmake/LaplaceNative'
+
+
 def prepare_runtime(config, force=False):
     clean = ['--clean-first'] if force else []
+    package = native_package(config)
     if config.get('mcp'):
         root = Path(config['mcp_build'])
+        # LAPLACE_NATIVE stays for a consumer that still builds Native from source; one on the package reads
+        # LaplaceNative_DIR.
         options = ['-UCMAKE_RUNTIME_OUTPUT_DIRECTORY', '-DLAPLACE_BUNDLE_ENGINE=ON',
                    '-DLAPLACE_INSTALL_RECIPE_RESOURCES=OFF',
                    '-DLAPLACE_ENGINE_SRC=' + (Path(config['engine']) / 'src').as_posix(),
+                   '-DLaplaceNative_DIR=' + package.as_posix(),
                    '-DLAPLACE_NATIVE=' + Path(config['native']).as_posix()]
         if not (root / 'CMakeCache.txt').is_file():
             toolchain = Path(__file__).resolve().parent.parent / 'toolchain/laplace.cmake'
@@ -212,9 +227,13 @@ def prepare_runtime(config, force=False):
         build_run(['cmake', '--build', root, *clean, '--target', 'laplace_engine', 'lpm_program', 'lpm_lib'])
     else:
         cache = (Path(config['build']) / 'CMakeCache.txt').read_text()
-        for variable, key in (('CMAKE_HOME_DIRECTORY', 'engine'), ('LAPLACE_NATIVE', 'native')):
+        # An Engine on the package must be configured with the declared Native's package; one still building Native
+        # from source, with the declared Native tree.
+        native = ('LaplaceNative_DIR', package) if re.search(r'^LaplaceNative_DIR:', cache, re.M) \
+            else ('LAPLACE_NATIVE', Path(config['native']))
+        for variable, expected in (('CMAKE_HOME_DIRECTORY', Path(config['engine'])), native):
             selected = re.search(r'^' + variable + r':[^=]+=(.+)$', cache, re.M)
-            if not selected or Path(selected.group(1).strip()).resolve() != Path(config[key]).resolve():
+            if not selected or Path(selected.group(1).strip()).resolve() != expected.resolve():
                 raise ValueError('Configured build does not use the declared source: ' + variable)
         build_run(['cmake', '--build', config['build'], *clean, '--target', 'laplace_engine'])
 

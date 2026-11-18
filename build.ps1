@@ -17,29 +17,10 @@ if (-not ($env:VSCMD_VER -and (Get-Command icx.exe -ErrorAction SilentlyContinue
 $contract = ((Get-Content (Join-Path $PSScriptRoot 'toolchain\determinism.tsv') | Where-Object { $_ -match '^[a-z]' }) -join "`n")
 $env:PATH = "$env:LAPLACE_PG_DIR\bin;$env:LAPLACE_ICU_DIR\bin64;$env:PATH"   # libpq and ICU, for the engine when it runs
 
-# Laplace-Native once per source revision, installed as the CMake package LaplaceNative (native-package.sh's prefix
-# layout): $LAPLACE_BUILD\packages\laplace-native\<commit>[-<diff digest>], reused when complete; three are kept.
-$native = Join-Path $env:LAPLACE_SRC 'Laplace-Native'
-$key = (& git -C $native rev-parse HEAD).Trim()
-if (& git -C $native status --porcelain --untracked-files=no) {
-    $key += '-' + ([BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes((& git -C $native diff HEAD) -join "`n"))) -replace '-', '').Substring(0, 12).ToLower()
-}
-$packages = Join-Path $env:LAPLACE_BUILD 'packages\laplace-native'; $prefix = Join-Path $packages $key
-$nativeConfig = Join-Path $prefix 'lib\cmake\LaplaceNative'
-if (-not (Test-Path (Join-Path $nativeConfig 'LaplaceNativeConfig.cmake'))) {
-    $nb = Join-Path $env:LAPLACE_BUILD 'Laplace-Native\package'; $nmark = Join-Path $nb '.contract'
-    if ((Test-Path $nb) -and -not ((Test-Path $nmark) -and (Get-Content $nmark -Raw) -eq $contract)) { Remove-Item $nb -Recurse -Force }
-    & cmake.exe -S $native -B $nb -G Ninja "-DCMAKE_TOOLCHAIN_FILE=$PSScriptRoot\toolchain\laplace.cmake" "-DLAPLACE_MATH=$env:LAPLACE_MATH" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLAPLACE_NATIVE_TESTS=OFF "-DLAPLACE_OPERATIONS=$PSScriptRoot"
-    if ($LASTEXITCODE) { exit $LASTEXITCODE }
-    & cmake.exe --build $nb
-    if ($LASTEXITCODE) { exit $LASTEXITCODE }
-    Set-Content -Path $nmark -Value $contract -NoNewline
-    Remove-Item "$prefix.partial" -Recurse -Force -ErrorAction SilentlyContinue
-    & cmake.exe --install $nb --prefix "$prefix.partial" | Out-Null
-    if ($LASTEXITCODE) { exit $LASTEXITCODE }
-    Move-Item "$prefix.partial" $prefix
-}
-Get-ChildItem $packages -Directory | Where-Object { $_.Name -notlike '*.partial' } | Sort-Object LastWriteTime -Descending | Select-Object -Skip 3 | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+# Laplace-Native once per source revision, installed as the CMake package LaplaceNative (native-package.ps1).
+$nativePrefix = & "$PSScriptRoot\native-package.ps1" (Join-Path $env:LAPLACE_SRC 'Laplace-Native') | Select-Object -Last 1
+if ($LASTEXITCODE) { exit $LASTEXITCODE }
+$nativeConfig = Join-Path $nativePrefix 'lib\cmake\LaplaceNative'
 
 foreach ($r in 'Laplace-postgres', 'Laplace-Engine') {
     $b = Join-Path (Join-Path $env:LAPLACE_BUILD $r) 'icx-release'; $mark = Join-Path $b '.contract'
