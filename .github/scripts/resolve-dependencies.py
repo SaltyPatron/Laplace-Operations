@@ -1,4 +1,9 @@
-"""Resolve one immutable component release, preserving a dispatch's exact commit."""
+"""Resolve one immutable component release from the version lock, preserving a dispatch's exact commit.
+
+components.lock.tsv holds the revisions staging last deployed and verified. A deployment takes every component from
+it; a component's main-merged dispatch replaces only that component's row (never moving it backwards); an operator's
+dispatch with advance=true takes every component's main. After the deployment's tests pass, `write-lock` records the
+verified set in the lock (laplace.yml commits it)."""
 import json
 import os
 from pathlib import Path
@@ -10,14 +15,46 @@ import urllib.error
 import urllib.request
 
 COMPONENTS = {'native': 'Laplace-Native', 'postgres': 'Laplace-postgres', 'engine': 'Laplace-Engine', 'mcp': 'Laplace-MCP'}
+LOCK = Path(__file__).resolve().parents[2] / 'components.lock.tsv'
 
 
-def resolve(owner, event_name, event, request):
+def read_lock(path=LOCK):
+    revisions = {}
+    for line in Path(path).read_text().splitlines():
+        if not line.strip() or line.startswith('#'):
+            continue
+        fields = line.split('\t')
+        if (len(fields) != 3 or fields[0] not in COMPONENTS or COMPONENTS[fields[0]] != fields[1]
+                or fields[0] in revisions or not re.fullmatch(r'[0-9a-f]{40}', fields[2])):
+            raise ValueError('Invalid version lock row: ' + line)
+        revisions[fields[0]] = fields[2]
+    if set(revisions) != set(COMPONENTS):
+        raise ValueError('The version lock must name every component once: ' + ', '.join(sorted(COMPONENTS)))
+    return revisions
+
+
+def write_lock(revisions, path=LOCK):
+    """Rewrite the lock's rows with revisions, keeping its header; True when anything changed."""
+    if set(revisions) != set(COMPONENTS) or not all(re.fullmatch(r'[0-9a-f]{40}', v) for v in revisions.values()):
+        raise ValueError('A lock names every component by a full commit')
+    text = Path(path).read_text()
+    header = [line for line in text.splitlines() if line.startswith('#')]
+    rows = [f'{key}\t{name}\t{revisions[key]}' for key, name in COMPONENTS.items()]
+    updated = '\n'.join(header + rows) + '\n'
+    if updated == text:
+        return False
+    Path(path).write_text(updated)
+    return True
+
+
+def resolve(owner, event_name, event, request, lock):
     if not re.fullmatch(r'[A-Za-z0-9-]+', owner):
         raise ValueError('Invalid repository owner')
     payload = event.get('client_payload', {}) if event_name == 'repository_dispatch' else {}
     repository, triggering_sha = payload.get('repository'), payload.get('sha')
-    pinned_engine = event.get('inputs', {}).get('engine_revision') if event_name == 'workflow_dispatch' else None
+    inputs = event.get('inputs', {}) if event_name == 'workflow_dispatch' else {}
+    pinned_engine = inputs.get('engine_revision')
+    advance = str(inputs.get('advance', '')).lower() == 'true'
     if pinned_engine:
         repository, triggering_sha = f'{owner}/Laplace-Engine', pinned_engine
     if event_name == 'repository_dispatch' or pinned_engine:
@@ -28,16 +65,21 @@ def resolve(owner, event_name, event, request):
     revisions = {}
     for key, name in COMPONENTS.items():
         repo = f'{owner}/{name}'
-        main = request(f'/repos/{repo}/commits/main')['sha']
-        if not re.fullmatch(r'[0-9a-f]{40}', main):
-            raise ValueError('GitHub returned an invalid main revision')
+        if repo == repository or advance:
+            main = request(f'/repos/{repo}/commits/main')['sha']
+            if not re.fullmatch(r'[0-9a-f]{40}', main):
+                raise ValueError('GitHub returned an invalid main revision')
         if repo == repository:
             comparison = request(f'/repos/{repo}/compare/{triggering_sha}...{main}')
             if comparison['status'] not in ('ahead', 'identical'):
                 raise ValueError('Triggering revision is not in the component main history')
-            revisions[key] = triggering_sha
-        else:
+            # A dispatch delivered after a later revision of the same component was verified does not move it back.
+            behind = request(f'/repos/{repo}/compare/{lock[key]}...{triggering_sha}')['status'] == 'behind'
+            revisions[key] = lock[key] if behind else triggering_sha
+        elif advance:
             revisions[key] = main
+        else:
+            revisions[key] = lock[key]
     return revisions
 
 
@@ -107,6 +149,11 @@ def qualify_engine(owner, revision, request, mutate, sleep=time.sleep, attempts=
 
 
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == 'write-lock':
+        # write-lock native=SHA postgres=SHA engine=SHA mcp=SHA: the set this deployment verified
+        changed = write_lock(dict(argument.split('=', 1) for argument in sys.argv[2:]))
+        print('version lock ' + ('advanced' if changed else 'unchanged'))
+        return
     token = os.environ['GH_TOKEN']
     def request(path, method='GET', body=None):
         req = urllib.request.Request('https://api.github.com' + path, method=method,
@@ -126,7 +173,7 @@ def main():
                 output.write(f'superseded={"true" if qualified is None else "false"}\n')
         return
     revisions = resolve(os.environ['GITHUB_REPOSITORY_OWNER'], os.environ['GITHUB_EVENT_NAME'],
-        json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text()), request)
+        json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text()), request, read_lock())
     revisions['native_run'] = verified_native_run(os.environ['GITHUB_REPOSITORY_OWNER'], revisions['native'], request)
     with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
         for key, sha in revisions.items():
