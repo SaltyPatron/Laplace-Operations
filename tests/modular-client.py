@@ -361,11 +361,15 @@ class PackageReuse(unittest.TestCase):
     def test_mcp_package_builds_and_selects_one_shared_graph_without_a_legacy_engine_tree(self):
         config = dict(self.config, mcp=str(self.root / 'mcp-source'), mcp_build=str(self.root / 'shared-build'),
                       build=str(self.root / 'absent-legacy-engine-build'))
-        with patch.object(self.package, 'build_run') as build:
+        package = self.root / 'packages/laplace-native/revision/lib/cmake/LaplaceNative'
+        with patch.object(self.package, 'build_run') as build, \
+             patch.object(self.package, 'native_package', return_value=package) as native:
             self.package.prepare_runtime(config)
+        native.assert_called_once_with(config)
         commands = [[str(value) for value in call.args[0]] for call in build.call_args_list]
         self.assertEqual(len(commands), 2)
         self.assertIn('-DLAPLACE_BUNDLE_ENGINE=ON', commands[0])
+        self.assertIn('-DLaplaceNative_DIR=' + package.as_posix(), commands[0])
         self.assertEqual(commands[1][-3:], ['laplace_engine', 'lpm_program', 'lpm_lib'])
         self.assertFalse(any(config['build'] in command for command in commands))
         self.assertEqual(self.package.runtime_binaries(config)['bin/laplace.exe'],
