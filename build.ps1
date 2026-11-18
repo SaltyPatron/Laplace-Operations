@@ -1,6 +1,7 @@
 #Requires -Version 7
 <#
-  Build Laplace on Windows: the extension and the engine, each with Laplace-Native built as part of it (build.sh).
+  Build Laplace on Windows: Laplace-Native once, installed as the CMake package LaplaceNative, then the extension and
+  the engine against it (build.sh, native-package.sh).
     pwsh -File build.ps1            build both
     pwsh -File build.ps1 install    also install the extension into PostgreSQL's directories, by rename
   The builds run in the developer shell (LAPLACE_DEVSHELL) under the floating-point contract (toolchain\laplace.cmake,
@@ -16,12 +17,17 @@ if (-not ($env:VSCMD_VER -and (Get-Command icx.exe -ErrorAction SilentlyContinue
 $contract = ((Get-Content (Join-Path $PSScriptRoot 'toolchain\determinism.tsv') | Where-Object { $_ -match '^[a-z]' }) -join "`n")
 $env:PATH = "$env:LAPLACE_PG_DIR\bin;$env:LAPLACE_ICU_DIR\bin64;$env:PATH"   # libpq and ICU, for the engine when it runs
 
+# Laplace-Native once per source revision, installed as the CMake package LaplaceNative (native-package.ps1).
+$nativePrefix = & "$PSScriptRoot\native-package.ps1" (Join-Path $env:LAPLACE_SRC 'Laplace-Native') | Select-Object -Last 1
+if ($LASTEXITCODE) { exit $LASTEXITCODE }
+$nativeConfig = Join-Path $nativePrefix 'lib\cmake\LaplaceNative'
+
 foreach ($r in 'Laplace-postgres', 'Laplace-Engine') {
     $b = Join-Path (Join-Path $env:LAPLACE_BUILD $r) 'icx-release'; $mark = Join-Path $b '.contract'
     if ((Test-Path $b) -and -not ((Test-Path $mark) -and (Get-Content $mark -Raw) -eq $contract)) {
         "$r`: the build tree was configured under another contract: made fresh"; Remove-Item $b -Recurse -Force
     }
-    & cmake.exe -S (Join-Path $env:LAPLACE_SRC $r) -B $b -G Ninja "-DCMAKE_TOOLCHAIN_FILE=$PSScriptRoot\toolchain\laplace.cmake" "-DLAPLACE_MATH=$env:LAPLACE_MATH" -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    & cmake.exe -S (Join-Path $env:LAPLACE_SRC $r) -B $b -G Ninja "-DCMAKE_TOOLCHAIN_FILE=$PSScriptRoot\toolchain\laplace.cmake" "-DLAPLACE_MATH=$env:LAPLACE_MATH" -DCMAKE_BUILD_TYPE=RelWithDebInfo "-DLaplaceNative_DIR=$nativeConfig"
     if ($LASTEXITCODE) { exit $LASTEXITCODE }
     & cmake.exe --build $b
     if ($LASTEXITCODE) { exit $LASTEXITCODE }
