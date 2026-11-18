@@ -38,14 +38,19 @@ on:
       - 'installation/host-locks.py'
       - 'installation/hart-desktop-*.json'
       - 'development/installation.json'
+      - 'components.lock.tsv'   # written by this workflow once a deployment is verified
   repository_dispatch:
     types: [main-merged]
   workflow_dispatch:
     inputs:
       engine_revision:
-        description: "Optional full Engine commit already in main; its real CI must pass. Empty selects latest main."
+        description: "Optional full Engine commit already in main; its real CI must pass. Empty keeps the version lock's."
         type: string
         required: false
+      advance:
+        description: "Deploy every component at its main instead of the version lock (components.lock.tsv); a verified run records them there"
+        type: boolean
+        default: false
       drop:
         description: "drop the database and make it again, empty, before deploying (deploy.sh drop): everything in it is lost"
         type: boolean
@@ -101,8 +106,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
         run: python3 .github/scripts/resolve-dependencies.py
-      # Every queued run deploys every repository at its main, so a run whose revisions are already deployed and
-      # verified (the tests job records them) has nothing to do. A manual dispatch always runs.
+      # Every run deploys the version lock (a merged component's dispatch replaces only its own row), so a run whose
+      # revisions are already deployed and verified (the tests job records them) has nothing to do. A manual dispatch
+      # always runs.
       - name: Are these exact revisions already deployed and verified?
         id: current
         env:
@@ -278,6 +284,25 @@ jobs:
         run: |
           . ./Laplace-Operations/laplace.env
           printf '%s' "$KEY" > "$LAPLACE_WORK/deployed-revisions.tmp" && mv "$LAPLACE_WORK/deployed-revisions.tmp" "$LAPLACE_WORK/deployed-revisions"
+      # The version lock moves only here: to the set this deployment built, installed and verified. Its commit is
+      # excluded from the push trigger, so recording it deploys nothing.
+      - name: Advance the version lock to the verified revisions
+        working-directory: Laplace-Operations
+        env:
+          TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 .github/scripts/resolve-dependencies.py write-lock native=${{ needs.resolve.outputs.native }} \
+            postgres=${{ needs.resolve.outputs.postgres }} engine=${{ needs.resolve.outputs.engine }} mcp=${{ needs.resolve.outputs.mcp }}
+          git diff --quiet -- components.lock.tsv && exit 0
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "Version lock: the revisions staging verified (run ${{ github.run_id }})" -- components.lock.tsv
+          remote="https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git"
+          for attempt in 1 2 3; do
+            git pull -q --rebase "$remote" main && git push -q "$remote" HEAD:main && exit 0
+            sleep 10
+          done
+          echo "::error::the version lock could not be pushed"; exit 1
   reads:
     needs: [deploy, checks, ingest]
     if: always() && needs.deploy.result == 'success' && needs.checks.result == 'success' && needs.ingest.result != 'failure' && needs.ingest.result != 'cancelled'

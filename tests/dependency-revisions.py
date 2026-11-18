@@ -7,47 +7,79 @@ resolver = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(resolver)
 
 
+LOCK = dict.fromkeys(resolver.COMPONENTS, 'd' * 40)
+
+
+def github(main='a' * 40, merged='ahead', against_lock='ahead'):
+    """A GitHub double: main's head, the triggering revision's place in main, and its place against the lock."""
+    def request(path):
+        if '/compare/' in path:
+            base = path.rsplit('/compare/', 1)[1].split('...')[0]
+            return {'status': against_lock if base == 'd' * 40 else merged}
+        return {'sha': main}
+    return request
+
+
 class Revisions(unittest.TestCase):
-    def test_push_resolves_every_component(self):
-        self.assertEqual(resolver.resolve('owner', 'push', {}, lambda _: {'sha': 'a' * 40}),
+    def test_push_deploys_the_locked_set_without_reading_main(self):
+        self.assertEqual(resolver.resolve('owner', 'push', {}, lambda _: self.fail('a push read main'), LOCK), LOCK)
+
+    def test_operator_advance_takes_every_main(self):
+        self.assertEqual(resolver.resolve('owner', 'workflow_dispatch', {'inputs': {'advance': 'true'}}, github(), LOCK),
                          dict.fromkeys(resolver.COMPONENTS, 'a' * 40))
 
     def test_operator_can_retain_a_qualified_engine_from_main_history(self):
-        result = resolver.resolve('owner', 'workflow_dispatch', {'inputs': {'engine_revision': 'b' * 40}},
-            lambda path: {'status': 'ahead'} if '/compare/' in path else {'sha': 'a' * 40})
+        result = resolver.resolve('owner', 'workflow_dispatch', {'inputs': {'engine_revision': 'b' * 40}}, github(), LOCK)
         self.assertEqual(result['engine'], 'b' * 40)
-        self.assertEqual(result['native'], 'a' * 40)
+        self.assertEqual(result['native'], 'd' * 40)
         with self.assertRaisesRegex(ValueError, 'main history'):
             resolver.resolve('owner', 'workflow_dispatch', {'inputs': {'engine_revision': 'b' * 40}},
-                lambda path: {'status': 'diverged'} if '/compare/' in path else {'sha': 'a' * 40})
+                             github(merged='diverged'), LOCK)
         with self.assertRaisesRegex(ValueError, 'full commit'):
             resolver.resolve('owner', 'workflow_dispatch', {'inputs': {'engine_revision': 'main'}},
-                             lambda _: self.fail('invalid revision reached GitHub'))
+                             lambda _: self.fail('invalid revision reached GitHub'), LOCK)
 
-    def test_delayed_dispatch_preserves_triggering_revision(self):
+    def test_dispatch_replaces_only_its_component(self):
         result = resolver.resolve('owner', 'repository_dispatch', {'client_payload': {
-            'repository': 'owner/Laplace-Engine', 'sha': 'b' * 40}},
-            lambda path: {'status': 'ahead'} if '/compare/' in path else {'sha': 'a' * 40})
-        self.assertEqual(result, {'native': 'a' * 40, 'postgres': 'a' * 40, 'engine': 'b' * 40, 'mcp': 'a' * 40})
+            'repository': 'owner/Laplace-Engine', 'sha': 'b' * 40}}, github(), LOCK)
+        self.assertEqual(result, {'native': 'd' * 40, 'postgres': 'd' * 40, 'engine': 'b' * 40, 'mcp': 'd' * 40})
 
-    def test_modular_mcp_dispatch_preserves_triggering_revision(self):
+    def test_late_dispatch_never_moves_a_component_back(self):
         result = resolver.resolve('owner', 'repository_dispatch', {'client_payload': {
-            'repository': 'owner/Laplace-MCP', 'sha': 'c' * 40}},
-            lambda path: {'status': 'ahead'} if '/compare/' in path else {'sha': 'a' * 40})
-        self.assertEqual(result['mcp'], 'c' * 40)
+            'repository': 'owner/Laplace-MCP', 'sha': 'c' * 40}}, github(against_lock='behind'), LOCK)
+        self.assertEqual(result['mcp'], 'd' * 40)
 
     def test_untrusted_payloads_fail_before_api_access(self):
         for repo, sha in [('stranger/Laplace-Native', 'b' * 40), ('owner/Laplace-Native', 'main'),
                           ('owner/Laplace-Native', 'a";echo unsafe'), (None, None)]:
             with self.subTest(repo=repo, sha=sha), self.assertRaises(ValueError):
                 resolver.resolve('owner', 'repository_dispatch', {'client_payload': {'repository': repo, 'sha': sha}},
-                                 lambda _: self.fail('invalid payload reached GitHub'))
+                                 lambda _: self.fail('invalid payload reached GitHub'), LOCK)
 
     def test_unmerged_revision_rejected(self):
         with self.assertRaisesRegex(ValueError, 'main history'):
             resolver.resolve('owner', 'repository_dispatch', {'client_payload': {
-                'repository': 'owner/Laplace-Engine', 'sha': 'b' * 40}},
-                lambda path: {'status': 'diverged'} if '/compare/' in path else {'sha': 'a' * 40})
+                'repository': 'owner/Laplace-Engine', 'sha': 'b' * 40}}, github(merged='diverged'), LOCK)
+
+
+class VersionLock(unittest.TestCase):
+    def test_repository_lock_names_every_component(self):
+        self.assertEqual(set(resolver.read_lock()), set(resolver.COMPONENTS))
+
+    def test_write_keeps_the_header_and_reports_change(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'components.lock.tsv'
+            path.write_text('# header\n' + ''.join(f'{k}\t{n}\t{"d" * 40}\n' for k, n in resolver.COMPONENTS.items()))
+            self.assertFalse(resolver.write_lock(LOCK, path))
+            self.assertTrue(resolver.write_lock(dict(LOCK, engine='e' * 40), path))
+            self.assertEqual(resolver.read_lock(path)['engine'], 'e' * 40)
+            self.assertTrue(path.read_text().startswith('# header\n'))
+            with self.assertRaises(ValueError):
+                resolver.write_lock(dict(LOCK, engine='main'), path)
+            path.write_text(path.read_text().replace('Laplace-MCP', 'Elsewhere'))
+            with self.assertRaises(ValueError):
+                resolver.read_lock(path)
 
 
 class EngineQualification(unittest.TestCase):
