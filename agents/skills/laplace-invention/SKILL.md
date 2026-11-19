@@ -54,7 +54,7 @@ Packing the ID into X/Y/Z gives each vertex three "entity coordinates" that *are
   - `physicality_paths` GIN `(path laplace_path_ops, mask laplace_mask_ops)`. Read `gin_pending_list_limit` from `operations.sql`; it was 32768.
   - Partial GIN `physicality_assertions WHERE laplace_path_has_roles(path,6)`.
 - `consensus(claim PK, rating, deviation, volatility float8, matches bigint)`: 16 partitions, fillfactor 80.
-- Witness = the source trunk node itself; no witness table (HEAD still has one; the in-progress work removes it). Physicalities are usages, observations and examples, **not attestations**. `attestation` is its own table, one row per (claim, witness, lineage) with games, tokens, score, position and trust (in progress). `consensus` folds the attestations per claim.
+- Witness = the source trunk node itself; no witness table. Physicalities are usages, observations and examples, **not attestations**. `attestation` (`claim`, `witness`, `lineage`, `games`, `tokens`, `score`, `"position"`, `trust`, partitioned by `claim`) is its own table (`sql/laplace.sql.in`), one row per (claim, witness, lineage). `consensus` folds the attestations per claim.
 - Staging API: `laplace_ensure_stage`, `laplace_merge_stage`, `laplace_enrich_stage`, `laplace_clean_stage`, `laplace_stage_retire`/`_own`, `laplace_present_stage`, `laplace_accumulate_series`, `laplace_attest_stage`, `laplace_contained_series`, `laplace_clean_partitions`. `laplace_attest_series` is used by replay. `laplace_clean_pending_list` exists.
 - Reads: `laplace_containers`, `laplace_paths`, `laplace_claims`, `laplace_follows`, `laplace_couple`, `laplace_distance4d`, `laplace_attested`, `laplace_attribution`, `laplace_bank_bit` (smallint), mask operators `?` `?&` `?|` (bit vs smallint / smallint[]), `laplace_text_id` (UAX #29 in SQL), `laplace_recoordinate`.
 - Function contracts are the `COMMENT ON FUNCTION` blocks at the end of `laplace.sql.in`; `manifest/function_bindings.tsv` lists the exported Native symbols; `tools/check-function-bindings.mjs` checks the two agree.
@@ -87,7 +87,7 @@ Packing the ID into X/Y/Z gives each vertex three "entity coordinates" that *are
 ## 5. Verification checklist before claiming "done"
 
 1. Native: `ctest --preset icx-release` in `Laplace-Native` (`test_tier0` needs `$LAPLACE_TIER0`).
-2. postgres: build `laplace_pg`, then `ctest` (`postgres_regress`, `module_install`). New SQL needs a regression case in `tests/regression_cases.txt`.
+2. Deploy & verify against the real installed desktop stack (`laplace`, `laplace-mono`, `laplace-desktop-app`, IIS `https://dev.hartonomous.com`) — **never** spin up private PostgreSQL clusters (`postgres_regress`), private Kestrel servers, or manual disposable DBs (`laplace_test_disposable`, `laplace_regress_*`): `laplace-ops deploy -Target desktop`, `laplace-ops verify -Target desktop -Installed`, `laplace-ops test -Check desktop-installed-databases,desktop-installed-deployment,desktop-source-interpretation,desktop-sql-foundation,desktop-installed-runtime`, plus `Laplace-postgres/tests/deployed.sh`, `Laplace-Engine/tests/deployed/run.sh`, and `Laplace-MCP/tests/deployed/run.sh`.
 3. Engine: build `laplace_engine` plus the affected `EXCLUDE_FROM_ALL` test targets; `laplace ingest --plan` / `--claims` against a fixture in `tests/fixtures/`.
 4. Monorepo: `ReadPathArchitectureGateTests` must pass (zero hand-written SQL).
 5. Wiki: `python3 tools/check_wiki.py` and `npx markdownlint-cli2`.

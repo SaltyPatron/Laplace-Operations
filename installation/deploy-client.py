@@ -5,14 +5,15 @@ import socket
 import subprocess
 
 import client
+import database
 
 
 def deploy(configuration, psql, *, drop=False):
     executable, environment, selected = client.selected(Path(configuration))
     if selected['database_host'].lower() not in {socket.gethostname().lower(), 'localhost', '127.0.0.1', '::1'}:
         raise ValueError('Installed desktop deployment requires the local database host')
-    database = selected['database']
-    if not database or database.lower() in {'postgres', 'template0', 'template1'}:
+    database_name = selected['database']
+    if not database_name or database_name.lower() in {'postgres', 'template0', 'template1'}:
         raise ValueError('The selected database is not an application database')
     psql = Path(psql)
     if not psql.is_file():
@@ -28,21 +29,25 @@ def deploy(configuration, psql, *, drop=False):
         # Active clients cause DROP to fail; this operation never terminates them.
         maintenance = environment['LAPLACE_CONNINFO'] + " dbname='postgres'"
         subprocess.run([str(psql), '-X', '-w', '-d', maintenance, '-v', 'ON_ERROR_STOP=1',
-                        '-v', 'laplace_database=' + database], env=env, check=True,
+                        '-v', 'laplace_database=' + database_name], env=env, check=True,
                        input="SELECT format('DROP DATABASE IF EXISTS %I WITH (FORCE)', :'laplace_database')\n\\gexec\n", text=True)
     subprocess.run([str(executable), 'deploy', '--configure-server-cache'], env=env, check=True)
-    grants = (
-        "DO $$ BEGIN "
+    grants = database.runtime_grants({
+        'role': 'laplace_modular_runtime',
+        'database': database_name,
+        'connection_limit': 64,
+    }) + (
+        "\nDO $$ BEGIN "
         "IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'laplace_modular_web') THEN "
         "EXECUTE format('GRANT CONNECT ON DATABASE %I TO laplace_modular_web', current_database()); "
         "GRANT USAGE ON SCHEMA public TO laplace_modular_web; "
         "GRANT SELECT ON ALL TABLES IN SCHEMA public TO laplace_modular_web; "
         "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO laplace_modular_web; "
         "END IF; "
-        "END $$;"
+        "END $$;\n"
     )
     subprocess.run([str(psql), '-X', '-w', '-d', environment['LAPLACE_CONNINFO'],
-                    '-v', 'ON_ERROR_STOP=1', '-qc', grants], env=env, check=True)
+                    '-v', 'ON_ERROR_STOP=1', '-qf', '-'], env=env, input=grants, text=True, check=True)
     return selected
 
 
