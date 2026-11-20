@@ -1,94 +1,74 @@
 ---
 name: laplace-invention
-description: Deep byte-level and operational reference for Laplace (identity, tiers, Tier-0, path carrier, banks, schema, ingest, MCP research recipes, verification checklist). Load for any Laplace task that touches layouts, schema, ingest, retrieval, or documentation accuracy.
+description: Deep byte-level and operational reference for Laplace (identity, tiers, Tier-0, mantissa path carrier, 64-bit mask banks, schema, in-place reconcile, ingest VM, Forward/Model/Export, end-to-end delivery checklist). Load for any Laplace task touching layouts, schema, ingest, retrieval, synthesis, or documentation.
 metadata:
-  short-description: Laplace byte-level reference + research recipes
+  short-description: Laplace byte-level reference + end-to-end delivery checklist
 ---
 
 # Laplace — Deep Reference
 
-The core laws and repo map are in the global agent file (`Laplace-Operations/agents/AGENTS.md`). This skill adds byte-level detail, research recipes, and a verification checklist. **Every number here was verified against code on 2026-11-09. Re-verify anything you're about to depend on** — the "where to verify" column says where.
+Core mandate, truth hierarchy (`INVENTOR_RECORD.md` + `INVENTION.md` + decided `Sequence/Conflicts.md` > `Architecture.md` > modular packages > monorepo migration debt), and the 1.0 finish line live in `Laplace-Operations/agents/AGENTS.md`. Always check documentation and code together; when agent-written code contradicts the invention, fix the code to match the invention.
 
-## 1. Byte layouts
+## 1. Exact Byte & Bit Layouts (`Laplace-Native`)
 
-| Thing | Layout | Where to verify |
+| Structure | Layout | Source (`Laplace-Native`) |
 | :--- | :--- | :--- |
-| `lp_id` | `uint8_t b[16]` = BLAKE3-256 prefix; printed as 32 lowercase hex digits | `laplace.h` (`lp_id`, `lp_id_codepoint`, `lp_id_compose`) |
-| Composition | n==1 → child itself; n≥2 → BLAKE3-128(child ids ‖ …), `tier = lp_tier_above` = 1+max (saturates at 255) | `src/compose.c` (`lp_ref_compose`), `laplace.h` `lp_tier_above` |
-| `lp_tier0_record` (64 B) | `id[16]`, `int64 m[4]` (value m/2^53), `uint64 hilbert`, `uint32 rank` (DUCET), `uint32 pad` | `laplace.h`, `src/tier0.c` |
-| Tier-0 shards | ascii 128 · utf 22,112 · cjk 115,920 · ext 975,952 records; `LAPLACE_TIER0_PROFILE` tokens `ascii`, `utf`/`latin` (=ascii+utf), `utf-only`, `cjk` (=bmp), `cjk-only`, `bmp`, `ext`/`supplementary`/`planes`, `full`/`all`; fallback `LAPLACE_TIER0_BRANCHES`; `@profile` path suffix | `tier0.h`, `src/tier0_map.c` |
-| Flags | 32 B (256 bits) per codepoint + `.layout`; shards `<stem>.flags.<shard>.bin` | `laplace.h` `lp_flags`, `src/flags.c` |
-| Highway | shards `core` (banks), `wordnet` (ILI), `frames` (roles); profile tokens `core`/`banks`, `wordnet`/`ili`, `frames`/`roles`, `lexical`/`full`/`all`; `LAPLACE_HIGHWAY_PROFILE` (fallback `LAPLACE_HIGHWAY_BRANCHES`) | `highway.h`, `src/highway.c` |
-| Centroid | Σ m in `__int128`, divided by n truncating toward zero | `src/coord.c`, `internal.h` `lp_div128` |
-| Inside test | Σ m_d² ≤ 2^106 (`lp_coord_inside`); Tier-0 nudged inward | `src/coord.c`, `src/tier0.c` |
-| Hilbert | 4D 16-bit Skilling + `pdep`; SQL stores `h ^ 0x8000000000000000` | `laplace.h` `lp_hilbert_key`, `src/isa/hilbert_bmi2.c` |
-| Path vertex X/Y/Z | Biased exponent 1021 (values in [0.25, 0.5)); low 43/43/42 mantissa bits = the 128-bit child ID; the 9+9+10 = 28 spare bits = 4-bit tag + 24-bit payload (e.g. `LP_SPARE_SCORE`: score × 2^24) | `laplace.h` `lp_id_to_xyz`/`lp_xyz_to_id`/`lp_xyz_spare`, `src/geometry.c` |
-| Path vertex M | Integer-valued double: run bits 0–29 (`LP_M_RUN_BITS`), said bits 30–32 (`LP_M_SAID_BITS`), outcome bits 33–34, position bits 35–52 (18 bits). `lp_m_run`, `lp_m_said`, `lp_m_outcome`, `lp_m_position`, `lp_m_full` | `laplace.h` |
-| `LP_SAID_*` | CLAIM 1, RECORD 2, TUPLE 3, METADATA 4, HOLDS 5, VOICE 6, DEPENDENCE 7 | `laplace.h`, `consensus.h` |
-| Outcome | WIN 0 (also every non-claim), DRAW 1, LOSS 2, SCORE 3 (value in spare bits) | `laplace.h` |
-| EWKB | POINT ZM 37 B (`0xC0000001`); LINESTRING ZM 9+32n B (`0xC0000002`); always binary, never WKT | `src/geometry.c` |
-| Mask carrier | One `uint64` / `bit(64)`. `banks.tsv` gives the fields: `kind` 8 bits at 0 (row-role flags: CLAIM, RECORD, TUPLE, FILE), `upos` 5@8, `lexfile` 6@13, `deprel` 6@19, `vnrole` 6@25, `wnframe` 6@31. Enums store slot+1. Carriers: kind=row, upos/lexfile/wnframe=entity, deprel/vnrole=occurrence | `manifest/banks.tsv`, `laplace.h` `LP_MASK_BITS`, SQL `laplace_mask_*` |
+| `lp_id` (16 B) | First 16 bytes of BLAKE3-256 (`uint8_t b[16]`, 32 lowercase hex chars). Zero salt, zero domain byte, zero tier/recipe/position prefix | `include/laplace/laplace.h` (`lp_id`, `lp_id_codepoint`, `lp_id_compose`) |
+| Composition | Leaf = BLAKE3-128(1..4 UTF-8 bytes of codepoint). `n==1` → child itself (`compose_refs` singleton collapse). `n>=2` → BLAKE3-128($16n$ child IDs in order, repeats included); `tier = lp_tier_above` = `1 + max(child.tier)` (saturates at 255) | `src/compose.c` (`lp_ref_compose`), `laplace.h` (`lp_tier_above`) |
+| `lp_tier0_record` (64 B) | `id[16]`, `int64 m[4]` (fixed point $m / 2^{53}$), `uint64 hilbert`, `uint32 rank` (DUCET), `uint32 pad` | `laplace.h`, `tier0.h`, `src/tier0.c` |
+| Tier-0 shards | 1,114,112 records: `ascii` (128), `utf` (22,112), `cjk` (115,920), `ext` (975,952). Select via `LAPLACE_TIER0_PROFILE` (`ascii`, `utf`/`latin`, `cjk`/`bmp`, `ext`, `full`/`all`) or `@profile` suffix; IDs and coords are identical across profiles | `tier0.h`, `src/tier0_map.c` |
+| Flags (32 B/cp) | 256-bit Unicode property record per codepoint + `.layout`; shards `<stem>.flags.<shard>.bin` | `laplace.h` (`lp_flags`), `src/flags.c` |
+| Highway ROM | Shards `core` (banks), `wordnet` (ILI), `frames` (roles); `LAPLACE_HIGHWAY_PROFILE` (`core`, `wordnet`, `frames`, `lexical`/`full`). Generated from `manifest/` + `tier0.bin` with no raw corpora needed on disk | `highway.h`, `src/highway.c` |
+| Centroid & Wall | Exact `__int128` sum divided by $n$ truncating toward zero; wall test $\sum_{d=0}^3 m_d^2 \le 2^{106}$ (`lp_coord_inside`); Tier-0 shell nudged strictly inside | `src/coord.c`, `src/tier0.c` |
+| Hilbert key | 4D 16-bit Skilling + BMI2 `pdep`; SQL stores `h ^ 0x8000000000000000` so signed `bigint` sort = unsigned Hilbert order | `laplace.h` (`lp_hilbert4`, `lp_hilbert_key`), `src/isa/hilbert_bmi2.c` |
+| Path vertex X/Y/Z | IEEE-754 binary64 with biased exponent 1021 (values in `[0.25, 0.5)`): low `43 + 43 + 42 = 128` mantissa bits carry child `lp_id`; upper `9 + 9 + 10 = 28` spare bits carry `4-bit tag + 24-bit payload` (e.g. `LP_SPARE_SCORE`: score $\times 2^{24}$) | `laplace.h` (`lp_id_to_xyz`, `lp_xyz_to_id`, `lp_xyz_spare`), `src/geometry.c` |
+| Path vertex M | Exact integer-valued double: run bits `0..29` (30b), `said` role bits `30..32` (3b: `CLAIM=1`, `RECORD=2`, `TUPLE=3`, `METADATA=4`, `HOLDS=5`, `VOICE=6`, `DEPENDENCE=7`), outcome bits `33..34` (2b: `WIN=0`, `DRAW=1`, `LOSS=2`, `SCORE=3`), position bits `35..52` (18b) | `laplace.h` (`lp_m_run`, `lp_m_said`, `lp_m_outcome`, `lp_m_position`, `lp_m_full`), `consensus.h` |
+| EWKB carrier | `POINT ZM` = 37 B (`0xC0000001`, single run); `LINESTRING ZM` = `9 + 32n` B (`0xC0000002`); always binary EWKB, never WKT | `src/geometry.c` |
+| 64-bit `mask` | Single `uint64` / SQL `bit(64)` defined by `manifest/banks.tsv`: `kind` 8-bit flag set at bit 0 (`CLAIM`, `RECORD`, `TUPLE`, `FILE`), `upos` 5@8, `lexfile` 6@13, `deprel` 6@19, `vnrole` 6@25, `wnframe` 6@31 (enums store `slot + 1`, `0` = absent) | `manifest/banks.tsv`, `laplace.h` (`LP_MASK_BITS`), SQL `laplace_mask_*` |
 
-### The path carrier: what it is for
+### Why Mantissa Bit-Packing Exists (Never Conflate the Three Spaces)
 
-Packing the ID into X/Y/Z gives each vertex three "entity coordinates" that *are* its identity, plus an M coordinate that holds metadata. Everything PostGIS knows about storing, copying, TOASTing and indexing geometry then works on ordered ID sequences:
-
-- **Identity:** exact vertex match. An R-tree/GiST probe on a point is an exact ID lookup. GIN `laplace_path_ops` posts each vertex ID, which gives containment.
-- **Metadata in M:** RLE run length, role, outcome and position. M-range predicates (`ST_LocateBetween`, `ST_FilterByM`) slice vertices by position first, then by outcome, said and run, because that is the bit order from high to low.
-- **Not shape:** the axes are hash bits, so carrier closeness means nothing. A multi-vertex bounding box covers almost the whole [0.25, 0.5)³ cube and prunes nothing. Shape (the 4D form of the DAG segment) always realizes child coordinates first (`laplace_couple`, `laplace_project_path`). The raw `laplace_frechet4d` / `dtw4d` / `edr4d` measure whatever geometry they are handed.
-- **Three kinds of "near", never conflated:**
-  1. *Identity/containment*: the carrier and GIN.
-  2. *Shape*: real 4D coordinates and realized trajectories. This is compositional/morphological similarity, not semantic.
-  3. *Meaning*: attestations, relations, usages, observations, examples and highway identifiers, weighted by Glicko-2 consensus.
+1. **Identity, Sequence & Containment (`physicality.path` + GIN/B-tree/R-tree):** Packing 128-bit BLAKE3 child IDs + run/role/outcome/position into `POINT ZM` / `LINESTRING ZM` mantissas exploits 40+ years of battle-tested PostgreSQL/PostGIS storage, TOAST (`lz4`), binary `COPY`, and GIN/GiST indexing. It gives exact constituent order, RLE compression, `precedes` (`laplace_precedes`), `follows` (`laplace_follows`), gaps, co-occurrence, and LCA containment in microseconds **without** storing billions of `continues_to`/`contains` edge rows.
+2. **4D Shape (`entity.coord` + Realized Curves):** Tier-0 DUCET/Super-Fibonacci points on $S^3$ and exact centroids inside the 4-ball (`entity.coord`), plus curves realized by unpacking constituent IDs and resolving their real `entity.coord` (`laplace_couple`, `laplace_project_path`) before measuring `laplace_frechet4d`, `laplace_dtw4d`, or `laplace_edr4d`. Never pass raw `physicality.path` carrier doubles into shape metrics or render carrier doubles directly on the glome (`ExploreDecomposeService.cs` / `GlomeCanvas.tsx` legacy bug).
+3. **Meaning & Truth (`attestation` + `consensus` + Highway):** Curated witnesses and assimilated models assert n-ary claim compositions; per-witness game series fold into Glicko-2 `consensus` (`s_eff = 0.5 + t(s - 0.5)` bounded by witness trust and dependence root). Semantic navigation hops across rated claims and highway identifiers (`hop`, `translate`, `degrees`, `pull`, `turn`).
 
 > [!WARNING]
-> The monorepo has a **second, different carrier**: `Laplace/engine/core/src/mantissa.c` `mantissa_pack` (exponent 1023, sign + 52-bit mantissa = 53 payload bits; Z = 22 hash bits + 31 flag bits), exposed through `extension/laplace_geom` (`laplace_mantissa_pack`). The web glome (`web/src/explore/glome/GlomeCanvas.tsx` `unpackMantissaCoord`) decodes both formats. Its Native branch treats M as "51-bit run count", which is wrong. Do not assume paths are interchangeable between the `laplace` and `laplace-mono` databases.
+> Legacy monorepo files (`Laplace/engine/core/src/mantissa.c` 212-bit `53/53/22` carrier, `hilbert4d.c` 128-bit key, `glicko2.c`, `hash128_merkle` domain byte, `SubstrateCanonicalIds.cs`) belong to the pre-modular substrate being retired under `one-substrate`. Never extend them; converge callers onto `Laplace-Native` + `Laplace-postgres`.
 
-## 2. Schema snapshot (`Laplace-postgres/sql/laplace.sql.in`, `operations.sql`; version in `laplace.control`)
+## 2. Extension Schema & In-Place Reconcile (`Laplace-postgres`)
 
-- At verification time the version was 1.63. The `laplace--<v>.sql` file is generated by CMake from `sql/laplace.sql.in` (assembled from `api.sql` + `operations.sql` + `path_set_match.sql`), along with direct upgrade scripts.
-- `entity(id blake3, tier smallint, coord geometry(PointZM), hilbert bigint, mask bit(64) CHECK laplace_mask_valid)`: 256 partitions. No `lexical`/`kind` columns.
-- `physicality(entity blake3 PK → entity, tier, hilbert, path geometry, mask bit(64))`: 256 partitions, `parallel_workers=0`.
-- Indexes:
-  - `entity_coord` GiST `laplace_point4d_ops`, `entity_angular` `laplace_angular4d_ops`, `entity_hilbert`, `entity_tier_hilbert(tier,hilbert,id)`.
-  - `physicality_paths` GIN `(path laplace_path_ops, mask laplace_mask_ops)`. Read `gin_pending_list_limit` from `operations.sql`; it was 32768.
-  - Partial GIN `physicality_assertions WHERE laplace_path_has_roles(path,6)`.
-- `consensus(claim PK, rating, deviation, volatility float8, matches bigint)`: 16 partitions, fillfactor 80.
-- Witness = the source trunk node itself; no witness table. Physicalities are usages, observations and examples, **not attestations**. `attestation` (`claim`, `witness`, `lineage`, `games`, `tokens`, `score`, `"position"`, `trust`, partitioned by `claim`) is its own table (`sql/laplace.sql.in`), one row per (claim, witness, lineage). `consensus` folds the attestations per claim.
-- Staging API: `laplace_ensure_stage`, `laplace_merge_stage`, `laplace_enrich_stage`, `laplace_clean_stage`, `laplace_stage_retire`/`_own`, `laplace_present_stage`, `laplace_accumulate_series`, `laplace_attest_stage`, `laplace_contained_series`, `laplace_clean_partitions`. `laplace_attest_series` is used by replay. `laplace_clean_pending_list` exists.
-- Reads: `laplace_containers`, `laplace_paths`, `laplace_claims`, `laplace_follows`, `laplace_couple`, `laplace_distance4d`, `laplace_attested`, `laplace_attribution`, `laplace_bank_bit` (smallint), mask operators `?` `?&` `?|` (bit vs smallint / smallint[]), `laplace_text_id` (UAX #29 in SQL), `laplace_recoordinate`.
-- Function contracts are the `COMMENT ON FUNCTION` blocks at the end of `laplace.sql.in`; `manifest/function_bindings.tsv` lists the exported Native symbols; `tools/check-function-bindings.mjs` checks the two agree.
+- **Versioning (`CMakeLists.txt` + `laplace.control`):**
+  - `laplace-storage:<16-hex>` hashes **only** `CREATE TYPE blake3` and the four persistent table DDLs in `sql/laplace.sql.in`.
+  - `default_version` hashes the full install script, and the build emits `laplace.reconcile.sql` covering all replaceable functions, casts, operators, opclasses, and indexes (`path_set_match.sql` + `api.sql` + `operations.sql` + `laplace_restore_function_bindings()`).
+  - `laplace deploy` (`Laplace-Engine/src/deploy.c` `prepare_laplace_transition`) checks storage compatibility and runs `ALTER EXTENSION laplace UPDATE TO ...` **in place**, preserving all ingested data and indexes whenever storage DDL is unchanged. Pass `--recreate` **only** when persistent table DDL or `tier0.bin` coordinates change.
+- **Persistent tables (`sql/laplace.sql.in`):**
+  - `entity(id blake3, tier smallint, coord geometry(PointZM), hilbert bigint, mask bit(64))` — PK `(tier, id)`, per-partition `UNIQUE (id)`; currently 9 tier range partitions `entity_t0`..`entity_t8plus` (note `Sequence/Conflicts.md` P4 vs `Sequence/Database.md` §8.10).
+  - `physicality(entity blake3, tier smallint, hilbert bigint, path geometry, mask bit(64))` — PK `(tier, entity)`, FK `(tier, entity) → entity(tier, id) ON UPDATE CASCADE`, `parallel_workers=0`, `path SET STATISTICS 0`; 9 tier range partitions `physicality_t0`..`physicality_t8plus`.
+  - `attestation(claim, witness, lineage, games, tokens, score, "position", trust)` — `UNIQUE NULLS NOT DISTINCT (claim, witness, lineage)`, 16 hex range partitions `attestation_0`..`attestation_f` (`fillfactor=80`).
+  - `consensus(claim PK, rating, deviation, volatility, matches)` — 16 hex range partitions `consensus_0`..`consensus_f` (`fillfactor=80`).
+- **Indexes (`sql/operations.sql` `laplace_schema_indexes()`):**
+  - `entity_hilbert(hilbert)`, `entity_tier_hilbert(tier, hilbert, id)`, `entity_coord USING gist (coord laplace_point4d_ops)`, `entity_angular USING gist (coord laplace_angular4d_ops)`.
+  - `physicality_paths USING gin (path laplace_path_ops, mask laplace_mask_ops) WITH (gin_pending_list_limit = 32768)`.
+  - `physicality_assertions USING gin (path laplace_path_ops) WITH (gin_pending_list_limit = 32768) WHERE laplace_path_has_roles(path, 6)`.
+  - `attestation_witness_lineage(witness, lineage NULLS FIRST) INCLUDE (trust)`.
+- **Exported binding contract:** `Laplace-postgres/manifest/function_bindings.tsv` checked by `Laplace-postgres/tools/check-function-bindings.mjs`.
 
-## 3. Engine module map (`Laplace-Engine/src`)
+## 3. Engine Map (`Laplace-Engine/src`, 31 CLI Operations in `op.c`)
 
-| Concern | Files |
+| Area | Files |
 | :--- | :--- |
-| CLI dispatch | `main.c` → `op.c` command table (`op_named`); built-ins `describe`, `help <cmd>` |
-| Recipes | `recipe.c` (parse/select/order), `recipe_compile.c` (`say_compile`), `structure_compile.c` (TS symbol/field binding), `recipe_program.h` (bytecode) |
-| Records | `structure_records.c` (record slicing), `record_stream.c` (windows, barriers), `recipe_decompose.c` (`decompose_input`; legacy `read_all` for non-streamable recipes), `structure_decode.c` (injected sub-grammars) |
-| VM | `say.c` (`record_execute`), `record_values.c`, `record_things.c`, `record_operands.c`, `record_select.c`, `record_output.c`, `record_surface.c`, `record_journal.c`, `record_diagnostics.c`, `recipe_says.c`, `record_worker.h` |
-| Tree-sitter | `grammars.c` (`lp_tls_parser`, `lp_tls_cursor`), grammars in `recipes/formats/grammars/` |
-| Table | `table.c` (`compose`, `table_find`, `keys_put/get`, `table_reset`) |
-| Load | `db.c` (`prune`, `load`, `copy_rows`, `merge`, `cmd_merge`), `db_metadata.c` (`start_loader`, `fold_events`, `flush_series`), `pg.c` |
-| Ingest driver | `ingest.c`, `ingest_probe.c` (`--plan`) |
-| Reads | `read.c`, `pull.c`, `forward.c`, `program.c`, `walk.c`, `provenance.c` |
-| Chess / models | `chess.c`, `model.c` |
+| CLI & SQL contract | `main.c`, `op.c` (31 operations + `describe`/`help`), `pg_contract.c`, `pg_plan.c`, `pg.c` (enforced by `tests/sql-contract-gate.py`) |
+| Perf-caches & deploy | `tier0.c`, `flags.c`, `highway.c`, `chess_cache.c`, `deploy.c` (`deploy`, `index`, `status`, `projection`) |
+| Recipes & Tree-sitter | `recipe.c`, `recipe_compile.c`, `structure_compile.c`, `structure_records.c`, `structure_decode.c`, `record_stream.c`, `grammars.c`, `recipes/` |
+| Record VM & Node Table | `say.c`, `record_*.c`, `recipe_says.c`, `record_worker.h`, `table.c` (lock-free CAS + `compose` + cross-record `keys_put/get`) |
+| Stage Load & Maintenance | `ingest.c`, `ingest_probe.c`, `db.c` (`prune`, `load`, `merge`), `db_metadata.c`, `forget.c` (`forget`, `sweep`), `replay` |
+| Forward, Firmware & Domains | `firmware.c`, `program.c`, `pull.c`, `forward.c`, `read.c` (`pull`, `turn`, `said`, `hop`, `translate`, `degrees`, `fills`, `held`), `chess.c` (`pgn`, `tablebase`), `model.c` |
 
-## 4. Research recipes (laplace-code MCP)
+## 4. End-to-End Delivery Checklist (Definition of Done)
 
-- **"Where is X defined / who calls it?"** `code_where {query: "symbol"}`, then `code_callers` / `code_callees`, then `file_outline {path}`.
-- **"How does concept Y work?"** `code_search {query, scope: "docs", limit: 5}` for the spec, then the same query with `scope: "code"` for the implementation. Compare the two and report drift.
-- **"Is the doc still true?"** `code_search` for each symbol the doc cites. Any missing symbol means stale.
-- **"What's loaded / is an ingest running?"** `ingest_status {source?}`. On staging, also read `/repos/work/logs/ingest-runs/<UTC>/`.
-- **"Does a recipe cover this source?"** `recipe_catalog`, then `recipe_plan {source}`.
-- **Exercise the read path:** `search`, `hop`, `translate`, `degrees`, `pull`, `forward`, `turn`. Unexpected results here are bugs worth reporting, not noise.
-- Exact-string lookups are faster with `git -C <repo> grep -n "<sym>"` (ripgrep is not installed on HART-DESKTOP).
+Never declare work done at compilation or unit tests alone. Complete the full loop for every layer touched:
 
-## 5. Verification checklist before claiming "done"
-
-1. Native: `ctest --preset icx-release` in `Laplace-Native` (`test_tier0` needs `$LAPLACE_TIER0`).
-2. Deploy & verify against the real installed desktop stack (`laplace`, `laplace-mono`, `laplace-desktop-app`, IIS `https://dev.hartonomous.com`) — **never** spin up private PostgreSQL clusters (`postgres_regress`), private Kestrel servers, or manual disposable DBs (`laplace_test_disposable`, `laplace_regress_*`): `laplace-ops deploy -Target desktop`, `laplace-ops verify -Target desktop -Installed`, `laplace-ops test -Check desktop-installed-databases,desktop-installed-deployment,desktop-source-interpretation,desktop-sql-foundation,desktop-installed-runtime`, plus `Laplace-postgres/tests/deployed.sh`, `Laplace-Engine/tests/deployed/run.sh`, and `Laplace-MCP/tests/deployed/run.sh`.
-3. Engine: build `laplace_engine` plus the affected `EXCLUDE_FROM_ALL` test targets; `laplace ingest --plan` / `--claims` against a fixture in `tests/fixtures/`.
-4. Monorepo: `ReadPathArchitectureGateTests` must pass (zero hand-written SQL).
-5. Wiki: `python3 tools/check_wiki.py` and `npx markdownlint-cli2`.
-6. Doc or agent edits: every cited path or symbol exists (grep it).
+1. **Build cleanly out-of-tree** (`icx-release`): `Laplace-Native` (`ctest --preset icx-release` when math/layouts change) → `Laplace-postgres` (`node tools/check-function-bindings.mjs`) → `Laplace-Engine` (`python tests/sql-contract-gate.py`) → `Laplace-MCP` / `Laplace` (`ReadPathArchitectureGateTests` when C#/SQL catalog touched).
+2. **Deploy to the installed stack (in-place reconcile unless storage DDL changed):** `laplace-ops deploy -Target desktop` and `laplace-ops verify -Target desktop -Installed`.
+3. **Execute the real feature end-to-end against installed PostgreSQL & real data** (`laplace`, `lpm` / MCP HTTP endpoint, or `/v1/*` Web/API route) and inspect actual outputs, timings, and plans (`Laplace-postgres/tests/deployed.sh`, `Laplace-Engine/tests/deployed/run.sh`, `Laplace-MCP/tests/deployed/run.sh`, `laplace-ops test -Check desktop-installed-deployment,desktop-installed-runtime`).
+4. **Keep docs synchronized:** If you changed commands, schema, layouts, or operational workflows, update `Laplace-Wiki` (`python tools/check_wiki.py` and `npx markdownlint-cli2` — preserve exact `README.md` catalog summary parity) and `Laplace-Operations/agents/` (`pwsh -File Laplace-Operations/agents/sync.ps1`).

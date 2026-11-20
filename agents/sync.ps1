@@ -58,6 +58,17 @@ $repoTargets = @(
   (Join-Path $LaplaceRoot 'Laplace\AGENTS.md'),
   (Join-Path $LaplaceRoot 'Laplace-Operations\AGENTS.md')
 )
+$worktreesRoot = Join-Path $LaplaceRoot '.worktrees'
+if (Test-Path $worktreesRoot) {
+  foreach ($wt in Get-ChildItem $worktreesRoot -Directory) {
+    foreach ($candidate in @(
+      (Join-Path $wt.FullName 'AGENTS.md'),
+      (Join-Path $wt.FullName 'agents\AGENTS.md')
+    )) {
+      if (Test-Path $candidate) { $repoTargets += $candidate }
+    }
+  }
+}
 $skillRoots = @(
   (Join-Path $UserHome '.gemini\skills'),
   (Join-Path $UserHome '.gemini\antigravity\skills'),
