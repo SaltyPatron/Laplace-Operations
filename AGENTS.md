@@ -118,8 +118,9 @@ laplace ingest --plan [SOURCE]                         # verify recipe coverage 
 laplace ingest [SOURCE...]                             # ingest from local $LAPLACE_DATA
 laplace turn --as operator --session dev "prompt"      # run end-to-end Forward pass
 laplace-ops status -Target desktop                     # (-Target defaults to staging if omitted)
-laplace-ops build -Target desktop                      # -Components all,modular,modular-web,native,postgres,api,cli,uci,migrations,web
-laplace-ops deploy -Target desktop                     # content-addressed build + in-place DB reconcile + IIS deploy
+laplace-ops components -Target desktop                 # build & install modular Native + Engine + MCP ('laplace' CLI)
+laplace-ops build -Target desktop                      # build app IIS package (-Components all,native,postgres,api,cli,uci,migrations,web)
+laplace-ops deploy -Target desktop                     # content-addressed build + in-place DB reconcile + IIS deploy (-Components modular,modular-web,...)
 laplace-ops verify -Target desktop -Installed          # verify live IIS + installed substrate + fingerprints
 laplace-ops test -Check desktop-installed-deployment,desktop-installed-runtime
 laplace-ops deploy -Target staging -Wait               # deploy & verify staging (then -Target production -Wait)
