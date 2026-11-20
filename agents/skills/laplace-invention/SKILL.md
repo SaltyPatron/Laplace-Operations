@@ -64,11 +64,18 @@ Core mandate, truth hierarchy (`INVENTOR_RECORD.md` + `INVENTION.md` + decided `
 | Stage Load & Maintenance | `ingest.c`, `ingest_probe.c`, `db.c` (`prune`, `load`, `merge`), `db_metadata.c`, `forget.c` (`forget`, `sweep`), `replay` |
 | Forward, Firmware & Domains | `firmware.c`, `program.c`, `pull.c`, `forward.c`, `read.c` (`pull`, `turn`, `said`, `hop`, `translate`, `degrees`, `fills`, `held`), `chess.c` (`pgn`, `tablebase`), `model.c` |
 
-## 4. End-to-End Delivery Checklist (Definition of Done)
+## 4. Batch Execution & End-to-End Delivery Checklist (Definition of Done)
 
-Never declare work done at compilation or unit tests alone. Complete the full loop for every layer touched:
+Never declare work done at compilation, unit tests, HTTP 200 status codes, or empty/1-source database probes, and **never** run per-ticket waterfall deploy ceremonies across 28 individual tickets. Execute across repositories in **Large Horizontal Batches (`Batch 1` → `Batch 4`)**:
 
-1. **Build cleanly out-of-tree** (`icx-release`): `Laplace-Native` (`ctest --preset icx-release` when math/layouts change) → `Laplace-postgres` (`node tools/check-function-bindings.mjs`) → `Laplace-Engine` (`python tests/sql-contract-gate.py`) → `Laplace-MCP` / `Laplace` (`ReadPathArchitectureGateTests` when C#/SQL catalog touched).
-2. **Deploy to the installed stack (in-place reconcile unless storage DDL changed):** `laplace-ops deploy -Target desktop` and `laplace-ops verify -Target desktop -Installed`.
-3. **Execute the real feature end-to-end against installed PostgreSQL & real data** (`laplace`, `lpm` / MCP HTTP endpoint, or `/v1/*` Web/API route) and inspect actual outputs, timings, and plans (`Laplace-postgres/tests/deployed.sh`, `Laplace-Engine/tests/deployed/run.sh`, `Laplace-MCP/tests/deployed/run.sh`, `laplace-ops test -Check desktop-installed-deployment,desktop-installed-runtime`).
-4. **Keep docs synchronized:** If you changed commands, schema, layouts, or operational workflows, update `Laplace-Wiki` (`python tools/check_wiki.py` and `npx markdownlint-cli2` — preserve exact `README.md` catalog summary parity) and `Laplace-Operations/agents/` (`pwsh -File Laplace-Operations/agents/sync.ps1`).
+1. **Iterate fast locally across the whole Batch** (`icx-release` in `$LAPLACE_BUILD`, `D:\Libraries\build\Laplace`):
+   - Compile & test incrementally across all repos touched by the Batch: `Laplace-Native` (`ctest --preset icx-release`, `node tools/csharp/generate.mjs --check`, `csharp_abi`) → `Laplace-postgres` (`node tools/check-function-bindings.mjs`) → `Laplace-Engine` (`python tests/sql-contract-gate.py`) → `Laplace-MCP` → `Laplace` (`dotnet build app/Laplace.slnx -warnaserror`, `ReadPathArchitectureGateTests`).
+   - Verify **Client-Determinism Collapse & Anti-Silo Law**: deterministic client ops run in-process via `Laplace.Native.Interop` over mmap'd ROMs (`0` DB round-trips); new modalities/sources snap in via generic codecs/grammars + `.recipe`s; domain capabilities run through the **one** shared C `Forward + Highway A* + Gödel` loop (`program.c` + `.firmware`), never forked mini-engines.
+2. **Deploy ONCE per Batch (in-place reconcile unless storage DDL changed):**
+   - Run `pwsh Laplace-Operations/laplace.ps1 deploy -Target desktop` and `pwsh Laplace-Operations/laplace.ps1 verify -Target desktop -Installed`, then advance `Laplace-Operations/components.lock.tsv` once for the Batch.
+3. **Prove real AI behavioral quality against populated PostgreSQL data** (never mock harnesses or unseeded DBs):
+   - Conversation (`turn` / `/v1/chat/completions` / MCP): coherent, accurate multi-sentence answers in `<100–200ms` (`2–3` batched binary probes, never 45 round-trips, never echoing the prompt or matching stop-word frames like `"How does this shirt fit?"`), honest `ABSTAIN` on unwitnessed facts, and `SUM(share_bp) = 10000` witness attribution.
+   - Mold-a-Model (`#1719`): exported `laplace-blake3-v1` / GGUF checkpoint loads in external `llama.cpp` and holds coherent multi-prompt conversations (`raw_weight_bytes_retained = 0` in DB).
+   - Code (`#894`) & Chess (`#833,#939`): AST repair compiles and passes real tests; Chess Forward beats calibrated anchors on `fastchess` + `ordo`.
+4. **Keep docs & global agent instructions synchronized (zero status-report clutter):**
+   - Never commit progress diaries, audit dumps, or benchmark prose into repos. When commands, schemas, layouts, or boundaries change, update `Laplace-Wiki` (`python tools/check_wiki.py` + `npx markdownlint-cli2`, preserving exact `README.md` catalog summary parity) and `Laplace-Operations/agents/` (`pwsh -File Laplace-Operations/agents/sync.ps1`).
