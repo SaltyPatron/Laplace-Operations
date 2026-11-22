@@ -10,7 +10,6 @@ permissions:
 concurrency:
   group: laplace-admission-readback-hart-server
   cancel-in-progress: false
-  queue: max
 jobs:
   readback:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'

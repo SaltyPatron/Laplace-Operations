@@ -24,7 +24,6 @@ on:
 concurrency:
   group: hart-server-laplace
   cancel-in-progress: false
-  queue: max
 env:
   LAPLACE_HOST_LOCK_WAIT_SECONDS: ${{ vars.LAPLACE_HOST_LOCK_WAIT_SECONDS || 'wait' }}
   LAPLACE_SRC: ${{ github.workspace }}
