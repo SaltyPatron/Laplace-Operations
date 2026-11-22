@@ -199,13 +199,19 @@ jobs:
             echo "- reseed policy (LAPLACE_RESEED=$LAPLACE_RESEED): drop $drop, ingest $ingest: $why"; echo
             echo '```'; ./Laplace-Operations/seed-stamp.sh show; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Receive the canonical caches verified for the selected Native revision
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          repository: SaltyPatron/Laplace-Native
-          run-id: ${{ needs.resolve.outputs.native_run }}
-          github-token: ${{ secrets.LAPLACE_CHECKOUT }}
-          name: native-prepared-inputs
-          path: ${{ runner.temp }}/native-prepared-inputs
+        env:
+          GH_TOKEN: ${{ secrets.LAPLACE_CHECKOUT }}
+          NATIVE_SHA: ${{ needs.resolve.outputs.native }}
+          NATIVE_RUN: ${{ needs.resolve.outputs.native_run }}
+        run: |
+          dest="${RUNNER_TEMP:?}/native-prepared-inputs"
+          rm -rf "$dest" && mkdir -p "$dest"
+          shared_dir="${LAPLACE_BUILD%/agents/*}/native-prepared-inputs/$NATIVE_SHA"
+          if [[ -d "$shared_dir" ]]; then
+            cp -a --reflink=auto --no-preserve=ownership "$shared_dir/." "$dest/"
+          else
+            gh run download "$NATIVE_RUN" --repo SaltyPatron/Laplace-Native --name native-prepared-inputs --dir "$dest"
+          fi
       - name: Provide the pinned Rust compiler for recipe grammar generation
         uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
         with:
@@ -234,12 +240,13 @@ jobs:
           receipt: ${{ runner.temp }}/storage.json
       - name: Retain deployment cleanup evidence
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: storage-staging-${{ github.run_id }}
           path: ${{ runner.temp }}/storage.json
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 1
   checks:
     needs: deploy
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]

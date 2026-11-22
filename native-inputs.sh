@@ -5,6 +5,7 @@ fail() { echo "$*" >&2; exit 1; }
 digest() { local value; value=$(sha256sum < "$1") || return; printf '%s' "${value%% *}"; }
 resolve() {
   local owner=$1 revision=$2 runs eligible run jobs artifacts passed available pending expired=
+  local shared_dir="${LAPLACE_BUILD:+${LAPLACE_BUILD%/agents/*}/native-prepared-inputs/$revision}"
   [[ $owner =~ ^[A-Za-z0-9-]+$ && $revision =~ ^[0-9a-f]{40}$ ]] || fail 'Expected repository owner and full Native revision'
   runs=$(gh api --paginate "repos/$owner/Laplace-Native/actions/runs?head_sha=$revision&per_page=100") || return
   eligible=$(jq -sr --arg revision "$revision" '[.[].workflow_runs[] | select(.head_sha == $revision and
@@ -16,6 +17,10 @@ resolve() {
     passed=$(jq -sr '[.[].jobs[] | select(.conclusion == "success") | .name] |
       contains(["native (icx-release)","native (gcc-release)"])' <<< "$jobs") || return
     [[ $passed == true ]] || continue
+    if [[ -n ${shared_dir:-} && -d $shared_dir ]]; then
+      printf '%s\n' "$run"
+      return
+    fi
     artifacts=$(gh api --paginate "repos/$owner/Laplace-Native/actions/runs/$run/artifacts?per_page=100") || return
     available=$(jq -sr 'any(.[].artifacts[]; .name == "native-prepared-inputs" and .expired == false)' <<< "$artifacts") || return
     if [[ $available == true ]]; then
@@ -113,7 +118,12 @@ prepare() (
   fi
   run=$(resolve "$GITHUB_REPOSITORY_OWNER" "$revision")
   temporary=$(mktemp -d "$RUNNER_TEMP/native-inputs.XXXXXXXX")
-  gh run download "$run" --repo "$GITHUB_REPOSITORY_OWNER/Laplace-Native" --name native-prepared-inputs --dir "$temporary"
+  local shared_dir="${LAPLACE_BUILD%/agents/*}/native-prepared-inputs/$revision"
+  if [[ -d $shared_dir ]]; then
+    cp -a --reflink=auto --no-preserve=ownership -- "$shared_dir/." "$temporary/"
+  else
+    gh run download "$run" --repo "$GITHUB_REPOSITORY_OWNER/Laplace-Native" --name native-prepared-inputs --dir "$temporary"
+  fi
   verify "$temporary"
   cache=$(LAPLACE_TIER0="$temporary/tier0.bin" bash "$native/scripts/ci-prepared-inputs.sh")
   verify "$cache"
