@@ -1,7 +1,7 @@
 # The Laplace components staging last deployed and verified, one row each: key, repository, commit.
 # laplace.yml resolves every deployment from this set (a merged component replaces only its own row) and, once the
 # deployment's tests pass, commits the set it verified here. Component CIs build against these revisions.
-native	Laplace-Native	4d5a482648ec679ae89c54a0777f6a6007e4136f
-postgres	Laplace-postgres	d71cf56b8f219d82065489e308558a0e0f8dead6
-engine	Laplace-Engine	ab5d8c549ac34c0e396b0288b6f1ac34664d855a
-mcp	Laplace-MCP	fe1cc269d7aa87f1db557f4048d75e96c8054470
+native	Laplace-Native	6c0ec6f4fdbb7b5d70e6da6c68fffcc796a12c5a
+postgres	Laplace-postgres	a03d1f7540b298d481ba329fee4d20a86d758d2e
+engine	Laplace-Engine	abab6bf8ef99feb9b541322ff78265d70f1f2101
+mcp	Laplace-MCP	25733efe034109138a0403044738b4aede122fa3

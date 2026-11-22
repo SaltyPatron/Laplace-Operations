@@ -6,7 +6,7 @@
   "client_address": "100.70.222.78",
   "database_host": "HART-DESKTOP",
   "port": 5432,
-  "substrate_database": "laplace-mono",
+  "substrate_database": "laplace",
   "substrate_role": "laplace_desktop_db",
   "application_database": "laplace-desktop-app",
   "application_role": "laplace_desktop_app",

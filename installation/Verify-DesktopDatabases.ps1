@@ -82,10 +82,10 @@ try{
             $env:LAPLACE_HIGHWAY=$installed.highway;$env:LAPLACE_GRAMMARS=$installed.grammars
             & py -3 -X utf8 (Join-Path $env:LAPLACE_SRC 'Laplace-Engine/tests/semantic-interpretation.py') $selection.executable --recipes (Join-Path $selection.release 'share/recipes') --database
         } else {
-            $command=Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace-mono.cmd'
+            $command=Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd'
             $selection=(Invoke-InstalledClient $command @('--where'))|ConvertFrom-Json
-            if ($selection.database_host -ine $target.host) { throw 'Installed monorepo selects another host.' }
-            & py -3 -X utf8 (Join-Path $source 'tests/sql-native-foundation.py') --pgbin (Join-Path $target.prefix 'bin') --source-database $selection.database_name --results $env:LAPLACE_ACCEPTANCE_RESULTS
+            if ($selection.database_host -ine $target.host) { throw 'Installed Engine selects another host.' }
+            & py -3 -X utf8 (Join-Path $source 'tests/sql-native-foundation.py') --pgbin (Join-Path $target.prefix 'bin') --source-database $selection.database --results $env:LAPLACE_ACCEPTANCE_RESULTS
         }
         if ($LASTEXITCODE) { throw "Installed $Proof proof failed with exit $LASTEXITCODE." }
         @{proof=$Proof;scope=$Scope;selection=$selection;passed=$true}|ConvertTo-Json -Depth 8
@@ -105,7 +105,7 @@ try{
     $wal=Get-Item -LiteralPath (Join-Path $target.data 'pg_wal')
     $clients=@();$substrates=@()
     $env:PGPASSWORD='invalid-ambient-password-must-not-be-used'
-    $commands=switch($Scope){'monorepo'{@('laplace-mono')};'modular'{@('laplace')};default{@('laplace-mono','laplace')}}
+    $commands=switch($Scope){'monorepo'{@()};'modular'{@('laplace')};default{@('laplace')}}
     foreach($name in $commands){
         $command=Join-Path $env:LOCALAPPDATA "Laplace/bin/$name.cmd"
         $where=Invoke-InstalledClient $command @('--where')
