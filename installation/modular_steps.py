@@ -107,7 +107,8 @@ def package(config, receipt_path, repair=False, rebuild=False):
         'bash', '-c',
         '. "$1/laplace.env"; '
         'export LAPLACE_DEPSRC="${LAPLACE_DEPSRC:-$LAPLACE_SRC}"; '
-        'if [ -d "$LAPLACE_SRC/eigen" ]; then export LAPLACE_EIGEN_DIR="${LAPLACE_EIGEN_DIR:-$LAPLACE_SRC/eigen}"; fi; '
+        'if [ -d "$LAPLACE_SRC/eigen" ]; then export LAPLACE_EIGEN_DIR="${LAPLACE_EIGEN_DIR:-$LAPLACE_SRC/eigen}"; '
+        'elif [ -d /usr/include/eigen3 ]; then export LAPLACE_EIGEN_DIR="${LAPLACE_EIGEN_DIR:-/usr/include/eigen3}"; fi; '
         'if [ -d "$LAPLACE_SRC/spectra" ]; then export LAPLACE_SPECTRA_DIR="${LAPLACE_SPECTRA_DIR:-$LAPLACE_SRC/spectra}"; fi; '
         'if [ -n "$5" ] && [ -x "$5" ]; then export LAPLACE_TREESITTER_CLI="${LAPLACE_TREESITTER_CLI:-$5}"; fi; '
         'exec python3 "$2" package --config "$3" --output "$4" "${@:6}"',
