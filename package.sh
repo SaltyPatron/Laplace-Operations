@@ -14,9 +14,9 @@ name=${1:?usage: package.sh NAME SOURCE [VARIABLE=VALUE...]}
 source=$(cd "${2:?usage: package.sh NAME SOURCE [VARIABLE=VALUE...]}" && pwd)
 shift 2
 settings=(); for s in "$@"; do settings+=("-D$s"); done
-key=$(git -C "$source" rev-parse HEAD)
-if [ -n "$(git -C "$source" status --porcelain --untracked-files=no)" ]; then
-  key=$key-$(git -C "$source" diff HEAD | sha256sum | cut -c1-12)
+key=$(git -c safe.directory="$source" -C "$source" rev-parse HEAD)
+if [ -n "$(git -c safe.directory="$source" -C "$source" status --porcelain --untracked-files=no)" ]; then
+  key=$key-$(git -c safe.directory="$source" -C "$source" diff HEAD | sha256sum | cut -c1-12)
 fi
 if [ $# -gt 0 ]; then key=$key-$(printf '%s\n' "$@" | sha256sum | cut -c1-12); fi
 packages=$LAPLACE_BUILD/packages/$name
