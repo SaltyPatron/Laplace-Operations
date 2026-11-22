@@ -13,6 +13,11 @@ here=$(cd "$(dirname "$0")" && pwd)
 name=${1:?usage: package.sh NAME SOURCE [VARIABLE=VALUE...]}
 source=$(cd "${2:?usage: package.sh NAME SOURCE [VARIABLE=VALUE...]}" && pwd)
 shift 2
+if [ -z "${LAPLACE_EIGEN_DIR:-}" ]; then
+  if [ -f "${LAPLACE_DEPSRC:-${LAPLACE_SRC:-/repos/src}}/eigen/Eigen/Core" ]; then export LAPLACE_EIGEN_DIR="${LAPLACE_DEPSRC:-${LAPLACE_SRC:-/repos/src}}/eigen"
+  elif [ -f /usr/include/eigen3/Eigen/Core ]; then export LAPLACE_EIGEN_DIR=/usr/include/eigen3; fi
+fi
+export LAPLACE_SPECTRA_DIR="${LAPLACE_SPECTRA_DIR:-${LAPLACE_DEPSRC:-${LAPLACE_SRC:-/repos/src}}/spectra}"
 settings=(); for s in "$@"; do settings+=("-D$s"); done
 key=$(git -c safe.directory="$source" -C "$source" rev-parse HEAD)
 if [ -n "$(git -c safe.directory="$source" -C "$source" status --porcelain --untracked-files=no)" ]; then
@@ -21,7 +26,11 @@ fi
 if [ $# -gt 0 ]; then key=$key-$(printf '%s\n' "$@" | sha256sum | cut -c1-12); fi
 packages=$LAPLACE_BUILD/packages/$name
 prefix=$packages/$key
-if ! ls "$prefix"/lib/cmake/*/*Config.cmake >/dev/null 2>&1; then
+rebuild_missing_linalg=0
+if [ "$name" = laplace-native ] && [ -n "${LAPLACE_EIGEN_DIR:-}" ] && [ -f "$LAPLACE_SPECTRA_DIR/include/Spectra/SymEigsSolver.h" ] && [ ! -f "$prefix/lib/liblaplace_linalg.a" ]; then
+  rebuild_missing_linalg=1
+fi
+if ! ls "$prefix"/lib/cmake/*/*Config.cmake >/dev/null 2>&1 || [ "$rebuild_missing_linalg" -eq 1 ]; then
   build=$LAPLACE_BUILD/$(basename "$source")/package
   cmake -S "$source" -B "$build" -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLAPLACE_OPERATIONS="$here" -DCMAKE_INSTALL_PREFIX="$prefix" "${settings[@]}" >&2
