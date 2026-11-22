@@ -1,14 +1,47 @@
 #!/usr/bin/env python3
 """Read machine declarations as data; process values precede installation values."""
 import argparse
+import importlib.util
 import json
 import os
 from pathlib import Path
 import re
 import shlex
 
+_SALTY_MACHINE_ENV = Path(__file__).resolve().parents[1] / 'Salty-Suite/machine-env/machine_env.py'
+
+
+def _load_salty_machine_env():
+    if not _SALTY_MACHINE_ENV.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location('salty_suite_machine_env', _SALTY_MACHINE_ENV)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 def resolve(path, process, explicit=False):
+    salty = _load_salty_machine_env()
+    if salty is not None:
+        try:
+            return salty.resolve_env(
+                Path(path),
+                process,
+                process_precedence=True,
+                strict=explicit,
+                source_key='LAPLACE_CONFIG_SOURCE',
+            )
+        except FileNotFoundError as exc:
+            if explicit:
+                raise ValueError('LAPLACE_MACHINE_ENV does not name an existing file') from exc
+        except salty.ConfigError as exc:
+            message = str(exc)
+            if explicit and message.startswith('Configuration file does not exist:'):
+                raise ValueError('LAPLACE_MACHINE_ENV does not name an existing file') from exc
+            raise ValueError(message) from exc
+
     values = dict(process)
     declarations = {}
     try:

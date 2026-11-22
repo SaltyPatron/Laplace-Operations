@@ -1,6 +1,7 @@
 """Immutable local component files shared by Windows application and modular delivery."""
 from contextlib import contextmanager
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -8,6 +9,22 @@ import shutil
 import tempfile
 import subprocess
 import sys
+
+_SALTY_ARTIFACT_STORE = Path(__file__).resolve().parents[2] / 'Salty-Suite/artifact-store/artifact_store.py'
+
+
+def _load_salty_artifact_store():
+    if not _SALTY_ARTIFACT_STORE.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location('salty_suite_artifact_store', _SALTY_ARTIFACT_STORE)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_SALTY = _load_salty_artifact_store()
 
 
 def cleanup(store, installation=None):
@@ -27,6 +44,8 @@ def cleanup(store, installation=None):
 
 
 def digest(path):
+    if _SALTY is not None:
+        return _SALTY.digest_file(path)
     value = hashlib.sha256()
     with Path(path).open('rb') as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b''):
@@ -35,6 +54,12 @@ def digest(path):
 
 
 def files(root):
+    if _SALTY is not None:
+        try:
+            inventory, _ = _SALTY.files_inventory(root)
+            return inventory
+        except _SALTY.SymlinkTraversalError as error:
+            raise ValueError(str(error)) from error
     root = Path(root)
     result = {}
     for path in (root, *root.rglob('*')):
@@ -47,6 +72,8 @@ def files(root):
 
 def inherit_access(path):
     """Give a new, unshared staging object its destination parent's Windows ACL."""
+    if _SALTY is not None:
+        return _SALTY.inherit_access(path)
     if os.name != 'nt':
         return
     path = Path(path)
@@ -60,6 +87,8 @@ def inherit_access(path):
 
 
 def staging_directory(store, prefix):
+    if _SALTY is not None:
+        return _SALTY.staging_directory(store, prefix)
     directory = Path(tempfile.mkdtemp(prefix=prefix, dir=store))
     try:
         inherit_access(directory)
@@ -70,6 +99,9 @@ def staging_directory(store, prefix):
 
 
 def atomic(path, value):
+    if _SALTY is not None:
+        _SALTY.atomic_write_json(path, value)
+        return
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix='.receipt-')
