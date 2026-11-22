@@ -68,7 +68,7 @@ function Set-DesktopUciDatabase {
     }
     @{status='configured';database_host=$Iis.database.host;database=$Iis.database.substrate_database
       database_role=$Iis.database.substrate_role;profiles=@($Development.uci.profiles);changed=$changed
-      reload=($certificate -in $changed -or (Join-Path $root 'connector.json') -in $changed)}
+      reload=($certificate -in $changed -or (Join-Path $root 'connector.json') -in $changed -or $declaration -in $changed)}
 }
 
 if($MyInvocation.InvocationName -ne '.'){
@@ -117,7 +117,8 @@ if($MyInvocation.InvocationName -ne '.'){
             }finally{$manager.Dispose()}
         }else{
             $uciDeclaration=Get-Content -LiteralPath (Join-Path $env:LAPLACE_DATA_ROOT ('services/'+$d.uci.service+'/agent/installation.json')) -Raw|ConvertFrom-Json
-            $offline=Join-Path $uciDeclaration.publish 'app_offline.htm'
+            $hostDir=if($uciDeclaration.host_directory){$uciDeclaration.host_directory}else{$uciDeclaration.publish}
+            $offline=Join-Path $hostDir 'app_offline.htm'
             $origin='https://'+$uciDeclaration.hostname
             $token='laplace-uci-restart-'+[Guid]::NewGuid().ToString('N')
             $marker="<!doctype html><html><body>UCI connector restarting. <!-- $token --></body></html>"
