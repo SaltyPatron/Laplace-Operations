@@ -75,7 +75,7 @@ Set-Default LAPLACE_CONNINFO "host=$env:LAPLACE_PGHOST port=$env:LAPLACE_PGPORT 
 # rule cannot read from the machine is declared here, each with the measurement that set it; another machine measures
 # its own.
 Set-Default LAPLACE_PGWAL_ROOM     '32GB'   # the log's bound when it shares its drive (D: holds the heap, the sources and the models); a dedicated drive gets half of itself
-Set-Default LAPLACE_PG_PRELOAD     'pg_stat_statements,auto_explain,laplace'   # the libraries the server loads at start: observability (tune-pg.sh) and the Native substrate extension (database laplace)
+Set-Default LAPLACE_PG_PRELOAD     'pg_stat_statements,auto_explain'   # the libraries the server loads at start: observability (tune-pg.sh); laplace_<hash>.dll is loaded on demand per release
 Set-Default LAPLACE_PG_LIBDIRS     "$env:LAPLACE_DATA_ROOT\deploy\lib"
 # What an ingest decomposes at once (laplace ingest: LAPLACE_BATCH_MB, 1024 unless set): the batch's node table lives in
 # memory, and an XML source spends far more memory than its bytes. This machine has 13 GB left after the llama

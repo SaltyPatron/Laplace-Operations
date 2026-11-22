@@ -401,10 +401,10 @@ function TuneRestart {
     if (-not $pending) { return $true }
     if (TuneIngesting) { Write-Warning "tune-pg: restart for $pending DEFERRED: an ingest is running"; return $false }
     $svc = Get-Service -Name $env:LAPLACE_PGSERVICE -ErrorAction SilentlyContinue
-    $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if (-not $svc -or -not $admin) { Write-Warning "tune-pg: $pending pending_restart; $env:LAPLACE_PGSERVICE was not restarted (elevated: setup.ps1 settings)"; return $false }
+    if (-not $svc) { Write-Warning "tune-pg: $pending pending_restart; $env:LAPLACE_PGSERVICE service not found"; return $false }
     $began = (TunePsql 'SELECT pg_postmaster_start_time()') -join ''
-    Restart-Service -Name $env:LAPLACE_PGSERVICE -Force
+    try { Restart-Service -Name $env:LAPLACE_PGSERVICE -Force -ErrorAction Stop }
+    catch { Write-Warning "tune-pg: $pending pending_restart; $env:LAPLACE_PGSERVICE was not restarted (elevated: setup.ps1 settings): $($_.Exception.Message)"; return $false }
     foreach ($i in 1..180) {
         Start-Sleep -Seconds 1
         try { $now = (TunePsql 'SELECT pg_postmaster_start_time()') -join '' } catch { continue }
