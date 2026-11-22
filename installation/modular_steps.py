@@ -8,6 +8,7 @@ try:
     import pwd
 except ImportError:
     pwd = None
+import shutil
 import subprocess
 import time
 import uuid
@@ -92,23 +93,30 @@ def package(config, receipt_path, repair=False, rebuild=False):
     if inc.exists() and inc.stat().st_uid != target_uid:
         user_build = Path(config['build']) / f'user-{target_uid}'
         user_build.mkdir(parents=True, exist_ok=True)
+        shared_grammars = inc / 'grammars'
+        user_grammars = user_build / 'incremental/grammars'
+        if shared_grammars.is_dir() and not user_grammars.exists():
+            shutil.copytree(shared_grammars, user_grammars, dirs_exist_ok=True)
         build_config = dict(config, build=str(user_build))
         build_config_path = receipt_path / 'build-selection.json'
         atomic(build_config_path, json.dumps(build_config) + '\n')
     else:
         build_config_path = config_path
+    ts_cli = inc / 'deps/tree-sitter-cli/release/tree-sitter'
     command = [
         'bash', '-c',
         '. "$1/laplace.env"; '
         'export LAPLACE_DEPSRC="${LAPLACE_DEPSRC:-$LAPLACE_SRC}"; '
         'if [ -d "$LAPLACE_SRC/eigen" ]; then export LAPLACE_EIGEN_DIR="${LAPLACE_EIGEN_DIR:-$LAPLACE_SRC/eigen}"; fi; '
         'if [ -d "$LAPLACE_SRC/spectra" ]; then export LAPLACE_SPECTRA_DIR="${LAPLACE_SPECTRA_DIR:-$LAPLACE_SRC/spectra}"; fi; '
-        'exec python3 "$2" package --config "$3" --output "$4" "${@:5}"',
+        'if [ -n "$5" ] && [ -x "$5" ]; then export LAPLACE_TREESITTER_CLI="${LAPLACE_TREESITTER_CLI:-$5}"; fi; '
+        'exec python3 "$2" package --config "$3" --output "$4" "${@:6}"',
         'modular-package',
         str(Path(config['source']) / 'Laplace-Operations'),
         str(program),
         str(build_config_path),
         str(receipt_path / 'package.json'),
+        str(ts_cli) if ts_cli.is_file() else '',
     ]
     if rebuild:
         command.append('--clean-build')
