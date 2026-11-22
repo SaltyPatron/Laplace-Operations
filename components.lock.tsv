@@ -3,5 +3,5 @@
 # deployment's tests pass, commits the set it verified here. Component CIs build against these revisions.
 native	Laplace-Native	abeaff038ba02b40943b044d96e3366387bf8d7d
 postgres	Laplace-postgres	479d2e29af02cf6edd7a9d20230fc1778fb2225d
-engine	Laplace-Engine	526d062b1296b57ce2f201ac6264d5d718bc91d7
+engine	Laplace-Engine	19ffaf2dc0f0a4df0ee3776823eccbce2e03eeb0
 mcp	Laplace-MCP	1f0a75beca64413ac34850241b9055a2b2f222a3
