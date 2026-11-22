@@ -87,8 +87,29 @@ def package(config, receipt_path, repair=False, rebuild=False):
             return Path(prepared['release'])
     config_path = receipt_path / 'selection.json'
     atomic(config_path, json.dumps(config) + '\n')
-    command = ['bash', '-c', '. "$1/laplace.env"; exec python3 "$2" package --config "$3" --output "$4" "${@:5}"',
-               'modular-package', str(Path(config['source']) / 'Laplace-Operations'), str(program), str(config_path), str(receipt_path / 'package.json')]
+    target_uid = pwd.getpwnam(config['operator']).pw_uid if os.geteuid() == 0 and pwd is not None else os.geteuid()
+    inc = Path(config['build']) / 'incremental'
+    if inc.exists() and inc.stat().st_uid != target_uid:
+        user_build = Path(config['build']) / f'user-{target_uid}'
+        user_build.mkdir(parents=True, exist_ok=True)
+        build_config = dict(config, build=str(user_build))
+        build_config_path = receipt_path / 'build-selection.json'
+        atomic(build_config_path, json.dumps(build_config) + '\n')
+    else:
+        build_config_path = config_path
+    command = [
+        'bash', '-c',
+        '. "$1/laplace.env"; '
+        'export LAPLACE_DEPSRC="${LAPLACE_DEPSRC:-$LAPLACE_SRC}"; '
+        'if [ -d "$LAPLACE_SRC/eigen" ]; then export LAPLACE_EIGEN_DIR="${LAPLACE_EIGEN_DIR:-$LAPLACE_SRC/eigen}"; fi; '
+        'if [ -d "$LAPLACE_SRC/spectra" ]; then export LAPLACE_SPECTRA_DIR="${LAPLACE_SPECTRA_DIR:-$LAPLACE_SRC/spectra}"; fi; '
+        'exec python3 "$2" package --config "$3" --output "$4" "${@:5}"',
+        'modular-package',
+        str(Path(config['source']) / 'Laplace-Operations'),
+        str(program),
+        str(build_config_path),
+        str(receipt_path / 'package.json'),
+    ]
     if rebuild:
         command.append('--clean-build')
     if os.geteuid() == 0:
