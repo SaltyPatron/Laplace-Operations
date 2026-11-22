@@ -4,4 +4,4 @@
 native	Laplace-Native	abeaff038ba02b40943b044d96e3366387bf8d7d
 postgres	Laplace-postgres	479d2e29af02cf6edd7a9d20230fc1778fb2225d
 engine	Laplace-Engine	abab6bf8ef99feb9b541322ff78265d70f1f2101
-mcp	Laplace-MCP	25733efe034109138a0403044738b4aede122fa3
+mcp	Laplace-MCP	1f0a75beca64413ac34850241b9055a2b2f222a3
