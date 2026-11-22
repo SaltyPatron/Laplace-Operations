@@ -35,9 +35,11 @@ if ! ls "$prefix"/lib/cmake/*/*Config.cmake >/dev/null 2>&1 || [ "$rebuild_missi
   cmake -S "$source" -B "$build" -G Ninja -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLAPLACE_OPERATIONS="$here" -DCMAKE_INSTALL_PREFIX="$prefix" "${settings[@]}" >&2
   cmake --build "$build" >&2
-  rm -rf "$prefix.partial"
+  rm -rf "$prefix.partial" "$prefix.old"
   cmake --install "$build" --prefix "$prefix.partial" >&2
+  if [ -e "$prefix" ]; then mv "$prefix" "$prefix.old"; fi
   mv "$prefix.partial" "$prefix"
+  rm -rf "$prefix.old"
 fi
 ls -1dt "$packages"/*/ 2>/dev/null | tail -n +4 | while read -r old; do rm -rf -- "$old"; done
 echo "$prefix"
