@@ -42,7 +42,7 @@ class Revisions(unittest.TestCase):
     def test_dispatch_replaces_only_its_component(self):
         result = resolver.resolve('owner', 'repository_dispatch', {'client_payload': {
             'repository': 'owner/Laplace-Engine', 'sha': 'b' * 40}}, github(), LOCK)
-        self.assertEqual(result, {'native': 'd' * 40, 'postgres': 'd' * 40, 'engine': 'b' * 40, 'mcp': 'd' * 40})
+        self.assertEqual(result, dict(LOCK, engine='b' * 40))
 
     def test_late_dispatch_never_moves_a_component_back(self):
         result = resolver.resolve('owner', 'repository_dispatch', {'client_payload': {

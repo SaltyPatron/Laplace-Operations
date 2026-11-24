@@ -148,7 +148,84 @@ tune_local_or_die() {
 max() { [ "$1" -gt "$2" ] && echo "$1" || echo "$2"; }
 min() { [ "$1" -lt "$2" ] && echo "$1" || echo "$2"; }
 clamp() { min "$(max "$1" "$2")" "$3"; }   # value lo hi
+_tune_salty_script() {
+  local cand
+  for cand in "${SALTY_SUITE_ROOT:-}" "${LAPLACE_SRC:-}/Salty-Suite" "$_tune_here/../Salty-Suite" "$_tune_here/Salty-Suite"; do
+    [ -n "$cand" ] && [ -f "$cand/pg-tune/pg_tune.py" ] && { printf '%s\n' "$cand/pg-tune/pg_tune.py"; return 0; }
+  done
+  return 1
+}
+_tune_python() {
+  local cand
+  if command -v python3 >/dev/null 2>&1 && python3 -c "import sys" >/dev/null 2>&1; then command -v python3; return 0; fi
+  if command -v python >/dev/null 2>&1 && python -c "import sys" >/dev/null 2>&1; then command -v python; return 0; fi
+  for cand in "/c/Users/ahart/AppData/Local/Python/pythoncore-3.15-64/python.exe"; do
+    [ -x "$cand" ] && { printf '%s\n' "$cand"; return 0; }
+  done
+  return 1
+}
+_tune_invoke_salty() {  # $1 = plan | declared
+  local mode=$1 script py
+  script=$(_tune_salty_script) || return 1
+  py=$(_tune_python) || return 1
+  local ram_kb threads cores reserved_kb cap_kb rotational wal shared wal_bytes
+  ram_kb=$(fact_ram_kb); threads=$(fact_threads); cores=$(fact_cores); reserved_kb=$(fact_reserved_kb); cap_kb=$(fact_buffers_max_kb)
+  rotational=$(fact_rotational); set -- $(fact_wal_bytes); wal_bytes=$1; shared=$2
+  [ "$cores" -ge 1 ] || cores=1; [ "$threads" -ge "$cores" ] || threads=$cores
+  local avw ingest serving locks reserved_conns conns active work_nodes wal_level wal_senders trace
+  avw=$(max 3 $((cores / 2)))
+  case $PROFILE in
+    substrate) ingest=$((1 + 2 * cores + 3)); serving=${LAPLACE_PG_SERVING:-$((4 * threads))}; locks=1024; wal_level=minimal; wal_senders=0 ;;
+    app)       ingest=0; serving=${LAPLACE_PG_SERVING:-$(max 16 $((8 * threads)))}; locks=64; wal_level=replica; wal_senders=3 ;;
+  esac
+  [[ "$serving" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo 'tune-pg: LAPLACE_PG_SERVING must be a nonnegative integer (at most six digits)' >&2; return 2; }
+  reserved_conns=3; conns=$((ingest + serving + avw + reserved_conns))
+  active=${LAPLACE_PG_ACTIVE_QUERIES:-$(min "$cores" "$((conns - reserved_conns))")}
+  [[ "$active" =~ ^[1-9][0-9]{0,5}$ ]] && [ "$active" -le "$((conns - reserved_conns))" ] || {
+    echo 'tune-pg: LAPLACE_PG_ACTIVE_QUERIES must be positive and fit non-reserved connection capacity' >&2; return 2;
+  }
+  work_nodes=${LAPLACE_PG_WORK_NODES:-2}
+  [[ "$work_nodes" =~ ^[1-9][0-9]{0,5}$ ]] || { echo 'tune-pg: LAPLACE_PG_WORK_NODES must be a positive integer (at most six digits)' >&2; return 2; }
+  trace=${LAPLACE_PG_TRACE:-full}
+  case "$trace" in full|reduced|off) ;; *) echo "tune-pg: LAPLACE_PG_TRACE must be full, reduced, or off (got '$trace')" >&2; return 2 ;; esac
+  local extra=()
+  [ "$PROFILE" = substrate ] && extra+=(--temp-tablespaces pgtemp)
+  local script_arg=$script
+  if command -v cygpath >/dev/null 2>&1; then script_arg=$(cygpath -m "$script"); fi
+  local json
+  json=$("$py" "$script_arg" \
+    --os linux --ram-kb "$ram_kb" --threads "$threads" --cores "$cores" \
+    --wal-bytes "$wal_bytes" --wal-shared "$shared" --rotational "$rotational" \
+    --reserved-kb "$reserved_kb" --buffers-max-kb "$cap_kb" \
+    --wal-level "$wal_level" --max-wal-senders "$wal_senders" \
+    --huge-pages try --io-method worker \
+    --ingest-conns "$ingest" --serving-conns "$serving" \
+    --active-queries "$active" --work-nodes "$work_nodes" \
+    --locks-per-tx "$locks" --port "$TUNE_PORT" --trace "$trace" \
+    --listen-addresses '*' --ssl on "${extra[@]}" --format json) || return 2
+  "$py" -c '
+import json, sys
+d = json.loads(sys.argv[1])
+mode, profile = sys.argv[2], sys.argv[3]
+if mode == "plan":
+    f, b = d["facts"], d["budget"]
+    for k in ("memory_kb","reserved_kb","threads","cores","wal_volume_bytes","wal_volume_shared","data_rotational"):
+        print(f"fact.{k}={f[k]}")
+    print(f"fact.profile={profile}")
+    for k in ("usable_kb","shared_kb","ecs_kb","private_kb","wal_mb","min_wal_mb","wal_buf_kb",
+              "par","gather","avw","iow","mwp","conns","active_queries","backends","temp_total_kb","exec_kb",
+              "mwm_kb","avwm_kb","work_kb","work_nodes","temp_kb","eic","rpc","locks","over_kb"):
+        print(f"{k}={b[k]}")
+else:
+    for k, v in d["settings"].items():
+        print(f"{k:<32} {v}")
+' "$json" "$mode" "$PROFILE"
+}
 plan() {  # every derived quantity as NAME=value lines; declared() formats them
+  if _tune_salty_script >/dev/null 2>&1 && _tune_python >/dev/null 2>&1; then
+    _tune_invoke_salty plan
+    return $?
+  fi
   local ram_kb threads cores reserved_kb usable_kb cap_kb rotational wal shared wal_bytes
   local shared_kb ecs_kb private_kb maint_dom_kb exec_kb wal_mb min_wal_mb wal_buf_kb
   local par gather avw iow mwp ingest serving reserved_conns conns active backends work_kb temp_kb temp_total_kb mwm_kb avwm_kb eic rpc locks over_kb
@@ -237,6 +314,10 @@ PLAN
 }
 mb() { echo "$(( $1 / 1024 ))MB"; }   # kB -> whole MB (every value here is a multiple of 8 kB blocks)
 declared() {
+  if _tune_salty_script >/dev/null 2>&1 && _tune_python >/dev/null 2>&1; then
+    _tune_invoke_salty declared
+    return $?
+  fi
   local plan; plan=$(plan) || return 1; v(){ sed -n "s/^$1=//p" <<<"$plan"; }
   local wal_level=minimal wal_senders=0
   if [[ "$PROFILE" == app ]]; then wal_level=replica; wal_senders=3; fi

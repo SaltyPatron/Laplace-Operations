@@ -25,9 +25,31 @@ laplace_host_lock_notice() {
   fi
   laplace_host_lock_holders
 }
+if [ -z "${_laplace_hl_loaded:-}" ]; then
+  _laplace_hl_loaded=1
+  _laplace_hl_salty=${SALTY_SUITE_ROOT:-}
+  if [ -z "$_laplace_hl_salty" ] && [ -n "${LAPLACE_SRC:-}" ]; then
+    _laplace_hl_salty="$LAPLACE_SRC/Salty-Suite"
+  fi
+  if [ -z "$_laplace_hl_salty" ] && [ -n "${BASH_SOURCE[0]:-}" ]; then
+    _laplace_hl_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    if [ -f "$_laplace_hl_dir/../Salty-Suite/host-lock/host-lock.sh" ]; then
+      _laplace_hl_salty="$_laplace_hl_dir/../Salty-Suite"
+    elif [ -f "$_laplace_hl_dir/Salty-Suite/host-lock/host-lock.sh" ]; then
+      _laplace_hl_salty="$_laplace_hl_dir/Salty-Suite"
+    fi
+  fi
+  if [ -n "$_laplace_hl_salty" ] && [ -f "$_laplace_hl_salty/host-lock/host-lock.sh" ]; then
+    . "$_laplace_hl_salty/host-lock/host-lock.sh"
+  fi
+fi
 # Who has the lock open: pid, start time and command line of every process with a descriptor on it (/proc/locks names
 # the short-lived flock child, not the holder). Processes of accounts this one cannot inspect are counted, not named.
 laplace_host_lock_holders() {
+  if command -v host_lock_holders >/dev/null 2>&1; then
+    host_lock_holders "$laplace_host_lock_path"
+    return $?
+  fi
   [ -d /proc/self/fd ] || return 0
   laplace_host_lock_seen=$(find /proc/[0-9]*/fd -maxdepth 1 -lname "$laplace_host_lock_path" 2>/dev/null |
     cut -d/ -f3 | sort -un | grep -vx "$$")
@@ -50,6 +72,11 @@ laplace_host_lock() {
     ''|*[!0-9]*) echo 'LAPLACE_HOST_LOCK_WAIT_SECONDS must be a nonnegative integer or wait' >&2; return 2 ;;
   esac
   laplace_host_lock_path=${LAPLACE_HOST_LOCK:-${LAPLACE_LOCKS:?machine lock directory required}/host-resource.lock}
+  if command -v host_lock >/dev/null 2>&1; then
+    LAPLACE_HOST_LOCK_PATH="$laplace_host_lock_path"
+    host_lock "${1:-exclusive}" 8 "$laplace_host_lock_path" "$laplace_host_lock_wait"
+    return $?
+  fi
   [ -d "$(dirname "$laplace_host_lock_path")" ] || { echo "missing host lock directory: $laplace_host_lock_path" >&2; return 1; }
   laplace_host_lock_inherited=0
   if [ /proc/self/fd/8 -ef "$laplace_host_lock_path" ]; then

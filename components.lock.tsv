@@ -2,6 +2,7 @@
 # laplace.yml resolves every deployment from this set (a merged component replaces only its own row) and, once the
 # deployment's tests pass, commits the set it verified here. Component CIs build against these revisions.
 native	Laplace-Native	a77ab596f9845f0bd14bae7f457ae4ad927dca85
-postgres	Laplace-postgres	a46438c295e014b8a863eab2c4418ec82d0833ca
-engine	Laplace-Engine	df17a78221a43aa15c2e92f6150fbc5323769a2f
-mcp	Laplace-MCP	e4522f1877cfe99c57f81092f79dccbbd56e95a8
+postgres	Laplace-postgres	9822efc07d67354bdddae5d3d81d0f195b8521d3
+engine	Laplace-Engine	d2ab99bcf9b18c5ed340ee536d20a224bf3f6422
+mcp	Laplace-MCP	e0bcee4324b59e15d154f8a105b56c715f6e42ec
+salty_suite	Salty-Suite	a58ada31001ab2a72c12b4e029e3bab58ba1e711

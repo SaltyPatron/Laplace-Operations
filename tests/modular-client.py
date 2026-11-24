@@ -14,6 +14,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT / 'installation') not in sys.path:
+    sys.path.insert(0, str(ROOT / 'installation'))
 spec = importlib.util.spec_from_file_location('client', ROOT / 'installation/client.py')
 client = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(client)
@@ -210,8 +212,9 @@ class ClientInputs(unittest.TestCase):
         self.assertEqual(migration.kwargs['env']['LAPLACE_CONNINFO'], environment['LAPLACE_CONNINFO'])
         self.assertEqual(grants.args[0][:4], [str(psql), '-X', '-w', '-d'])
         self.assertEqual(grants.args[0][4], environment['LAPLACE_CONNINFO'])
-        self.assertIn('laplace_modular_web', grants.args[0][-1])
-        self.assertNotIn('DROP', grants.args[0][-1])
+        self.assertEqual(grants.args[0][-2:], ['-qf', '-'])
+        self.assertIn('laplace_modular_web', grants.kwargs['input'])
+        self.assertNotIn('DROP', grants.kwargs['input'])
 
     def test_recreate_refuses_missing_artifacts_before_database_calls(self):
         executable, environment, psql = self.deployment()

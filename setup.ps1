@@ -366,6 +366,19 @@ function rights {
 # first, and PostGIS last under MSYS2 (toolchain\windows\postgis.sh).
 function deps([string[]]$Names, [switch]$SkipRuntimeClosure) {
     Part 'dependencies'
+    $saltyDepsInstaller = @($env:SALTY_SUITE_ROOT, (Join-Path (Split-Path $PSScriptRoot -Parent) 'Salty-Suite'), (Join-Path $PSScriptRoot 'Salty-Suite')) |
+        Where-Object { $_ } | ForEach-Object { Join-Path $_ 'deps-installer\deps_installer.py' } |
+        Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if ($saltyDepsInstaller) {
+        $pyExe = Get-Command python, python3, py -All -ErrorAction SilentlyContinue |
+            Where-Object { $_.Source -notmatch 'WindowsApps' } | Select-Object -First 1 -ExpandProperty Source
+        if ($pyExe) {
+            $planArgs = if ($pyExe -match '\\py\.exe$') { @('-3', $saltyDepsInstaller) } else { @($saltyDepsInstaller) }
+            $planArgs += @('--manifest', (Join-Path $PSScriptRoot 'dependencies.tsv'), '--platform', 'windows', '--plan', '--format', 'json')
+            $null = & $pyExe @planArgs 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "Salty-Suite deps-installer manifest validation failed for dependencies.tsv (exit $LASTEXITCODE)" }
+        }
+    }
     $rows = @(Manifest)
     if ($Names.Count) {
         $rows = @($rows | Where-Object name -In $Names)

@@ -14,7 +14,7 @@ import time
 import urllib.error
 import urllib.request
 
-COMPONENTS = {'native': 'Laplace-Native', 'postgres': 'Laplace-postgres', 'engine': 'Laplace-Engine', 'mcp': 'Laplace-MCP'}
+COMPONENTS = {'native': 'Laplace-Native', 'postgres': 'Laplace-postgres', 'engine': 'Laplace-Engine', 'mcp': 'Laplace-MCP', 'salty_suite': 'Salty-Suite'}
 LOCK = Path(__file__).resolve().parents[2] / 'components.lock.tsv'
 
 

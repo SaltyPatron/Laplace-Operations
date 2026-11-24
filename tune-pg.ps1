@@ -147,19 +147,26 @@ function TuneFactBuffersMaxKB { if ($env:LAPLACE_PG_BUFFERS_MAX) { TuneKB $env:L
 
 # ---------------------------------------------------------------------------------------------------- the rules
 function TuneDiv([int64]$n, [int64]$d) { [int64][math]::Floor($n / [decimal]$d) }
-function TunePlan {   # every derived quantity, tune-pg.sh's plan(): the same names, the same arithmetic (integers)
-    $ramKB = TuneFactRamKB; $threads = TuneFactThreads; $cores = TuneFactCores; $reservedKB = TuneFactReservedKB; $capKB = TuneFactBuffersMaxKB
-    $rotational = TuneFactRotational; $wal = TuneFactWal; $walBytes = $wal[0]; $shared = $wal[1]
-    if ($ramKB -le 0 -or $cores -lt 1 -or $threads -lt $cores) { throw 'tune-pg: invalid hardware facts (positive RAM and threads >= cores >= 1 required)' }
-    $usableKB = [math]::Max($ramKB - $reservedKB, (TuneDiv $ramKB 8))
-    $sharedKB = TuneDiv $usableKB 4; if ($capKB -gt 0) { $sharedKB = [math]::Min($sharedKB, $capKB) }; $sharedKB = [math]::Max($sharedKB, 131072)
-    $ecsKB = TuneDiv ($usableKB * 7) 10
-    $privateKB = TuneDiv $usableKB 4
-    $walMB = if ($shared -eq 1) { [math]::Min((TuneDiv $walBytes (1MB * 4)), 32768) } else { TuneDiv $walBytes (1MB * 2) }
-    $walMB = [math]::Max($walMB, 1024)
-    $minWalMB = [math]::Min([math]::Max((TuneDiv $walMB 8), 80), 4096)
-    $walBufKB = [math]::Min([math]::Max((TuneDiv $sharedKB 32), 16384), (TuneDiv ($walMB * 1024) 16))
-    $par = $cores; $gather = TuneDiv $cores 2; $avw = [math]::Max(3, $gather); $iow = [math]::Min([math]::Max((TuneDiv ($threads * 2) 3), 1), 32); $mwp = $par + 4
+function TuneFindSaltyPgTune {
+    $candidates = @($env:SALTY_SUITE_ROOT, (Join-Path (Split-Path $PSScriptRoot -Parent) 'Salty-Suite'), (Join-Path $PSScriptRoot 'Salty-Suite'))
+    foreach ($root in $candidates) {
+        if (-not $root) { continue }
+        $script = Join-Path $root 'pg-tune\pg_tune.py'
+        if (Test-Path -LiteralPath $script) { return $script }
+    }
+    $null
+}
+function TunePythonExe {
+    foreach ($name in @('python', 'python3', 'py')) {
+        $cmds = Get-Command $name -All -ErrorAction SilentlyContinue | Where-Object { $_.Source -notmatch 'WindowsApps' }
+        foreach ($cmd in $cmds) { return $cmd.Source }
+    }
+    if (Test-Path -LiteralPath 'C:\Users\ahart\AppData\Local\Python\pythoncore-3.15-64\python.exe') {
+        return 'C:\Users\ahart\AppData\Local\Python\pythoncore-3.15-64\python.exe'
+    }
+    $null
+}
+function TuneResolveWorkload([int]$threads, [int]$cores) {
     $declaredServing = $null
     if ($env:LAPLACE_PG_SERVING) {
         if ($env:LAPLACE_PG_SERVING -notmatch '^(0|[1-9][0-9]{0,5})$') { throw 'tune-pg: LAPLACE_PG_SERVING must be a nonnegative integer (at most six digits)' }
@@ -169,21 +176,84 @@ function TunePlan {   # every derived quantity, tune-pg.sh's plan(): the same na
         'substrate' { $ingest = 1 + 2 * $cores + 3; $serving = if ($null -ne $declaredServing) { $declaredServing } else { 4 * $threads }; $locks = 1024 }
         'app'       { $ingest = 0; $serving = if ($null -ne $declaredServing) { $declaredServing } else { [math]::Max(16, 8 * $threads) }; $locks = 64 }
     }
-    $reservedConns = 3; $conns = $ingest + $serving + $avw + $reservedConns
+    $reservedConns = 3; $conns = $ingest + $serving + [math]::Max(3, (TuneDiv $cores 2)) + $reservedConns
     $activeText = if ($env:LAPLACE_PG_ACTIVE_QUERIES) { $env:LAPLACE_PG_ACTIVE_QUERIES } else { "$([math]::Min($cores, $conns - $reservedConns))" }
     if ($activeText -notmatch '^[1-9][0-9]{0,5}$' -or [int]$activeText -gt ($conns - $reservedConns)) {
         throw 'tune-pg: LAPLACE_PG_ACTIVE_QUERIES must be positive and fit non-reserved connection capacity'
     }
-    $active = [int]$activeText
+    $workNodesText = if ($env:LAPLACE_PG_WORK_NODES) { $env:LAPLACE_PG_WORK_NODES } else { '2' }
+    if ($workNodesText -notmatch '^[1-9][0-9]{0,5}$') { throw 'tune-pg: LAPLACE_PG_WORK_NODES must be a positive integer (at most six digits)' }
+    @{ ingest = $ingest; serving = $serving; locks = $locks; active = [int]$activeText; work_nodes = [int]$workNodesText }
+}
+function TunePreloadList {
+    $libdirs = @(Join-Path $env:LAPLACE_PG_DIR 'lib') + @($env:LAPLACE_PG_LIBDIRS -split ';' | Where-Object { $_ })
+    @(($(if ($env:LAPLACE_PG_PRELOAD) { $env:LAPLACE_PG_PRELOAD } else { 'pg_stat_statements,auto_explain' }) -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Where-Object {
+        $name = $_; $found = $libdirs | Where-Object { Test-Path (Join-Path $_ "$name.dll") } | Select-Object -First 1
+        if (-not $found) { Write-Warning "tune-pg: $name is declared for shared_preload_libraries but no $name.dll is in $($libdirs -join ';'): not loaded" }
+        [bool]$found
+    })
+}
+function TuneInvokeSalty([int64]$ramKB, [int]$threads, [int]$cores, [int64]$walBytes, [int]$shared, [int]$rotational, [int64]$reservedKB, [int64]$capKB, [hashtable]$w, [string]$trace, [string[]]$preload) {
+    $script = TuneFindSaltyPgTune
+    $py = TunePythonExe
+    if (-not $script -or -not $py) { return $null }
+    $walLevel = if ($TuneProfile -eq 'app') { 'replica' } else { 'minimal' }
+    $walSenders = if ($TuneProfile -eq 'app') { '3' } else { '0' }
+    $listen = if ($env:LAPLACE_PG_LISTEN_ADDRESSES) { $env:LAPLACE_PG_LISTEN_ADDRESSES } else { '*' }
+    $sslVal = if (Test-Path (Join-Path $env:LAPLACE_PGDATA 'server.crt')) { 'on' } else { 'off' }
+    [Collections.Generic.List[string]]$argv = [Collections.Generic.List[string]]::new()
+    if ($py -match '\\py\.exe$') { $argv.Add('-3') }
+    $argv.Add($script)
+    foreach ($arg in @(
+        '--os', 'windows',
+        '--ram-kb', "$ramKB", '--threads', "$threads", '--cores', "$cores",
+        '--wal-bytes', "$walBytes", '--wal-shared', "$shared", '--rotational', "$rotational",
+        '--reserved-kb', "$reservedKB", '--buffers-max-kb', "$capKB",
+        '--wal-level', $walLevel, '--max-wal-senders', $walSenders,
+        '--huge-pages', 'off', '--io-method', 'worker',
+        '--ingest-conns', "$($w.ingest)", '--serving-conns', "$($w.serving)",
+        '--active-queries', "$($w.active)", '--work-nodes', "$($w.work_nodes)",
+        '--locks-per-tx', "$($w.locks)", '--port', "$env:LAPLACE_PGPORT",
+        '--trace', $trace, '--preload', ($preload -join ','),
+        '--listen-addresses', $listen, '--ssl', $sslVal,
+        '--format', 'json'
+    )) { $argv.Add([string]$arg) }
+    if ($TuneProfile -eq 'substrate' -and $env:LAPLACE_PGTEMP) { $argv.Add('--temp-tablespaces'); $argv.Add('pgtemp') }
+    $argvArr = $argv.ToArray()
+    $rawJson = & $py @argvArr 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "tune-pg: Salty-Suite pg-tune failed (exit $LASTEXITCODE): $($rawJson -join ' ')" }
+    ($rawJson -join "`n") | ConvertFrom-Json
+}
+function TunePlan {   # every derived quantity, tune-pg.sh's plan(): the same names, the same arithmetic (integers)
+    $ramKB = TuneFactRamKB; $threads = TuneFactThreads; $cores = TuneFactCores; $reservedKB = TuneFactReservedKB; $capKB = TuneFactBuffersMaxKB
+    $rotational = TuneFactRotational; $wal = TuneFactWal; $walBytes = $wal[0]; $shared = $wal[1]
+    if ($ramKB -le 0 -or $cores -lt 1 -or $threads -lt $cores) { throw 'tune-pg: invalid hardware facts (positive RAM and threads >= cores >= 1 required)' }
+    $w = TuneResolveWorkload $threads $cores
+    $salty = TuneInvokeSalty $ramKB $threads $cores $walBytes $shared $rotational $reservedKB $capKB $w 'full' @('pg_stat_statements', 'auto_explain')
+    if ($salty) {
+        $b = $salty.budget
+        return [ordered]@{
+            'fact.memory_kb' = [int64]$salty.facts.memory_kb; 'fact.reserved_kb' = [int64]$salty.facts.reserved_kb; 'fact.threads' = [int]$salty.facts.threads; 'fact.cores' = [int]$salty.facts.cores
+            'fact.wal_volume_bytes' = [int64]$salty.facts.wal_volume_bytes; 'fact.wal_volume_shared' = [int]$salty.facts.wal_volume_shared; 'fact.data_rotational' = [int]$salty.facts.data_rotational; 'fact.profile' = $TuneProfile
+            usable_kb = [int64]$b.usable_kb; shared_kb = [int64]$b.shared_kb; ecs_kb = [int64]$b.ecs_kb; private_kb = [int64]$b.private_kb; wal_mb = [int64]$b.wal_mb; min_wal_mb = [int64]$b.min_wal_mb; wal_buf_kb = [int64]$b.wal_buf_kb
+            par = [int]$b.par; gather = [int]$b.gather; avw = [int]$b.avw; iow = [int]$b.iow; mwp = [int]$b.mwp; conns = [int]$b.conns; active_queries = [int]$b.active_queries; backends = [int]$b.backends; temp_total_kb = [int64]$b.temp_total_kb; exec_kb = [int64]$b.exec_kb
+            mwm_kb = [int64]$b.mwm_kb; avwm_kb = [int64]$b.avwm_kb; work_kb = [int64]$b.work_kb; work_nodes = [int]$b.work_nodes; temp_kb = [int64]$b.temp_kb; eic = [int]$b.eic; rpc = [string]$b.rpc; locks = [int]$b.locks; over_kb = [int64]$b.over_kb
+        }
+    }
+    $usableKB = [math]::Max($ramKB - $reservedKB, (TuneDiv $ramKB 8))
+    $sharedKB = TuneDiv $usableKB 4; if ($capKB -gt 0) { $sharedKB = [math]::Min($sharedKB, $capKB) }; $sharedKB = [math]::Max($sharedKB, 131072)
+    $ecsKB = TuneDiv ($usableKB * 7) 10
+    $privateKB = TuneDiv $usableKB 4
+    $walMB = if ($shared -eq 1) { [math]::Min((TuneDiv $walBytes (1MB * 4)), 32768) } else { TuneDiv $walBytes (1MB * 2) }
+    $walMB = [math]::Max($walMB, 1024)
+    $minWalMB = [math]::Min([math]::Max((TuneDiv $walMB 8), 80), 4096)
+    $walBufKB = [math]::Min([math]::Max((TuneDiv $sharedKB 32), 16384), (TuneDiv ($walMB * 1024) 16))
+    $par = $cores; $gather = TuneDiv $cores 2; $avw = [math]::Max(3, $gather); $iow = [math]::Min([math]::Max((TuneDiv ($threads * 2) 3), 1), 32); $mwp = $par + 4
+    $ingest = $w.ingest; $serving = $w.serving; $locks = $w.locks; $reservedConns = 3; $conns = $ingest + $serving + $avw + $reservedConns; $active = $w.active; $workNodes = $w.work_nodes
     $maintDomKB = TuneDiv $privateKB 4; $mwmKB = [math]::Max((TuneDiv $maintDomKB 2), 65536); $avwmKB = [math]::Max((TuneDiv $maintDomKB (2 * $avw)), 1024)
     $tempKB = 8192; $tempTotalKB = $conns * $tempKB
     $execKB = $privateKB - $mwmKB - $avw * $avwmKB - $tempTotalKB
     $backends = $active + $par
-    $workNodesText = if ($env:LAPLACE_PG_WORK_NODES) { $env:LAPLACE_PG_WORK_NODES } else { '2' }
-    if ($workNodesText -notmatch '^[1-9][0-9]{0,5}$') { throw 'tune-pg: LAPLACE_PG_WORK_NODES must be a positive integer (at most six digits)' }
-    $workNodes = [int]$workNodesText
-    # A workload estimate, not admission control: SQL can run more nodes or queries.
-    # Account for every permitted parallel worker and every connection's temp buffers.
     $workKB = [math]::Max((TuneDiv $execKB ($backends * $workNodes)), 4096)
     $overKB = [math]::Max([int64]($backends * $workNodes * $workKB + $tempTotalKB + $mwmKB + $avw * $avwmKB - $privateKB), 0)
     if ($rotational -eq 1) { $eic = 2; $rpc = '4' } else { $eic = $iow; $rpc = '1.1' }
@@ -199,6 +269,34 @@ function TuneMBs([int64]$kb) { "$(TuneDiv $kb 1024)MB" }
 
 # Every setting, from the plan. The reasons are tune-pg.sh's.
 function TuneDeclared {
+    $logs = (Join-Path $env:LAPLACE_PGDATA 'log') -replace '\\', '/'
+    # the libraries loaded at start: each declared one only when its DLL is in the server's library directory or one of
+    # LAPLACE_PG_LIBDIRS, since a name the server cannot load stops it at its next start; a missing one is said
+    $preload = @(TunePreloadList)
+    $trace = if ($env:LAPLACE_PG_TRACE) { $env:LAPLACE_PG_TRACE.ToLowerInvariant() } else { 'full' }
+    if ($trace -notin @('full', 'reduced', 'off')) { throw "tune-pg: LAPLACE_PG_TRACE must be full, reduced, or off (got '$trace')" }
+    $ramKB = TuneFactRamKB; $threads = TuneFactThreads; $cores = TuneFactCores; $reservedKB = TuneFactReservedKB; $capKB = TuneFactBuffersMaxKB
+    $rotational = TuneFactRotational; $wal = TuneFactWal; $walBytes = $wal[0]; $shared = $wal[1]
+    if ($ramKB -le 0 -or $cores -lt 1 -or $threads -lt $cores) { throw 'tune-pg: invalid hardware facts (positive RAM and threads >= cores >= 1 required)' }
+    $w = TuneResolveWorkload $threads $cores
+    $salty = TuneInvokeSalty $ramKB $threads $cores $walBytes $shared $rotational $reservedKB $capKB $w $trace $preload
+    if ($salty) {
+        $s = [ordered]@{}
+        foreach ($prop in $salty.settings.PSObject.Properties) {
+            $k = $prop.Name; $v = [string]$prop.Value
+            $s[$k] = $v
+            if ($k -eq 'track_wal_io_timing') {
+                $s['logging_collector'] = 'on'
+                $s['log_directory'] = $logs
+                $s['log_filename'] = 'postgresql-%Y-%m-%d.log'
+                $s['log_rotation_age'] = '1d'
+                $s['log_rotation_size'] = '0'
+                $s['log_min_messages'] = 'warning'
+                $s['log_checkpoints'] = 'on'
+            }
+        }
+        return $s
+    }
     $p = TunePlan
     $logs = (Join-Path $env:LAPLACE_PGDATA 'log') -replace '\\', '/'
     # the libraries loaded at start: each declared one only when its DLL is in the server's library directory or one of
