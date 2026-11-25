@@ -60,8 +60,9 @@ if($Package){
 }
 $valid=@('all','modular','modular-web','native','postgres','api','cli','uci','migrations','web')
 if(@($selected | Where-Object {$_ -notin $valid}).Count){throw "Unknown component selection: $Components"}
-if($selected.Contains('all')){foreach($name in $valid | Where-Object {$_ -ne 'all'}){$null=$selected.Add($name)};$null=$selected.Remove('all')}
-if($selected.Contains('native')){foreach($name in $valid | Where-Object {$_ -ne 'all'}){$null=$selected.Add($name)}}
+if($selected.Contains('modular-web')){throw 'modular-web (Laplace-MCP/web) is retired; deploy the unified product UI with -Components web (or all).'}
+if($selected.Contains('all')){foreach($name in $valid | Where-Object {$_ -notin @('all','modular-web')}){$null=$selected.Add($name)};$null=$selected.Remove('all')}
+if($selected.Contains('native')){foreach($name in $valid | Where-Object {$_ -notin @('all','modular-web')}){$null=$selected.Add($name)}}
 if($selected.Contains('postgres')){foreach($name in 'native','api','cli','uci','migrations','web'){$null=$selected.Add($name)}}
 if($selected.Contains('api')){$null=$selected.Add('web')}
 $mono=@($selected | Where-Object {$_ -notin @('modular','modular-web')} | Sort-Object)

@@ -16,8 +16,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def request(opener, url):
+    req = urllib.request.Request(url, headers={'User-Agent': 'Laplace-Ops-Probe/1.0'})
     try:
-        response = opener.open(url, timeout=12)
+        response = opener.open(req, timeout=12)
     except urllib.error.HTTPError as error:
         response = error
     with response:

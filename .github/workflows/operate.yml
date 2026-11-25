@@ -1,0 +1,112 @@
+name: Laplace — Operate
+run-name: "Operate — ${{ inputs.action }} ${{ inputs.sources }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Single staging entrypoint for everyday operations against canonical 'laplace'"
+        type: choice
+        required: true
+        default: status
+        options:
+          - status
+          - deploy-runtime
+          - ingest-sources
+          - reseed-all
+          - drop-and-recreate-db
+          - workspace-code
+      sources:
+        description: "For ingest-sources: space-separated source names (blank = all sources)"
+        type: string
+        required: false
+        default: ""
+      confirm_destructive:
+        description: "Required for reseed-all or drop-and-recreate-db (drops the 'laplace' database)"
+        type: boolean
+        required: false
+        default: false
+      rebuild_runtime:
+        description: "For deploy-runtime: clean-build native runtime and retire old releases"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  guard:
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
+    timeout-minutes: 2
+    env:
+      ACTION: ${{ inputs.action }}
+      CONFIRM_DESTRUCTIVE: ${{ inputs.confirm_destructive }}
+    steps:
+      - name: Validate destructive confirmation
+        run: |
+          if [[ "$ACTION" == reseed-all || "$ACTION" == drop-and-recreate-db ]] && [[ "$CONFIRM_DESTRUCTIVE" != true ]]; then
+            echo "::error::Action '$ACTION' drops 'laplace'; set confirm_destructive=true to proceed." >&2
+            exit 2
+          fi
+
+  status:
+    needs: guard
+    if: inputs.action == 'status'
+    runs-on: [self-hosted, laplace, Laplace-Operations, staging]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, path: Laplace-Operations, clean: false }
+      - name: Substrate status and read verification
+        run: |
+          set -euo pipefail
+          . ./Laplace-Operations/laplace.env
+          laplace status
+          ./Laplace-Operations/verify.sh reads
+
+  deploy-runtime:
+    needs: guard
+    if: inputs.action == 'deploy-runtime'
+    uses: ./.github/workflows/laplace.yml
+    secrets: inherit
+    with:
+      advance: false
+      drop: false
+      reseed: false
+      rebuild_runtime: ${{ inputs.rebuild_runtime }}
+
+  ingest-sources:
+    needs: guard
+    if: inputs.action == 'ingest-sources'
+    uses: ./.github/workflows/ingest.yml
+    secrets: inherit
+    with:
+      sources: ${{ inputs.sources }}
+      reseed: false
+      repair_projection: false
+
+  reseed-all:
+    needs: guard
+    if: inputs.action == 'reseed-all'
+    uses: ./.github/workflows/laplace.yml
+    secrets: inherit
+    with:
+      drop: false
+      reseed: true
+
+  drop-and-recreate-db:
+    needs: guard
+    if: inputs.action == 'drop-and-recreate-db'
+    uses: ./.github/workflows/laplace.yml
+    secrets: inherit
+    with:
+      drop: true
+      reseed: false
+
+  workspace-code:
+    needs: guard
+    if: inputs.action == 'workspace-code'
+    uses: ./.github/workflows/workspace-code.yml
+    secrets: inherit

@@ -80,7 +80,7 @@ try{
             $installed=Get-Content -LiteralPath $selection.installation -Raw|ConvertFrom-Json
             $env:LAPLACE_TIER0=$installed.tier0;$env:LAPLACE_FLAGS=$installed.flags
             $env:LAPLACE_HIGHWAY=$installed.highway;$env:LAPLACE_GRAMMARS=$installed.grammars
-            & py -3 -X utf8 (Join-Path $env:LAPLACE_SRC 'Laplace-Engine/tests/semantic-interpretation.py') $selection.executable --recipes (Join-Path $selection.release 'share/recipes') --database
+            & py -3 -X utf8 (Join-Path $env:LAPLACE_SRC 'Laplace-Engine/tests/semantic-interpretation.py') $selection.executable --recipes (Join-Path $selection.release 'share/recipes')
         } else {
             $command=Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd'
             $selection=(Invoke-InstalledClient $command @('--where'))|ConvertFrom-Json

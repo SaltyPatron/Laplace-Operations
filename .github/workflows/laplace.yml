@@ -41,6 +41,24 @@ on:
       - 'components.lock.tsv'   # written by this workflow once a deployment is verified
   repository_dispatch:
     types: [main-merged]
+  workflow_call:
+    inputs:
+      engine_revision:
+        type: string
+        required: false
+        default: ""
+      advance:
+        type: boolean
+        default: false
+      drop:
+        type: boolean
+        default: false
+      reseed:
+        type: boolean
+        default: false
+      rebuild_runtime:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       engine_revision:
@@ -124,7 +142,7 @@ jobs:
         run: |
           . ./laplace.env
           record="$LAPLACE_WORK/deployed-revisions"
-          if [ "$EVENT" != workflow_dispatch ] && [ -f "$record" ] && [ "$(cat "$record")" = "$KEY" ]; then
+          if [ "$EVENT" != workflow_dispatch ] && [ "$EVENT" != workflow_call ] && [ -f "$record" ] && [ "$(cat "$record")" = "$KEY" ]; then
             echo "current=true" >> "$GITHUB_OUTPUT"
             echo "Already deployed and verified: $KEY; nothing to do" | tee -a "$GITHUB_STEP_SUMMARY"
           else
@@ -236,7 +254,7 @@ jobs:
         run: ./Laplace-Operations/seed-stamp.sh pending
       - name: Deploy and verify the installed modular runtime
         env:
-          REBUILD_RUNTIME: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_runtime == true }}
+          REBUILD_RUNTIME: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && inputs.rebuild_runtime == true }}
         run: |
           arguments=()
           if [[ "$REBUILD_RUNTIME" == true ]]; then arguments+=(--rebuild); fi

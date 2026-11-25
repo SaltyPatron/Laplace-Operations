@@ -5,15 +5,17 @@ here=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
 operation=${1:-help}; shift || true
 target=local; wait=0; force=false; yes=0; json=0; arguments=()
 usage() {
-  echo 'laplace-ops runs'
-  echo 'laplace-ops status|verify|deploy --target staging|production [--wait]'
-  echo 'laplace-ops components --target staging|cloud [--wait] [--force]'
-  echo 'laplace-ops clean|cleanup|storage [--target staging|production] [--receipt PATH]'
-  echo 'laplace-ops db --target staging|cloud substrate|application status|migrate|repair|remigrate|recreate|reindex [--wait]'
-  echo 'laplace-ops ingest [--target staging] [SOURCE...] [--wait]     ingest.sh here; ingest.yml on staging'
-  echo 'laplace-ops seed --target staging --yes [--wait]               laplace.yml with reseed on staging'
-  echo 'laplace-ops data [--target staging] [status|fetch|record] [SET...]   data.sh here, or on $LAPLACE_PEER over SSH'
-  echo 'laplace-ops sources [--json]                                   this machine: laplace sources (--json: laplace ingest --catalog)'
+  echo 'Laplace Operator CLI (laplace-ops) — canonical database: laplace'
+  echo ''
+  echo '  laplace-ops runs'
+  echo '  laplace-ops sources [--json]                                         installed recipe catalog'
+  echo '  laplace-ops ingest [--target staging] [SOURCE...] [--wait]           ingest local or via ingest.yml'
+  echo '  laplace-ops seed --target staging --yes [--wait]                     drop, deploy, bind caches & reseed via laplace.yml'
+  echo '  laplace-ops status|verify|deploy --target staging|production [--wait]'
+  echo '  laplace-ops components --target staging|cloud [--wait] [--force]'
+  echo '  laplace-ops db --target staging|cloud substrate|application status|migrate|repair|remigrate|recreate|reindex [--wait]'
+  echo '  laplace-ops clean|cleanup|storage [--target staging|production] [--receipt PATH]'
+  echo '  laplace-ops data [--target staging] [status|fetch|record] [SET...]'
 }
 while (($#)); do
   case "$1" in

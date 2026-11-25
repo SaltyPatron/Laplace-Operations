@@ -1,4 +1,4 @@
-#Requires -Version 7
+﻿#Requires -Version 7
 <#
 .SYNOPSIS
 Operate the installed Laplace application through its delivery workflows.
@@ -45,7 +45,7 @@ if ($Help -or $Operation -in @('help','-h','--help','/?') -or ($RemainingArgs | 
     $Operation = 'help'
 } else {
     $Names = @(); $DataOperation = 'status'
-    $takesNames = $Operation -in @('ingest','data')                          # source or data-set names, given after the operation
+    $takesNames = $Operation -in @('ingest','data','seed')                   # source or data-set names, given after the operation
     foreach ($token in $RemainingArgs) {
         if ($Operation -eq 'clients' -and $token -in @('status','verify')) { $ClientOperation=$token; continue }
         if ($Operation -eq 'storage' -and $token -in @('status','clean')) { $StorageOperation=$token; continue }
@@ -75,83 +75,48 @@ if ($Help -or $Operation -in @('help','-h','--help','/?') -or ($RemainingArgs | 
         }
     }
 }
-$validOperations = @('help','status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','clients','storage','prepare','build','test','recovery','db','restart-iis','repair-postgres','ingest','seed','sources','data')
+$validOperations = @('help','status','runs','run','start','stop','logs','configure-development','enroll-development','verify','deploy','components','clients','unify','storage','prepare','build','test','recovery','db','restart-iis','repair-postgres','ingest','seed','sources','data')
 if ($Operation -notin $validOperations) {
     throw "Unknown operation '$Operation'. Valid operations: $($validOperations -join ', ')"
 }
 if ($Operation -eq 'help') {
     @'
-Laplace Operator & Developer CLI (laplace-ops)
+Laplace Operator & Developer CLI (laplace-ops) — canonical database: 'laplace'
 
-LOCAL DESKTOP DEVELOPMENT (http://localhost:5187)
-  laplace-ops prepare                 Fetch pinned Unicode/UCD and Tree-sitter grammar inputs
-  laplace-ops build                   Build native C/C++ engine, ReadyToRun CLI, .NET solution, and web UI
-  laplace-ops test                    Build native engine and run native/runtime interop tests
-  laplace-ops test -List              List registered checks and their owners
-  laplace-ops test -Check <id,...>     Run named checks against existing inputs; retain one receipt
-  laplace-ops run                     Run the local desktop API + web UI in the foreground
-  laplace-ops start | stop | status   Manage the background local desktop server
-  laplace-ops logs                    Tail logs from the active background local desktop server
-  laplace-ops verify desktop          Verify the local desktop server (reuses running instance or cold-starts)
-  laplace-ops verify desktop -Installed  Verify the installed IIS package, readiness, authenticated SQL, Native and UI assets without a build
+EVERYDAY COMMANDS
+  laplace-ops unify                   Verify CLI, IIS, UCI, PostgreSQL, and live HTTPS all target 'laplace'
+  laplace-ops sources [-Json]         List installed ingest sources, aliases, and file locations
+  laplace-ops ingest [SOURCE...]      Ingest named sources (or all in recipes/order) into 'laplace'
+  laplace-ops seed -Yes [SOURCE...]   Drop/recreate 'laplace', bind caches, and ingest [SOURCE...] (or all)
+  laplace-ops db                      Report status of local databases ('laplace' + 'laplace-desktop-app')
+  laplace-ops db migrate              Apply declared schemas/extensions + cache bindings to local databases
+  laplace-ops db substrate recreate -Yes   Drop, recreate, and bind caches for canonical 'laplace'
+  laplace-ops db application recreate -Yes Drop and recreate 'laplace-desktop-app' only
+  laplace-ops deploy desktop          Package CLI/MCP, publish IIS, migrate, and verify installed release
+  laplace-ops verify desktop [-Installed]  Verify dev server or installed IIS package
 
-LOCAL DESKTOP IIS & DATABASE MAINTENANCE (https://dev.hartonomous.com)
-  laplace-ops deploy desktop          Package modular CLI/MCP, publish IIS, migrate, and verify installed and running releases
-  laplace-ops deploy desktop -Plan    Show desktop deployment stages without changing the installation
-  laplace-ops deploy desktop -Components web       Update only the web component
-  laplace-ops deploy desktop -Components modular-web  Update the modular browser using the installed native package
-  laplace-ops deploy desktop -Components api,cli   Update API/web and CLI; reuse other components
-  laplace-ops deploy desktop -Force                Explicitly rebuild selected components
-  laplace-ops deploy desktop -Package <directory>  Activate a verified prepared IIS package without a build
-  laplace-ops restart-iis             Cleanly recycle the local IIS site (app_offline.htm) and check /health
-  laplace-ops repair-postgres         Repair the local PostgreSQL runtime and service; verify its original cluster
-  laplace-ops repair-postgres -Plan   Inspect that repair without changing the host
-  laplace-ops db                      Report drift between the declared schema and the live catalog for both local databases (application + substrate)
-  laplace-ops db [both|application|substrate] [status|migrate|repair|remigrate|recreate] [-Yes]  (remigrate = re-apply the declaration; there is no migration journal)
-    Examples:
-      laplace-ops db                              Check status of both local databases
-      laplace-ops db migrate                      Apply the declared schema + grants to both local databases (idempotent, every time)
-      laplace-ops db repair                       Recreate any dropped local database and apply the declared schema + grants
-      laplace-ops db recreate -Yes                DROP and recreate both local databases from scratch
-      laplace-ops db substrate recreate -Yes      DROP and recreate only the local substrate database (laplace-mono)
-      laplace-ops db application recreate -Yes    DROP and recreate only the local app database (laplace-desktop-app)
-
-LOCAL DESKTOP ONE-TIME SETUP & MODULAR CLI
-  pwsh -File setup.ps1                Prepare dev inputs and register laplace-ops on PATH
-  pwsh -File setup.ps1 all            Full Windows host setup (volumes, packages, deps, PostgreSQL, cluster, access)
-  laplace-ops configure-development   Configure local Windows SSPI database roles and HBA rules
-  laplace-ops enroll-development      Enroll Windows DPAPI workload credentials from OpenBao
-  laplace-ops components desktop      Package Laplace-Native + Laplace-Engine and install the 'laplace' CLI
-  laplace-ops components staging -Force  Clean-build native runtime, verify it, then retire old native releases
-  laplace-ops clients [-Json]          Show installed/running modular releases, client owners and release retention
-  laplace-ops clients verify [-Json]   The same; exit 2 if older clients need reconnecting, 1 if inventory is incomplete
-  laplace-ops storage [-Json]          Audit releases, reusable packages/components and operation history
-  laplace-ops storage clean [-Json]    Retire unused outputs and superseded runs; preserve live selections and rollback
-  laplace-ops clean [-Json]            Clean unused releases, packages, blobs and abandoned build/scratch output
-
-INGESTION AND DATA (Laplace-Engine: the laplace program, recipes/order, the data sets of data.tsv)
-  laplace-ops sources [-Json]         Complete installed recipe catalog: source aliases, content, prerequisites and decomposers
-  laplace-ops ingest [SOURCE...]      Ingest every source in recipes/order, or the sources named (ingest.ps1)
-  laplace-ops ingest staging [SOURCE...] [-Wait]
-                                      The same on hart-server: dispatches Laplace-Operations ingest.yml
-  laplace-ops seed -Yes               Recreate the installed Engine's database, then ingest every source; no build
-  laplace-ops seed staging -Yes [-Wait]
-                                      The same on hart-server: ingest.yml with reseed
-  laplace-ops data [status|fetch|record] [SET...]
-                                      data.sh on this machine (needs bash and python3, as laplace.env does)
-  laplace-ops data staging [status|fetch|record] [SET...]
-                                      data.sh on the deployment target ($LAPLACE_PEER, over SSH)
-
-REMOTE CI/CD & ENVIRONMENT OPERATIONS (GitHub Actions)
+REMOTE STAGING / PRODUCTION (GitHub Actions: Laplace-Operations operate.yml / laplace.yml / ingest.yml)
   laplace-ops runs                    List recent GitHub Actions runs across all Laplace repositories
   laplace-ops status <staging|production> [-Wait]
   laplace-ops verify <staging|production> [-Wait]
   laplace-ops deploy <staging|production> [-Wait]
+  laplace-ops ingest staging [SOURCE...] [-Wait]   Dispatch ingest.yml on hart-server
+  laplace-ops seed staging -Yes [-Wait]            Dispatch laplace.yml (drop + deploy + full reseed) on hart-server
   laplace-ops db <staging|cloud> <substrate|application> <status|migrate|repair|recreate|reindex> [-Wait]
+  laplace-ops data [staging] [status|fetch|record] [SET...]   Audit/fetch/record corpus data sets
+
+ADVANCED / LOCAL DEVELOPMENT (http://localhost:5187 & https://dev.hartonomous.com)
+  laplace-ops prepare | build | test [-List | -Check <id,...>]
+  laplace-ops run | start | stop | status | logs
+  laplace-ops deploy desktop [-Plan] [-Components web|modular-web|api,cli] [-Force] [-Package <dir>]
+  laplace-ops restart-iis | repair-postgres [-Plan]
+  laplace-ops configure-development | enroll-development
+  laplace-ops components desktop | staging [-Force]
+  laplace-ops clients [verify] [-Json] | storage [clean] [-Json] | clean [-Json]
 '@ | Write-Host
     exit 0
 }
-$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','repair-postgres','clients','storage','ingest','seed','sources','data')
+$desktopOperations = @('prepare','build','test','run','start','stop','logs','configure-development','enroll-development','db','restart-iis','repair-postgres','clients','unify','storage','ingest','seed','sources','data')
 if (-not $PSBoundParameters.ContainsKey('Target')) {
     $Target = if ($Operation -in $desktopOperations) { 'desktop' } else { 'staging' }
 }
@@ -219,6 +184,104 @@ if ($Operation -eq 'clients') {
     }
     exit 0
 }
+if ($Operation -eq 'unify') {
+    if ($Target -ne 'desktop') { throw 'unify checks the local Windows installation.' }
+    . "$PSScriptRoot/laplace.env.ps1"
+    $failures = [Collections.Generic.List[string]]::new()
+    $rows = [Collections.Generic.List[object]]::new()
+
+    $binDir = Join-Path $env:LOCALAPPDATA 'Laplace\bin'
+    $staleShim = Join-Path $binDir 'laplace-mono.cmd'
+    if (Test-Path -LiteralPath $staleShim) {
+        $failures.Add("Stale legacy CLI shim exists: $staleShim")
+        $rows.Add([pscustomobject]@{ Component='stale-shim'; Target=$staleShim; Database='laplace-mono'; Status='FAIL (stale shim)' })
+    }
+
+    $laplaceCmd = Join-Path $binDir 'laplace.cmd'
+    if (-not (Test-Path -LiteralPath $laplaceCmd -PathType Leaf)) {
+        $failures.Add("Missing installed CLI: $laplaceCmd")
+        $rows.Add([pscustomobject]@{ Component='laplace CLI'; Target=$laplaceCmd; Database=''; Status='FAIL (missing)' })
+    } else {
+        $whereJson = (& $laplaceCmd --where 2>&1) -join "`n"
+        if ($LASTEXITCODE -ne 0) {
+            $failures.Add("laplace --where failed: $whereJson")
+            $rows.Add([pscustomobject]@{ Component='laplace CLI'; Target=$laplaceCmd; Database=''; Status='FAIL (--where error)' })
+        } else {
+            $w = $whereJson | ConvertFrom-Json
+            $ok = ($w.database -ceq 'laplace')
+            if (-not $ok) { $failures.Add("laplace CLI points to '$($w.database)' instead of 'laplace'") }
+            $rows.Add([pscustomobject]@{ Component='laplace CLI'; Target="$($w.database_host)/$($w.database_role)"; Database=$w.database; Status=$(if($ok){'OK'}else{'FAIL'}) })
+        }
+    }
+
+    $iisPath = if ($env:LAPLACE_IIS_INSTALLATION) { $env:LAPLACE_IIS_INSTALLATION } else { Join-Path $env:LAPLACE_DATA_ROOT 'services/laplace-mono-api/installation.json' }
+    if (-not (Test-Path -LiteralPath $iisPath -PathType Leaf)) {
+        $failures.Add("Missing IIS installation manifest: $iisPath")
+        $rows.Add([pscustomobject]@{ Component='IIS API'; Target=$iisPath; Database=''; Status='FAIL (missing)' })
+    } else {
+        $iis = Get-Content -LiteralPath $iisPath -Raw | ConvertFrom-Json
+        $subDb = $iis.database.substrate_database
+        $appDb = $iis.database.application_database
+        $ok = ($subDb -ceq 'laplace')
+        if (-not $ok) { $failures.Add("IIS manifest substrate_database is '$subDb' instead of 'laplace'") }
+        $rows.Add([pscustomobject]@{ Component='IIS API'; Target="$($iis.database.host) (app=$appDb)"; Database=$subDb; Status=$(if($ok){'OK'}else{'FAIL'}) })
+    }
+
+    $uciPath = Join-Path $env:LAPLACE_DATA_ROOT 'services/laplace-mono-uci/agent/installation.json'
+    if (-not (Test-Path -LiteralPath $uciPath -PathType Leaf)) {
+        $failures.Add("Missing UCI installation manifest: $uciPath")
+        $rows.Add([pscustomobject]@{ Component='UCI connector'; Target=$uciPath; Database=''; Status='FAIL (missing)' })
+    } else {
+        $uci = Get-Content -LiteralPath $uciPath -Raw | ConvertFrom-Json
+        $connStr = [string]$uci.connector.profiles.'mono-development'.variables.LAPLACE_DB
+        $uciDb = if ($connStr -match '(?:database|dbname)=([^;\s]+)') { $Matches[1] } else { '' }
+        $ok = ($uciDb -ceq 'laplace')
+        if (-not $ok) { $failures.Add("UCI LAPLACE_DB targets '$uciDb' instead of 'laplace'") }
+        $rows.Add([pscustomobject]@{ Component='UCI connector'; Target='mono-development'; Database=$uciDb; Status=$(if($ok){'OK'}else{'FAIL'}) })
+    }
+
+    $psql = Join-Path $env:LAPLACE_PG_DIR 'bin\psql.exe'
+    if (-not (Test-Path -LiteralPath $psql -PathType Leaf)) {
+        $failures.Add("Missing psql: $psql")
+        $rows.Add([pscustomobject]@{ Component='PostgreSQL'; Target=$psql; Database=''; Status='FAIL (missing psql)' })
+    } else {
+        $pgHost = if ($env:LAPLACE_PGHOST) { $env:LAPLACE_PGHOST } else { '127.0.0.1' }
+        $pgPort = if ($env:LAPLACE_PGPORT) { $env:LAPLACE_PGPORT } else { '5432' }
+        $pgUser = $env:USERNAME
+        $dbsRaw = & $psql -X -w -h $pgHost -p $pgPort -U $pgUser -d postgres -Atq -c "SELECT datname FROM pg_database WHERE NOT datistemplate ORDER BY datname;" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $failures.Add("PostgreSQL query failed: $($dbsRaw -join ' ')")
+            $rows.Add([pscustomobject]@{ Component='PostgreSQL'; Target="${pgHost}:${pgPort}"; Database=''; Status='FAIL (query)' })
+        } else {
+            $dbs = @($dbsRaw | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+            $hasLaplace = $dbs -contains 'laplace'
+            $hasMono = $dbs -contains 'laplace-mono'
+            if (-not $hasLaplace) { $failures.Add("PostgreSQL database 'laplace' is missing") }
+            if ($hasMono) { $failures.Add("Legacy database 'laplace-mono' still exists in PostgreSQL") }
+            $ok = $hasLaplace -and (-not $hasMono)
+            $rows.Add([pscustomobject]@{ Component='PostgreSQL'; Target="${pgHost}:${pgPort} ($($dbs -join ', '))"; Database=$(if($hasLaplace){'laplace'}else{'MISSING'}); Status=$(if($ok){'OK'}else{'FAIL'}) })
+        }
+    }
+
+    $origin = if ($env:LAPLACE_PUBLIC_BASE_URL) { $env:LAPLACE_PUBLIC_BASE_URL.TrimEnd('/') } else { 'https://dev.hartonomous.com' }
+    try {
+        $health = Invoke-RestMethod "$origin/health" -TimeoutSec 10
+        $ok = ($health.status -eq 'ok')
+        if (-not $ok) { $failures.Add("Live IIS /health status was '$($health.status)'") }
+        $rows.Add([pscustomobject]@{ Component='IIS HTTPS /health'; Target=$origin; Database=$(if($health.stream){$health.stream}else{'laplace'}); Status=$(if($ok){'OK'}else{'FAIL'}) })
+    } catch {
+        $failures.Add("Live IIS /health check failed ($origin/health): $($_.Exception.Message)")
+        $rows.Add([pscustomobject]@{ Component='IIS HTTPS /health'; Target=$origin; Database='unreachable'; Status='FAIL' })
+    }
+
+    $rows | Format-Table -AutoSize
+    if ($failures.Count -gt 0) {
+        foreach ($f in $failures) { Write-Error $f }
+        exit 1
+    }
+    Write-Host "UNIFIED: all desktop components target canonical 'laplace' with zero 'laplace-mono' leftovers."
+    exit 0
+}
 if ($Operation -eq 'repair-postgres') {
     $repairArgs = @('-NoProfile','-File',"$PSScriptRoot/setup.ps1",'repair-postgres')
     if ($Plan) { $repairArgs += '-Check' }
@@ -258,6 +321,13 @@ if ($Operation -eq 'db') {
                     & pwsh @dbArgs
                     $result=$LASTEXITCODE
                     if ($result) { break }
+                }
+                if ($result -eq 0 -and ($scopes -contains 'substrate') -and $DatabaseOperation -in @('migrate','repair','remigrate','recreate')) {
+                    $laplaceCmd = Join-Path $env:LOCALAPPDATA 'Laplace\bin\laplace.cmd'
+                    if (Test-Path -LiteralPath $laplaceCmd -PathType Leaf) {
+                        & $laplaceCmd deploy --configure-server-cache
+                        $result = $LASTEXITCODE
+                    }
                 }
             } finally {
                 . "$PSScriptRoot/installation/storage.ps1"
@@ -320,7 +390,7 @@ if ($Operation -in @('ingest','seed','sources','data')) {
         switch ($Operation) {
             'ingest'  { & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1" @Names; exit $LASTEXITCODE }
             'seed'    { & pwsh -NoProfile -File "$PSScriptRoot/deploy.ps1" drop -Installed; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-                        & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1"; exit $LASTEXITCODE }
+                        & pwsh -NoProfile -File "$PSScriptRoot/ingest.ps1" @Names; exit $LASTEXITCODE }
             'sources' { $laplace = Join-Path $env:LOCALAPPDATA 'Laplace/bin/laplace.cmd'
                         if (-not (Test-Path -LiteralPath $laplace -PathType Leaf)) { throw 'The modular client is not installed. Run setup.ps1 client for this host.' }
                         $raw = & $laplace ingest --catalog

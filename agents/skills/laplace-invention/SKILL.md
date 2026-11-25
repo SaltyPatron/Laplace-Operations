@@ -1,13 +1,13 @@
 ---
 name: laplace-invention
-description: Deep byte-level and operational reference for Laplace (identity, tiers, Tier-0, mantissa path carrier, 64-bit mask banks, schema, in-place reconcile, ingest VM, Forward/Model/Export, end-to-end delivery checklist). Load for any Laplace task touching layouts, schema, ingest, retrieval, synthesis, or documentation.
+description: Deep byte-level and operational reference for Laplace (identity, tiers, Tier-0, mantissa path carrier, 64-bit mask banks, schema, in-place reconcile, engine layout, and SDLC verification gates). Load for any Laplace task touching layouts, schema, ingest, retrieval, synthesis, UI, or documentation.
 metadata:
-  short-description: Laplace byte-level reference + end-to-end delivery checklist
+  short-description: Laplace byte-level reference + SDLC anti-fake verification gates
 ---
 
 # Laplace — Deep Reference
 
-Core mandate, truth hierarchy (`INVENTOR_RECORD.md` + `INVENTION.md` + decided `Sequence/Conflicts.md` > `Architecture.md` > modular packages > monorepo migration debt), and the 1.0 finish line live in `Laplace-Operations/agents/AGENTS.md`. Always check documentation and code together; when agent-written code contradicts the invention, fix the code to match the invention.
+Truth hierarchy (`INVENTOR_RECORD.md` + `INVENTION.md` + decided `Sequence/Conflicts.md` > `Engineering/Boundaries.md` & `Standards.md` > code) and strict SDLC priority (`P0` → `P5`) live in `Laplace-Operations/agents/AGENTS.md`. Always check documentation and code together; when agent-written code contradicts the invention or fakes an operation, tear out the fake and fix the code.
 
 ## 1. Exact Byte & Bit Layouts (`Laplace-Native`)
 
@@ -28,26 +28,20 @@ Core mandate, truth hierarchy (`INVENTOR_RECORD.md` + `INVENTION.md` + decided `
 
 ### Why Mantissa Bit-Packing Exists (Never Conflate the Four Orthogonal Planes)
 
-1. **Scale-Free 4D Address Handle (`entity`):** Every granularity of concept—a Tier-0 codepoint on $S^3$, `"255"`, a Tier-2 UAX #29 word, a Tier-3 idiom/C statement, a function AST, a book, or a whole `.git` repository root—resolves deterministically to **one `entity` record (`id`, exact `__int128` 4D `coord` in `[-1, 1]^4`, `tier`, 64-bit highway `mask`)**. Any tier's `entity` can therefore serve directly as a native compositional "token" in trajectories or Mold-a-Model vocabularies without context-window blowup or OOV. `entity.mask` is strictly `manifest/banks.tsv` highway/grammatical acceleration bits—never turn origin or channel.
-2. **Sequence, Containment & Microsecond Salience (`physicality.path` + GIN `laplace_path_ops`):** Packing 128-bit BLAKE3 child IDs + `M` (`run`/`said`/`outcome`/`position`) into `POINT ZM` / `LINESTRING ZM` mantissas gives exact constituent order, RLE compression, `precedes`, `follows`, gaps, co-occurrence, LCA containment, **and microsecond trajectory salience (`laplace_salience`)** without edge tables:
-   - **Intrinsic self-information ($I(e) = -\log_2\frac{\text{df}(e)+1}{N+1}$):** read exact `PATH_MEMBER` holder cardinalities from GIN entry/posting-tree metadata in $O(\log V)$ microseconds with zero heap/TOAST reads (never discarding `df > fan` behind an opaque `hub` cliff).
-   - **Contextual contraction & multi-tier promotion:** GIN bitmap intersections + `LineStringZM` vertex gaps separate pragmatic glue frames (`"How does ... ?"`) from load-bearing anchors (`"lightning"`) and promote tight high-$I$ compounds/idioms/AST blocks to their higher-tier `entity` handles.
-   - **Causal `WIN`/`LOSS` differential:** GIN bitmap contrast across `M`-outcome `WIN` vs `LOSS` trajectories isolates failing constituent interactions (*"every time datatype X enters function Y, compile fails"*) while background scaffolding cancels out.
-3. **Directed 4D Shape (`entity.coord` + Realized Curves):** Permutations share a deterministic 4D centroid (`coord("cat") == coord("act") == coord("tac")`); `"cat"` vs `"act"` differ in static wiring; `"cat"` (`c→a→t`) vs `"tac"` (`t→a→c`) share an undirected trace (`hausdorff4d == 0`) while monotone-forward `laplace_frechet4d`, `laplace_dtw4d`, and `laplace_edr4d` strictly enforce `0 → n-1` direction (`frechet4d("cat", "tac") > 0`) on unpacked child `entity.coord` positions (`laplace_couple`, `laplace_project_path`). Query-time centroids weight constituents by `laplace_salience` ($\sum w_i x_i / \sum w_i$, never flat `1/N` over spaces/glue), while stored `entity.coord` remains strictly deterministic from content alone.
-4. **Meaning, Consequence & Internal Monologue (`attestation` + `consensus` + `trust_classes.toml`):** External sources, user prompts (`UserPromptContent` `0.30`), Laplace external responses (`ResponseContent` `0.20`), Laplace internal reasoning/AST hypotheses (`InternalMonologue` `0.10`, non-self-corroborating), and deterministic compiler/test/engine outcomes (`ToolchainVerification` `0.90`) all live in the **same 4 tables**, separated by trajectory vertex metadata + witness trust class.
-5. **Pure State Trajectories, Altitude Inheritance & Set Intersection (`Sequence/Conflicts.md` K2):** State-transition domains (such as chess) store pure canonical state sequences (`[P0, P1, …, Pn]`) and `[P_k, P_{k+1}]` transition claims—never interleaving redundant move objects (`[P0, M0, P1, …]`), never storing raw FEN or `"[%clk …]"` strings as entities, never dumping headers into English key-value tuples (`["White", name]`, `["WhiteElo", "2850"]`), and never stamping parent-altitude metadata onto child plies/clauses/tokens. Record each fact once where it holds or changes (`["FIDE", FideId]` highway nodes at player altitude; positional `[seat_0, seat_1]` with compositional decimal Elo, date `[Y, M, D]`, and time control at game altitude; integer decisecond clocks at ply altitude), intersecting shared states and entities across witnesses in microseconds via GIN.
-
-> [!WARNING]
-> Legacy monorepo files (`Laplace/engine/core/src/mantissa.c` 212-bit `53/53/22` carrier, `hilbert4d.c` 128-bit key, `glicko2.c`, `hash128_merkle` domain byte, `SubstrateCanonicalIds.cs`) belong to the pre-modular substrate being retired under `one-substrate`. Never extend them; converge callers onto `Laplace-Native` + `Laplace-postgres`.
+1. **Scale-Free 4D Address Handle (`entity`):** Every granularity of concept—a Tier-0 codepoint on $S^3$, `"255"`, a Tier-2 UAX #29 word, a Tier-3 idiom/C statement, a function AST, a book, or a `.git` repository root—resolves deterministically to **one `entity` record (`id`, exact `__int128` 4D `coord` in `[-1, 1]^4`, `tier`, 64-bit highway `mask`)**. `entity.mask` is strictly `manifest/banks.tsv` highway/grammatical acceleration bits—never turn origin or channel.
+2. **Sequence, Containment & Salience (`physicality.path` + GIN `laplace_path_ops`):** Packing 128-bit BLAKE3 child IDs + `M` (`run`/`said`/`outcome`/`position`) into `POINT ZM` / `LINESTRING ZM` mantissas gives exact constituent order, RLE compression, `precedes`, `follows`, gaps, co-occurrence, LCA containment, and GIN posting-cardinality salience (`laplace_salience`: continuous $I(e) = -\log_2\frac{\text{df}(e)+1}{N+1}$, span contraction, `WIN`/`LOSS` differential) with zero edge tables.
+3. **Directed 4D Shape (`entity.coord` + Realized Curves):** Permutations share a deterministic 4D centroid (`coord("cat") == coord("act") == coord("tac")`); monotone-forward `laplace_frechet4d`, `laplace_dtw4d`, and `laplace_edr4d` resolve forward direction on unpacked child `entity.coord` positions (`laplace_couple`, `laplace_project_path`). Geometry nominates structural candidates and carries **zero** semantic meaning.
+4. **Meaning & Consequence (`attestation` + `consensus` + `trust_classes.toml`):** External sources, user prompts (`UserPromptContent` `0.30`), Laplace responses (`ResponseContent` `0.20`), internal reasoning/AST hypotheses (`InternalMonologue` `0.10`), and deterministic toolchain/verifier outcomes (`ToolchainVerification` `0.90`) all live in the same 4 tables, separated by trajectory vertex metadata and witness trust class.
+5. **Pure State Trajectories & Altitude Inheritance (`Sequence/Conflicts.md` K2):** State-transition domains (such as chess) store pure canonical state sequences (`[P0, P1, …, Pn]`) and `[P_k, P_{k+1}]` transition claims—never interleaving move tuples, raw FEN/`[%clk]` strings, or KVP header bags (`["White", name]`).
 
 ## 2. Extension Schema & In-Place Reconcile (`Laplace-postgres`)
 
 - **Versioning (`CMakeLists.txt` + `laplace.control`):**
   - `laplace-storage:<16-hex>` hashes **only** `CREATE TYPE blake3` and the four persistent table DDLs in `sql/laplace.sql.in`.
-  - `default_version` hashes the full install script, and the build emits `laplace.reconcile.sql` covering all replaceable functions, casts, operators, opclasses, and indexes (`path_set_match.sql` + `api.sql` + `operations.sql` + `laplace_restore_function_bindings()`).
-  - `laplace deploy` (`Laplace-Engine/src/deploy.c` `prepare_laplace_transition`) checks storage compatibility and runs `ALTER EXTENSION laplace UPDATE TO ...` **in place**, preserving all ingested data and indexes whenever storage DDL is unchanged. Pass `--recreate` **only** when persistent table DDL or `tier0.bin` coordinates change.
+  - `default_version` hashes the full install script; build emits `laplace.reconcile.sql` covering replaceable functions, casts, operators, opclasses, and indexes (`path_set_match.sql` + `api.sql` + `operations.sql` + `laplace_restore_function_bindings()`).
+  - `laplace deploy` (`Laplace-Engine/src/db/deploy.c`) runs `ALTER EXTENSION laplace UPDATE` **in place**, preserving admitted data and indexes whenever storage DDL is unchanged. Pass `--recreate` **only** when persistent table DDL or `tier0.bin` coordinates change.
 - **Persistent tables (`sql/laplace.sql.in`):**
-  - `entity(id blake3, tier smallint, coord geometry(PointZM), hilbert bigint, mask bit(64))` — PK `(tier, id)`, per-partition `UNIQUE (id)`; currently 9 tier range partitions `entity_t0`..`entity_t8plus` (note `Sequence/Conflicts.md` P4 vs `Sequence/Database.md` §8.10).
+  - `entity(id blake3, tier smallint, coord geometry(PointZM), hilbert bigint, mask bit(64))` — PK `(tier, id)`, per-partition `UNIQUE (id)`; 9 tier range partitions `entity_t0`..`entity_t8plus`.
   - `physicality(entity blake3, tier smallint, hilbert bigint, path geometry, mask bit(64))` — PK `(tier, entity)`, FK `(tier, entity) → entity(tier, id) ON UPDATE CASCADE`, `parallel_workers=0`, `path SET STATISTICS 0`; 9 tier range partitions `physicality_t0`..`physicality_t8plus`.
   - `attestation(claim, witness, lineage, games, tokens, score, "position", trust)` — `UNIQUE NULLS NOT DISTINCT (claim, witness, lineage)`, 16 hex range partitions `attestation_0`..`attestation_f` (`fillfactor=80`).
   - `consensus(claim PK, rating, deviation, volatility, matches)` — 16 hex range partitions `consensus_0`..`consensus_f` (`fillfactor=80`).
@@ -58,29 +52,36 @@ Core mandate, truth hierarchy (`INVENTOR_RECORD.md` + `INVENTION.md` + decided `
   - `attestation_witness_lineage(witness, lineage NULLS FIRST) INCLUDE (trust)`.
 - **Exported binding contract:** `Laplace-postgres/manifest/function_bindings.tsv` checked by `Laplace-postgres/tools/check-function-bindings.mjs`.
 
-## 3. Engine Map (`Laplace-Engine/src`, 31 CLI Operations in `op.c`)
+## 3. Engine Map (`Laplace-Engine/src`)
 
-| Area | Files |
+| Area | Directory & Key Files |
 | :--- | :--- |
-| CLI & SQL contract | `main.c`, `op.c` (31 operations + `describe`/`help`), `pg_contract.c`, `pg_plan.c`, `pg.c` (enforced by `tests/sql-contract-gate.py`) |
-| Perf-caches & deploy | `tier0.c`, `flags.c`, `highway.c`, `chess_cache.c`, `deploy.c` (`deploy`, `index`, `status`, `projection`) |
-| Recipes & Tree-sitter | `recipe.c`, `recipe_compile.c`, `structure_compile.c`, `structure_records.c`, `structure_decode.c`, `record_stream.c`, `grammars.c`, `recipes/` |
-| Record VM & Node Table | `say.c`, `record_*.c`, `recipe_says.c`, `record_worker.h`, `table.c` (lock-free CAS + `compose` + cross-record `keys_put/get`) |
-| Stage Load & Maintenance | `ingest.c`, `ingest_probe.c`, `db.c` (`prune`, `load`, `merge`), `db_metadata.c`, `forget.c` (`forget`, `sweep`), `replay` |
-| Forward, Firmware & Domains | `firmware.c`, `program.c`, `pull.c`, `forward.c`, `read.c` (`pull`, `turn`, `said`, `hop`, `translate`, `degrees`, `fills`, `held`), `chess.c` (`pgn`, `tablebase`), `model.c` |
+| Core, CLI & ROMs | `core/`: `main.c`, `op.c`, `tier0.c`, `flags.c`, `highway.c`, `fills.c`, `table.c`, `bench.c`, `reference_html.c` |
+| DB, SQL Contract & Maintenance | `db/`: `pg.c`, `pg_contract.c`, `pg_plan.c`, `deploy.c`, `db.c`, `db_metadata.c`, `forget.c`, `read.c`, `read_ids.c`, `read_text.c`, `claim_read.c`, `provenance.c`, `walk.c`, `reader.h` |
+| Recipes, Grammars & Ingest VM | `ingest/`: `ingest.c`, `ingest_probe.c`, `file.c`, `file_metadata.c`, `grammars.c`, `recipe.c`, `recipe_compile.c`, `recipe_decompose.c`, `recipe_says.c`, `say.c`, `structure*.c`, `record_*.c` |
+| Media, Git & Toolchain Codecs | `codecs/`: `media_image.c`, `media_audio.c`, `media_video.c`, `parquet_decoder.c`, `shapefile.c`, `git_dag.c`, `toolchain_witness.c` |
+| Forward, Firmware & OODA | `forward/`: `engine_abi.c`, `firmware.c`, `forward.c`, `program.c`, `program_couple.c`, `pull.c`, `pull_degrees.c`, `ooda.c` |
+| Models & Mold-a-Model | `model/`: `model.c`, `mold.c`, `gguf_writer.c` |
+| Chess & Syzygy | `chess/`: `chess.c`, `chess_cache.c`, `chess_pgn.c`, `chess_rules.c`, `chess_search.c`, `chess_syzygy.c`, `chess_tablebase.c` |
 
-## 4. Batch Execution & End-to-End Delivery Checklist (Definition of Done)
+## 4. SDLC Verification & Anti-Fake Gate Checklist
 
-Never declare work done at compilation, unit tests, HTTP 200 status codes, or empty/1-source database probes, and **never** run per-ticket waterfall deploy ceremonies across 28 individual tickets. Execute across repositories in **Large Horizontal Batches (`Batch 1` → `Batch 4`)**:
+Before considering any change complete under `P0` → `P5`, verify **every** applicable gate:
 
-1. **Iterate fast locally across the whole Batch** (`icx-release` in `$LAPLACE_BUILD`, `D:\Libraries\build\Laplace`):
-   - Compile & test incrementally across all repos touched by the Batch: `Laplace-Native` (`ctest --preset icx-release`, `node tools/csharp/generate.mjs --check`, `csharp_abi`) → `Laplace-postgres` (`node tools/check-function-bindings.mjs`) → `Laplace-Engine` (`python tests/sql-contract-gate.py`) → `Laplace-MCP` → `Laplace` (`dotnet build app/Laplace.slnx -warnaserror`, `ReadPathArchitectureGateTests`).
-   - Verify **Client-Determinism Collapse & Anti-Silo Law**: deterministic client ops run in-process via `Laplace.Native.Interop` over mmap'd ROMs (`0` DB round-trips); new modalities/sources snap in via generic codecs/grammars + `.recipe`s; domain capabilities run through the **one** shared C `Forward + Highway A* + Gödel` loop (`program.c` + `.firmware`), never forked mini-engines.
-2. **Deploy ONCE per Batch (in-place reconcile unless storage DDL changed):**
-   - Run `pwsh Laplace-Operations/laplace.ps1 deploy -Target desktop` and `pwsh Laplace-Operations/laplace.ps1 verify -Target desktop -Installed`, then advance `Laplace-Operations/components.lock.tsv` once for the Batch.
-3. **Prove real AI behavioral quality against populated PostgreSQL data** (never mock harnesses or unseeded DBs):
-   - Conversation (`turn` / `/v1/chat/completions` / MCP): coherent, accurate multi-sentence answers in `<100–200ms` (`2–3` batched binary probes, never 45 round-trips, never echoing the prompt or matching stop-word frames like `"How does this shirt fit?"`), honest `ABSTAIN` on unwitnessed facts, and `SUM(share_bp) = 10000` witness attribution.
-   - Mold-a-Model (`#1719`): exported `laplace-blake3-v1` / GGUF checkpoint loads in external `llama.cpp` and holds coherent multi-prompt conversations (`raw_weight_bytes_retained = 0` in DB).
-   - Code (`#894`) & Chess (`#833,#939`): AST repair compiles and passes real tests; Chess Forward beats calibrated anchors on `fastchess` + `ordo`.
-4. **Keep docs & global agent instructions synchronized (zero status-report clutter):**
-   - Never commit progress diaries, audit dumps, or benchmark prose into repos. When commands, schemas, layouts, or boundaries change, update `Laplace-Wiki` (`python tools/check_wiki.py` + `npx markdownlint-cli2`, preserving exact `README.md` catalog summary parity) and `Laplace-Operations/agents/` (`pwsh -File Laplace-Operations/agents/sync.ps1`).
+1. **Zero Ignored Parameters or Fake Lookups:**
+   - Every SQL/API/C parameter (`shape`, `bands`, `lang`, `contextIds`, `format`, `structure`, `max_tokens`, `temperature`, `seed`, `scope`) must actually drive execution or return an explicit unsupported error.
+   - Zero hardcoded dictionary chains (`@wn-lmf/Definition` shortcuts), zero `strstr()` compiler-log patch hacks, zero dummy identity/constant layer matrices, and zero C# reimplementations of C geometry/scoring.
+2. **Client-ROM vs. In-DB C Split Honored:**
+   - Pure deterministic operations (`lp_id`, UAX #29, `tier0.flags`, 4D centroids, Hilbert keys, EWKB packing, Syzygy probes, in-memory Fréchet/DTW/EDR, `lp_realize` over cached paths) run in `Laplace-Native` C (`Laplace.Native.Interop`) with `0` DB trips.
+   - Index/heap intersections (`Laplace-postgres`) stay inside PostgreSQL shared buffers via prepared binary probes.
+3. **Contract & Build Gates Pass:**
+   - `Laplace-Native`: `ctest --preset icx-release`, `node tools/csharp/generate.mjs --check`, `csharp_abi`.
+   - `Laplace-postgres`: `node tools/check-function-bindings.mjs`.
+   - `Laplace-Engine`: `python tests/sql-contract-gate.py`.
+   - `Laplace`: `dotnet build app/Laplace.slnx -warnaserror`, `ReadPathArchitectureGateTests`.
+4. **Live Populated-Database Proof (P5 / end of change):**
+   - No mocks, no `initdb` temp clusters. Prove real behavior against populated PostgreSQL 18 (`laplace` DB): coherent stateful `turn` / `/v1/chat/completions`, honest `ABSTAIN` on unwitnessed facts, real `llama.cpp` execution of exported checkpoints (`raw_weight_bytes_retained = 0`), real compiled/tested code repair, `fastchess` + `ordo` evaluation, and `SUM(share_bp) = 10000`.
+5. **Real Browser Walkthrough (for any UI change):**
+   - Walk every modified flow in the actual browser UI (`Laplace/web`): zero dead controls, zero silent broken tabs, zero quote gates blocking inspection, zero client-side regex masking backend noise.
+6. **Docs & Sync:**
+   - Keep `Laplace-Wiki` (`python tools/check_wiki.py`, `npx markdownlint-cli2`) and `Laplace-Operations/agents/` (`pwsh -File Laplace-Operations/agents/sync.ps1`) in sync with actual code, never committing status diaries or victory prose.

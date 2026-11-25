@@ -48,7 +48,7 @@ foreach ($dbCase in @(
 $rebuild=Dispatch @('components','-Target','staging','-Force')
 if ($rebuild.exit -ne 0 -or $rebuild.output -notmatch 'DISPATCH:(\[[^\r\n]+\])') { throw $rebuild.output }
 $rebuildArgv=$Matches[1] | ConvertFrom-Json
-foreach ($required in 'laplace.yml','SaltyPatron/Laplace-Operations','rebuild_runtime=true','drop=false','reseed=false','cloud=false') {
+foreach ($required in 'laplace.yml','SaltyPatron/Laplace-Operations','rebuild_runtime=true','drop=false','reseed=false') {
     if ($rebuildArgv -notcontains $required) { throw "Native replacement dispatch missing $required" }
 }
 foreach ($arguments in @(
