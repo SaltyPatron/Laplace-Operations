@@ -48,6 +48,11 @@ def deploy(configuration, psql, *, drop=False):
     )
     subprocess.run([str(psql), '-X', '-w', '-d', environment['LAPLACE_CONNINFO'],
                     '-v', 'ON_ERROR_STOP=1', '-qf', '-'], env=env, input=grants, text=True, check=True)
+    sub_schema = Path(__file__).resolve().parents[2] / 'Laplace' / 'db' / 'schema'
+    if (sub_schema / '10_substrate.sql').is_file() and (sub_schema / '20_substrate_grants.sql').is_file():
+        for name in ('10_substrate.sql', '20_substrate_grants.sql'):
+            subprocess.run([str(psql), '-X', '-w', '-d', environment['LAPLACE_CONNINFO'],
+                            '-v', 'ON_ERROR_STOP=1', '-qf', str(sub_schema / name)], env=env, check=True)
     return selected
 
 

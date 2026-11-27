@@ -80,6 +80,11 @@ if (-not (Get-ChildItem $env:LAPLACE_GRAMMARS -ErrorAction SilentlyContinue)) {
     Step grammars { & 'C:\Program Files\Git\bin\bash.exe' (Join-Path $env:LAPLACE_SRC 'Laplace-Engine\tools\build_grammars.sh') $env:LAPLACE_GRAMMAR_SRC $env:LAPLACE_GRAMMARS }
 }
 Step deploy   { & laplace.exe deploy --configure-server-cache }
+$subSchema = Join-Path $env:LAPLACE_SRC 'Laplace\db\schema'
+if ((Test-Path -LiteralPath (Join-Path $subSchema '10_substrate.sql')) -and (Test-Path -LiteralPath (Join-Path $subSchema '20_substrate_grants.sql'))) {
+    Step substrate-schema { & $psql -X $env:LAPLACE_CONNINFO -v ON_ERROR_STOP=1 -qf (Join-Path $subSchema '10_substrate.sql') }
+    Step substrate-grants { & $psql -X $env:LAPLACE_CONNINFO -v ON_ERROR_STOP=1 -qf (Join-Path $subSchema '20_substrate_grants.sql') }
+}
 Step status   { & laplace.exe status }
 $deployLock.Close()
 ''; "=== done   {0:HH:mm:ss}   $log" -f (Get-Date).ToUniversalTime()

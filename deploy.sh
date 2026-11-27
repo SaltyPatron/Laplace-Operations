@@ -122,6 +122,17 @@ fi
 if [ -n "$modular_manifest" ]; then
   step modular-grants python3 -c 'import importlib.util,sys; from pathlib import Path; spec=importlib.util.spec_from_file_location("m",Path(sys.argv[1])/"installation/modular.py"); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); cfg=m.installed_configuration(m.config_load(sys.argv[2])); m.sql(cfg,m.grants(cfg))' "$here" "$modular_manifest"
 fi
+sub_schema=
+for cand in /opt/laplace/app/migrations/db/schema "$LAPLACE_SRC/Laplace/db/schema"; do
+  if [ -f "$cand/10_substrate.sql" ] && [ -f "$cand/20_substrate_grants.sql" ]; then
+    sub_schema=$cand
+    break
+  fi
+done
+if [ -n "$sub_schema" ]; then
+  step substrate-schema psql -X "$LAPLACE_CONNINFO" -v ON_ERROR_STOP=1 -qf "$sub_schema/10_substrate.sql"
+  step substrate-grants psql -X "$LAPLACE_CONNINFO" -v ON_ERROR_STOP=1 -qf "$sub_schema/20_substrate_grants.sql"
+fi
 if [ -n "$modular_manifest" ]; then
   echo 'Database infrastructure prepared; modular activation and compatibility readback are required next.'
 else
