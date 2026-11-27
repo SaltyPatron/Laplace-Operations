@@ -333,7 +333,8 @@ jobs:
             commit -q -m "Version lock: the revisions staging verified (run ${{ github.run_id }})" -- components.lock.tsv
           remote="https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git"
           for attempt in 1 2 3; do
-            git pull -q --rebase "$remote" main && git push -q "$remote" HEAD:main && exit 0
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              pull -q --rebase "$remote" main && git push -q "$remote" HEAD:main && exit 0
             sleep 10
           done
           echo "::error::the version lock could not be pushed"; exit 1
