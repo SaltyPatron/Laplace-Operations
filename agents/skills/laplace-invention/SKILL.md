@@ -24,7 +24,7 @@ Truth hierarchy (`INVENTOR_RECORD.md` + `INVENTION.md` + decided `Sequence/Confl
 | Path vertex X/Y/Z | IEEE-754 binary64 with biased exponent 1021 (values in `[0.25, 0.5)`): low `43 + 43 + 42 = 128` mantissa bits carry child `lp_id`; upper `9 + 9 + 10 = 28` spare bits carry `4-bit tag + 24-bit payload` (e.g. `LP_SPARE_SCORE`: score $\times 2^{24}$) | `laplace.h` (`lp_id_to_xyz`, `lp_xyz_to_id`, `lp_xyz_spare`), `src/geometry.c` |
 | Path vertex M | Exact integer-valued double: run bits `0..29` (30b), `said` role bits `30..32` (3b: `CLAIM=1`, `RECORD=2`, `TUPLE=3`, `METADATA=4`, `HOLDS=5`, `VOICE=6`, `DEPENDENCE=7`), outcome bits `33..34` (2b: `WIN=0`, `DRAW=1`, `LOSS=2`, `SCORE=3`), position bits `35..52` (18b) | `laplace.h` (`lp_m_run`, `lp_m_said`, `lp_m_outcome`, `lp_m_position`, `lp_m_full`), `consensus.h` |
 | EWKB carrier | `POINT ZM` = 37 B (`0xC0000001`, single run); `LINESTRING ZM` = `9 + 32n` B (`0xC0000002`); always binary EWKB, never WKT | `src/geometry.c` |
-| 64-bit `mask` | Single `uint64` / SQL `bit(64)` defined by `manifest/banks.tsv`: `kind` 8-bit flag set at bit 0 (`CLAIM`, `RECORD`, `TUPLE`, `FILE`), `upos` 5@8, `lexfile` 6@13, `deprel` 6@19, `vnrole` 6@25, `wnframe` 6@31 (enums store `slot + 1`, `0` = absent) | `manifest/banks.tsv`, `laplace.h` (`LP_MASK_BITS`), SQL `laplace_mask_*` |
+| 64-bit `mask` | Single fixed 8-byte `uint64` / SQL `bigint` defined by `manifest/banks.tsv`: `kind` 8-bit flag set at bit 0 (`CLAIM`, `RECORD`, `TUPLE`, `FILE`), `upos` 5@8, `lexfile` 6@13, `deprel` 6@19, `vnrole` 6@25, `wnframe` 6@31 (enums store `slot + 1`, `0` = absent) | `manifest/banks.tsv`, `laplace.h` (`LP_MASK_BITS`), SQL `laplace_mask_*` |
 
 ### Why Mantissa Bit-Packing Exists (Never Conflate the Four Orthogonal Planes)
 
@@ -41,12 +41,12 @@ Truth hierarchy (`INVENTOR_RECORD.md` + `INVENTION.md` + decided `Sequence/Confl
   - `default_version` hashes the full install script; build emits `laplace.reconcile.sql` covering replaceable functions, casts, operators, opclasses, and indexes (`path_set_match.sql` + `api.sql` + `operations.sql` + `laplace_restore_function_bindings()`).
   - `laplace deploy` (`Laplace-Engine/src/db/deploy.c`) runs `ALTER EXTENSION laplace UPDATE` **in place**, preserving admitted data and indexes whenever storage DDL is unchanged. Pass `--recreate` **only** when persistent table DDL or `tier0.bin` coordinates change.
 - **Persistent tables (`sql/laplace.sql.in`):**
-  - `entity(id blake3, tier smallint, coord geometry(PointZM), hilbert bigint, mask bit(64))` — PK `(id, tier)` (no separate per-partition `entity_t*_id_key`); 9 tier range partitions `entity_t0`..`entity_t8plus`.
-  - `physicality(entity blake3, tier smallint, hilbert bigint, path geometry, mask bit(64))` — PK `(entity, tier)` (no separate per-partition `physicality_t*_entity_key`), FK `(entity, tier) → entity(id, tier) ON UPDATE CASCADE`, `parallel_workers=0`, `path SET STATISTICS 0`; 9 tier range partitions `physicality_t0`..`physicality_t8plus`.
+  - `entity(id blake3, tier smallint, coord geometry(PointZM), hilbert bigint, mask bigint)` — PK `(id, tier)` (no separate per-partition `entity_t*_id_key`); 9 tier range partitions `entity_t0`..`entity_t8plus`.
+  - `physicality(entity blake3, tier smallint, path geometry, mask bigint)` — PK `(entity, tier)` (no separate per-partition `physicality_t*_entity_key`), FK `(entity, tier) → entity(id, tier) ON UPDATE CASCADE`, `parallel_workers=0`, `path SET STATISTICS 0`; 9 tier range partitions `physicality_t0`..`physicality_t8plus`.
   - `attestation(claim, witness, lineage, games, tokens, score, "position", trust)` — `UNIQUE NULLS NOT DISTINCT (claim, witness, lineage)`, 16 hex range partitions `attestation_0`..`attestation_f` (`fillfactor=80`).
   - `consensus(claim PK, rating, deviation, volatility, matches)` — 16 hex range partitions `consensus_0`..`consensus_f` (`fillfactor=80`).
 - **Indexes (`sql/operations.sql` `laplace_schema_indexes()`):**
-  - `entity_tier_hilbert(tier, hilbert, id)` (`entity_hilbert` dropped), `entity_coord USING gist (coord laplace_point4d_ops)`, `entity_angular USING gist (coord laplace_angular4d_ops)`.
+  - `entity_tier_hilbert(tier, hilbert, id)` (`entity_hilbert` dropped), `entity_coord USING gist (coord laplace_point4d_ops)` (32-byte outward-rounded `float32[8]` `laplace_box4d` keys; default `entity_angular` dropped).
   - `physicality_paths USING gin (path laplace_path_ops, mask laplace_mask_ops) WITH (gin_pending_list_limit = 32768)`.
   - `physicality_assertions USING gin (path laplace_path_ops) WITH (gin_pending_list_limit = 32768) WHERE laplace_path_has_roles(path, 6)`.
   - `attestation_witness_lineage(witness, lineage NULLS FIRST) INCLUDE (trust)`.
