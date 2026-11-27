@@ -41,15 +41,16 @@ Truth hierarchy (`INVENTOR_RECORD.md` + `INVENTION.md` + decided `Sequence/Confl
   - `default_version` hashes the full install script; build emits `laplace.reconcile.sql` covering replaceable functions, casts, operators, opclasses, and indexes (`path_set_match.sql` + `api.sql` + `operations.sql` + `laplace_restore_function_bindings()`).
   - `laplace deploy` (`Laplace-Engine/src/db/deploy.c`) runs `ALTER EXTENSION laplace UPDATE` **in place**, preserving admitted data and indexes whenever storage DDL is unchanged. Pass `--recreate` **only** when persistent table DDL or `tier0.bin` coordinates change.
 - **Persistent tables (`sql/laplace.sql.in`):**
-  - `entity(id blake3, tier smallint, coord geometry(PointZM), hilbert bigint, mask bit(64))` — PK `(tier, id)`, per-partition `UNIQUE (id)`; 9 tier range partitions `entity_t0`..`entity_t8plus`.
-  - `physicality(entity blake3, tier smallint, hilbert bigint, path geometry, mask bit(64))` — PK `(tier, entity)`, FK `(tier, entity) → entity(tier, id) ON UPDATE CASCADE`, `parallel_workers=0`, `path SET STATISTICS 0`; 9 tier range partitions `physicality_t0`..`physicality_t8plus`.
+  - `entity(id blake3, tier smallint, coord geometry(PointZM), hilbert bigint, mask bit(64))` — PK `(id, tier)` (no separate per-partition `entity_t*_id_key`); 9 tier range partitions `entity_t0`..`entity_t8plus`.
+  - `physicality(entity blake3, tier smallint, hilbert bigint, path geometry, mask bit(64))` — PK `(entity, tier)` (no separate per-partition `physicality_t*_entity_key`), FK `(entity, tier) → entity(id, tier) ON UPDATE CASCADE`, `parallel_workers=0`, `path SET STATISTICS 0`; 9 tier range partitions `physicality_t0`..`physicality_t8plus`.
   - `attestation(claim, witness, lineage, games, tokens, score, "position", trust)` — `UNIQUE NULLS NOT DISTINCT (claim, witness, lineage)`, 16 hex range partitions `attestation_0`..`attestation_f` (`fillfactor=80`).
   - `consensus(claim PK, rating, deviation, volatility, matches)` — 16 hex range partitions `consensus_0`..`consensus_f` (`fillfactor=80`).
 - **Indexes (`sql/operations.sql` `laplace_schema_indexes()`):**
-  - `entity_hilbert(hilbert)`, `entity_tier_hilbert(tier, hilbert, id)`, `entity_coord USING gist (coord laplace_point4d_ops)`, `entity_angular USING gist (coord laplace_angular4d_ops)`.
+  - `entity_tier_hilbert(tier, hilbert, id)` (`entity_hilbert` dropped), `entity_coord USING gist (coord laplace_point4d_ops)`, `entity_angular USING gist (coord laplace_angular4d_ops)`.
   - `physicality_paths USING gin (path laplace_path_ops, mask laplace_mask_ops) WITH (gin_pending_list_limit = 32768)`.
   - `physicality_assertions USING gin (path laplace_path_ops) WITH (gin_pending_list_limit = 32768) WHERE laplace_path_has_roles(path, 6)`.
   - `attestation_witness_lineage(witness, lineage NULLS FIRST) INCLUDE (trust)`.
+  - `consensus_standing(laplace_confidence(rating, deviation, 2) DESC, matches DESC, claim) WHERE matches > 0`.
 - **Exported binding contract:** `Laplace-postgres/manifest/function_bindings.tsv` checked by `Laplace-postgres/tools/check-function-bindings.mjs`.
 
 ## 3. Engine Map (`Laplace-Engine/src`)
