@@ -1,8 +1,7 @@
 name: Deployment failure boundaries
-# Development checks run locally on HART-DESKTOP. Fixture replay is an explicit
-# operator choice. The Linux jobs run on this repository's own staging runner,
-# without root and in the runner's temp directory. windows-backup is the one job
-# still on a GitHub-hosted image: no self-hosted Windows runner exists.
+# Development and Windows checks run locally on HART-DESKTOP (`pwsh -File laplace.ps1 test`).
+# Fixture replay is an explicit operator choice. Every job in this private repository runs
+# strictly on this repository's self-hosted staging runner (zero GitHub-hosted runners).
 on:
   workflow_dispatch:
     inputs:
@@ -67,83 +66,6 @@ jobs:
           node-version: '24'
       - name: Verify source indexing and credential suppression
         run: node audit/test-configuration-index.mjs
-  windows-backup:
-    if: ${{ !inputs.logging_only }}
-    runs-on: windows-2025
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          persist-credentials: false
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          repository: SaltyPatron/Salty-Suite
-          path: Salty-Suite
-          token: ${{ secrets.LAPLACE_CHECKOUT }}
-          persist-credentials: false
-      - name: Verify installed modular client input and cache selection
-        run: python tests/modular-client.py
-      - name: Verify Windows installer native argument boundaries
-        shell: pwsh
-        run: pwsh -NoProfile -File tests/windows-client-arguments.ps1
-      - name: Verify staged artifacts retain inherited operator access
-        run: python tests/artifact-access.py
-      - name: Verify runtime audit uses its owner without remote installation
-        shell: pwsh
-        run: pwsh -NoProfile -File tests/application-runtime-verification.ps1
-      - name: Verify running client version, ownership and release retention
-        shell: pwsh
-        run: pwsh -NoProfile -File tests/desktop-clients.ps1
-      - name: Verify local cleanup ownership, hardlinks, references and idempotence
-        shell: pwsh
-        run: pwsh -NoProfile -File tests/storage.ps1
-      - name: Verify desktop component ownership and explicit rebuild selection
-        shell: pwsh
-        run: pwsh -NoProfile -File tests/desktop-component-plan.ps1
-      - name: Verify PostgreSQL installer service and recovery boundaries
-        shell: pwsh
-        run: pwsh -NoProfile -File tests/postgres-service-repair.ps1
-      - name: Verify Zstd synthetic codec regression
-        shell: pwsh
-        run: |
-          $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          if (-not $vs) { throw 'Visual Studio C compiler is missing' }
-          & cmd.exe /d /c "`"$vs\VC\Auxiliary\Build\vcvars64.bat`" >nul && cl /nologo /MD /Od tests\zstd-roundtrip.c /Fe:`"$env:RUNNER_TEMP\zstd-roundtrip.exe`" /Fo:`"$env:RUNNER_TEMP\zstd-roundtrip.obj`""
-          if ($LASTEXITCODE) { throw 'Zstd regression probe compilation failed' }
-          $gitRoot = Split-Path (Split-Path (Get-Command git.exe).Source)
-          $dll = @("$gitRoot/ucrt64/bin/libzstd.dll", "$gitRoot/mingw64/bin/libzstd.dll") | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-          if (-not $dll) { throw 'Git Zstd runtime is missing' }
-          & "$env:RUNNER_TEMP/zstd-roundtrip.exe" $dll $dll
-          if ($LASTEXITCODE) { throw 'Zstd synthetic regression failed' }
-      - name: Check out the application configuration contract
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          repository: SaltyPatron/Laplace
-          ref: aa9b512dc620ca9bf62b5afca6ac987cad9406b0
-          path: .acceptance/laplace
-          persist-credentials: false
-      - name: Verify application component dependency and immutable-storage integration
-        env:
-          LAPLACE_OPERATIONS: ${{ github.workspace }}
-        run: python .acceptance/laplace/scripts/test-windows-components.py
-      - name: Use the application SDK for configuration evaluation
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
-        with:
-          dotnet-version: '10.0.x'
-      - name: Verify named Windows acceptance checks
-        shell: pwsh
-        env:
-          LAPLACE_ACCEPTANCE_SOURCE: ${{ github.workspace }}/.acceptance/laplace
-        run: |
-          $env:LAPLACE_WORK=Join-Path $env:RUNNER_TEMP 'laplace'
-          pwsh -NoProfile -File laplace.ps1 test -Check config-windows,storage-windows,resource-refusal-windows,backup-copy-windows,desktop-enrollment-storage,platform-access-resolution,operation-targets,acceptance-runner,desktop-storage-retention
-      - name: Preserve Windows acceptance evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: acceptance-windows-${{ github.sha }}
-          path: ${{ runner.temp }}/laplace/operations/test-*/
-          if-no-files-found: error
   boundaries:
     if: ${{ !inputs.logging_only }}
     runs-on: [self-hosted, laplace, Laplace-Operations, staging]
@@ -211,19 +133,23 @@ jobs:
         run: pwsh -NoProfile -File acceptance/verify.ps1 -Check config-linux,storage-linux,resource-refusal-linux,setup-default-flow,setup-resource-convergence -Output "$env:RUNNER_TEMP/acceptance-linux.json"
       - name: Preserve Linux acceptance evidence
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: acceptance-linux-${{ github.sha }}
           path: ${{ runner.temp }}/acceptance-linux.json
-          if-no-files-found: error
+          if-no-files-found: warn
+          retention-days: 1
       - name: Require the host's SQLite for backup recovery checks
         run: sqlite3 --version
       - name: Check secrets backup failure and recovery behavior
         run: TMPDIR="$RUNNER_TEMP" pwsh -NoProfile -File acceptance/verify.ps1 -Check secrets-backup-isolation -Output "$RUNNER_TEMP/acceptance-secrets-backup.json"
       - name: Preserve secrets backup acceptance evidence
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: acceptance-secrets-backup-${{ github.sha }}
           path: ${{ runner.temp }}/acceptance-secrets-backup.json
-          if-no-files-found: error
+          if-no-files-found: warn
+          retention-days: 1

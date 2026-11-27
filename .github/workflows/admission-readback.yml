@@ -38,8 +38,10 @@ jobs:
           python3 Laplace-Operations/verify-admitted-data.py --output "$RUNNER_TEMP/admitted-data"
       - name: Retain the exact counts, invariant results and Native cache proof
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: admitted-data-${{ github.run_id }}
           path: ${{ runner.temp }}/admitted-data/
           if-no-files-found: warn
+          retention-days: 1

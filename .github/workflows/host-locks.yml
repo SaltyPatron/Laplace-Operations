@@ -13,10 +13,14 @@ jobs:
           persist-credentials: false
       - name: Read kernel and live descriptor ownership as the deployment identity
         run: python3 installation/host-locks.py --configuration installation/hart-server-modular.json --output "$RUNNER_TEMP/host-locks.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - name: Record host lock receipt in step summary
         if: always()
-        with:
-          name: host-locks-${{ github.run_id }}
-          path: ${{ runner.temp }}/host-locks.json
-          if-no-files-found: error
-          retention-days: 14
+        run: |
+          if [ -f "$RUNNER_TEMP/host-locks.json" ]; then
+            {
+              echo '## Host lock owners'
+              echo '```json'
+              cat "$RUNNER_TEMP/host-locks.json"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
