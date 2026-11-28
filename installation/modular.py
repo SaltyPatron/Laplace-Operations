@@ -53,13 +53,10 @@ def config_load(path):
     if runs is not None and (not isinstance(runs, str) or not Path(runs).is_absolute() or '..' in Path(runs).parts
                              or any(c in runs for c in '\n\r\0"')):
         raise ValueError('Invalid modular path: ingest_runs')
-    if not re.fullmatch(r'/[a-z][a-z0-9-]*', config['web_path']) or not re.fullmatch(r'https://[a-z0-9.-]+', config['web_origin']):
-        raise ValueError('Invalid modular web declaration')
-    for key in ('threads', 'build_jobs', 'connection_limit', 'batch_mb', 'http_port', 'port', 'web_port'):
+    for key in ('threads', 'build_jobs', 'connection_limit', 'batch_mb', 'http_port', 'port'):
         if type(config[key]) is not int or config[key] <= 0:
             raise ValueError('Invalid modular allocation: ' + key)
-    if config['bind'] != '127.0.0.1' or max(config['http_port'], config['port'], config['web_port']) > 65535 \
-            or config['web_port'] in (config['http_port'], config['port']):
+    if config['bind'] != '127.0.0.1' or max(config['http_port'], config['port']) > 65535:
         raise ValueError('Invalid listener declaration')
     if config['connection_limit'] < 3 * config['threads'] + 2:
         raise ValueError('Connection allocation cannot fit the resident reader and Engine bulk writer')
@@ -99,7 +96,8 @@ def select_manifest():
 
 def installed_configuration(config):
     live = config_load(config['installed_config'])
-    if any(config[key] != live[key] for key in config if key not in ('source', 'operator_client')):
+    ignored = ('source', 'operator_client', 'web_port', 'web_path', 'web_origin')
+    if any(config.get(key) != live.get(key) for key in config if key not in ignored):
         raise ValueError('Installation configuration changed; run setup before deployment')
     return live
 
@@ -539,7 +537,7 @@ def main():
             if installing:
                 restart_units(config)
                 install_credential_helper(config)
-                install_web(config)
+                retire_web()
                 client = config.get('operator_client')
                 if client:
                     checked(['runuser', '-u', config['operator'], '--', 'python3',
@@ -548,9 +546,6 @@ def main():
                                for value in ('--' + key, client[key])],
                              *[value for key in ('source', 'models') if key in client
                                for value in ('--' + key, client[key])]])
-            # The /modular host is part of the installation: a deployment that cannot read through it has failed.
-            web = verify_web(config)
-            atomic(receipt_path / 'web.json', json.dumps(web, indent=2) + '\n')
             atomic(receipt_path / 'acceptance.json', json.dumps({'scope': 'modular MCP installed runtime', 'host': config['host'],
                 'release': str(release), 'unit': UNIT, 'runtime_user': config['runtime_user'], 'database_role': config['role'],
                 'result': 'passed', 'database_prepared_paths': prepared_paths,

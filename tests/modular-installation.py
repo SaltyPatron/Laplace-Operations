@@ -149,9 +149,7 @@ class Installation(unittest.TestCase):
         for key, value in (('runtime_user', 'root'), ('runtime_user', 'ahart'),
                            ('role', 'x; ALTER ROLE laplace SUPERUSER'), ('bind', '0.0.0.0'),
                            ('http_port', 65536), ('source', '/tmp/../etc'), ('build', self.value['prefix']),
-                           ('threads', 0), ('connection_limit', 7), ('host', 'wrong-host'),
-                           ('web_port', 65536), ('web_port', self.value['http_port']), ('web_path', 'modular'),
-                           ('web_path', '/a b'), ('web_origin', 'http://staging.hartonomous.com')):
+                           ('threads', 0), ('connection_limit', 7), ('host', 'wrong-host')):
             with self.subTest(key=key, value=value):
                 original = self.value[key]
                 self.value[key] = value
@@ -159,33 +157,36 @@ class Installation(unittest.TestCase):
                     self.load()
                 self.value[key] = original
 
-    def test_web_host_runs_the_active_release_through_the_installed_reader(self):
-        config = self.load()
-        unit = modular.web_unit_text(config)
-        web = config['prefix'] + '/current/web'
-        self.assertIn(f'ExecStart=/usr/bin/dotnet "{web}/Laplace.Modular.Web.dll"', unit)
-        self.assertIn(f'Environment="NativeEndpoint=http://127.0.0.1:{config["http_port"]}"', unit)
-        self.assertIn(f'Environment="ASPNETCORE_URLS=http://127.0.0.1:{config["web_port"]}"', unit)
-        self.assertIn(f'User={config["runtime_user"]}', unit)
-        self.assertIn(modular.token_environment_line(config), unit)
-        location = modular.web_location_text(config)
-        self.assertIn(f'location {config["web_path"]}/ {{', location)
-        self.assertIn(f'proxy_pass http://127.0.0.1:{config["web_port"]};', location)
-
-    def test_web_check_refuses_a_page_where_a_position_belongs(self):
-        config = self.load()
+    def test_retire_web_removes_retired_unit_and_location(self):
         units = self.directory / 'units'
         units.mkdir()
-        with patch.object(modular, 'UNITS', units):
-            with self.assertRaisesRegex(ValueError, 'not installed'):
-                modular.verify_web(config, 1)
-            (units / modular.WEB_UNIT).write_text('')
-            page = Mock()
-            page.__enter__ = Mock(return_value=SimpleNamespace(headers={'Content-Type': 'text/html'}, read=lambda *a: b'<!doctype html>'))
-            page.__exit__ = Mock(return_value=False)
-            with patch('urllib.request.urlopen', return_value=page):
-                with self.assertRaisesRegex(ValueError, 'text/html, not a position'):
-                    modular.verify_web(config, 1)
+        unit = units / modular.WEB_UNIT
+        unit.write_text('[Unit]\n')
+        location = self.directory / 'modular.location.conf'
+        location.write_text('location /modular/ {}\n')
+        called = []
+
+        def fake_checked(args, **kwargs):
+            called.append([str(v) for v in args])
+            return subprocess.CompletedProcess(args, 0, stdout='', stderr='')
+
+        with patch.object(modular, 'UNITS', units), patch.object(modular, 'WEB_LOCATION', location), \
+             patch.object(modular, 'checked', side_effect=fake_checked):
+            modular.retire_web()
+        self.assertFalse(unit.exists())
+        self.assertFalse(location.exists())
+        self.assertIn(['systemctl', 'disable', '--now', modular.WEB_UNIT], called)
+        self.assertIn(['systemctl', 'daemon-reload'], called)
+        self.assertIn(['nginx', '-t'], called)
+        self.assertIn(['systemctl', 'reload', 'nginx'], called)
+
+    def test_installed_configuration_tolerates_legacy_retired_web_keys(self):
+        live_path = self.directory / 'live.json'
+        legacy = dict(self.value, web_port=5193, web_path='/modular', web_origin='https://staging.hartonomous.com')
+        live_path.write_text(json.dumps(legacy))
+        self.value['installed_config'] = str(live_path)
+        config = self.load()
+        self.assertEqual(modular.installed_configuration(config)['database'], config['database'])
 
     def test_configuration_rejects_linked_destinations(self):
         elsewhere = self.directory / 'elsewhere'

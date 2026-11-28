@@ -226,79 +226,26 @@ def activate(config, release, receipt_path, install):
 
 WEB_UNIT = 'laplace-modular-web.service'
 WEB_LOCATION = Path('/etc/nginx/laplace-mono/modular.location.conf')
-START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 
 
-def web_unit_text(config):
-    """The /modular host from the active release's web/, reading through the installed lpm with that unit's token."""
-    web = Path(config['prefix']) / 'current/web'
-    env = {'NativeEndpoint': f"http://127.0.0.1:{config['http_port']}", 'PathBase': config['web_path'],
-           'Hosting': 'service', 'ASPNETCORE_URLS': f"http://127.0.0.1:{config['web_port']}", 'AllowedHosts': '*',
-           'McpIdentityEndpoint': config['web_origin'].rstrip('/') + '/mcp', 'ReleaseId': 'modular',
-           'DOTNET_NOLOGO': '1', 'DOTNET_CLI_TELEMETRY_OPTOUT': '1'}
-    return ('[Unit]\nDescription=Laplace modular web host (' + config['web_path'] + ')\n'
-            f'After=network-online.target {UNIT}\nWants={UNIT}\n\n[Service]\nType=simple\n'
-            f"User={config['runtime_user']}\nGroup={config['runtime_group']}\n"
-            + token_environment_line(config)
-            + ''.join('Environment=' + sysquote(k + '=' + v) + '\n' for k, v in env.items())
-            # WorkingDirectory takes a bare absolute path: systemd refuses a quoted one.
-            + 'WorkingDirectory=' + str(web).replace('%', '%%') + '\n'
-            + f'ExecStart=/usr/bin/dotnet {sysquote(web / "Laplace.Modular.Web.dll")}\n'
-            'Restart=on-failure\nRestartSec=2\nUMask=0077\nNoNewPrivileges=true\nProtectSystem=strict\nProtectHome=true\n'
-            'PrivateTmp=true\nPrivateDevices=true\nProtectKernelTunables=true\nProtectKernelModules=true\n'
-            'ProtectControlGroups=true\nRestrictSUIDSGID=true\nCapabilityBoundingSet=\n'
-            'RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6\n\n[Install]\nWantedBy=multi-user.target\n')
-
-
-def web_location_text(config):
-    base = config['web_path'].rstrip('/')
-    return (f'location = {base} {{ return 301 {base}/; }}\nlocation {base}/ {{\n'
-            f"    proxy_pass http://127.0.0.1:{config['web_port']};\n    proxy_http_version 1.1;\n"
-            '    proxy_set_header Host $host;\n    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n'
-            '    proxy_set_header X-Forwarded-Proto $scheme;\n    proxy_read_timeout 300s;\n}\n')
-
-
-def install_web(config):
-    """Root, once per setup: the web unit and its nginx location. A deployment afterwards only restarts it."""
-    if not WEB_LOCATION.parent.is_dir():
-        raise ValueError('nginx has no ' + str(WEB_LOCATION.parent) + ': install the monorepo site first')
-    prior = WEB_LOCATION.read_text() if WEB_LOCATION.exists() else None
-    atomic(UNITS / WEB_UNIT, web_unit_text(config))
-    checked(['systemd-analyze', 'verify', UNITS / WEB_UNIT], capture_output=True)
-    checked(['systemctl', 'daemon-reload'])
-    checked(['systemctl', 'enable', WEB_UNIT])
-    checked(['systemctl', 'restart', WEB_UNIT])
-    atomic(WEB_LOCATION, web_location_text(config))
-    tested = checked(['nginx', '-t'], capture_output=True, check=False)
-    if tested.returncode != 0:
-        if prior is None:
-            WEB_LOCATION.unlink()
-        else:
+def retire_web():
+    """Root, idempotent: disable and remove the retired /modular web unit and nginx location if present."""
+    unit_path = UNITS / WEB_UNIT
+    unit_changed = False
+    if unit_path.exists():
+        checked(['systemctl', 'disable', '--now', WEB_UNIT], check=False, capture_output=True)
+        unit_path.unlink()
+        unit_changed = True
+    if unit_changed:
+        checked(['systemctl', 'daemon-reload'])
+    if WEB_LOCATION.exists():
+        prior = WEB_LOCATION.read_text()
+        WEB_LOCATION.unlink()
+        tested = checked(['nginx', '-t'], capture_output=True, check=False)
+        if tested.returncode != 0:
             atomic(WEB_LOCATION, prior)
-        raise ValueError('nginx refused the /modular location: ' + tested.stderr.strip()[-2000:])
-    checked(['systemctl', 'reload', 'nginx'])
-
-
-def verify_web(config, deadline_seconds=60):
-    """The /modular host answers a chess position read with JSON from the database, not a page or an error."""
-    import urllib.parse, urllib.request
-    if not (UNITS / WEB_UNIT).is_file():
-        raise ValueError('The /modular web host is not installed: sudo ./setup.sh modular')
-    url = (f"http://127.0.0.1:{config['web_port']}{config['web_path'].rstrip('/')}/api/chess/position?"
-           + urllib.parse.urlencode({'fen': START_FEN}))
-    deadline, last = time.monotonic() + deadline_seconds, None
-    while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=30) as response:
-                kind = response.headers.get('Content-Type', '')
-                body = json.load(response) if kind.startswith('application/json') else None
-            if not isinstance(body, dict) or not isinstance(body.get('position'), str) or not isinstance(body.get('openings'), list):
-                raise ValueError('The /modular chess read returned ' + (kind or 'no content type') + ', not a position')
-            return {'url': url, 'position': body['position'], 'openings': len(body['openings']), 'games': body.get('games')}
-        except (OSError, ValueError) as error:
-            last = error
-            time.sleep(1)
-    raise ValueError('The /modular web host did not answer: ' + str(last))
+            raise ValueError('nginx refused removal of retired /modular location: ' + tested.stderr.strip()[-2000:])
+        checked(['systemctl', 'reload', 'nginx'])
 
 
 def restart_units(config):
@@ -306,9 +253,7 @@ def restart_units(config):
     name = 'laplace-modular-mcp-restart'
     signal = sysquote(config['restart_signal'])
     atomic(root / (name + '.path'), f"[Path]\nPathExists={config['restart_signal'].replace('%', '%%')}\n[Install]\nWantedBy=multi-user.target\n")
-    # The web host runs from the same release (current/web); a release switch restarts both.
     atomic(root / (name + '.service'), '[Service]\nType=oneshot\n' +
-        f'ExecStart=/usr/bin/rm -f -- {signal}\nExecStart=/usr/bin/systemctl restart {UNIT}\n'
-        f'ExecStart=/usr/bin/systemctl try-restart {WEB_UNIT}\n')
+        f'ExecStart=/usr/bin/rm -f -- {signal}\nExecStart=/usr/bin/systemctl restart {UNIT}\n')
     checked(['systemctl', 'daemon-reload'])
     checked(['systemctl', 'enable', '--now', name + '.path'])

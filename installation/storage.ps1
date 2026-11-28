@@ -135,19 +135,6 @@ SELECT DISTINCT path FROM (
     } finally { $process.Dispose() }
 }
 
-function Get-StorageModularWebReferences([string]$Configuration=(Join-Path $PSScriptRoot ($env:COMPUTERNAME.ToLowerInvariant()+'-modular-web.json'))) {
-    $declaration=Read-StorageJson $Configuration
-    if(-not $declaration){return}
-    $active=Read-StorageJson (Join-Path $declaration.directory 'active.json')
-    foreach($directory in @($active.directory,$active.previous)|Where-Object {$_}) {
-        $record=Read-StorageJson (Join-Path $directory 'native-resources.json')
-        if($record.release){[string]$record.release}
-    }
-    if($active.native_resources){[string]$active.native_resources}
-    $legacy=Read-StorageJson (Join-Path $declaration.directory 'state/native.json')
-    if($legacy.release){[string]$legacy.release}
-}
-
 function Get-StorageProcesses {
     $result = @()
     foreach ($process in Get-CimInstance Win32_Process -ErrorAction Stop) {
@@ -433,7 +420,7 @@ function Get-DesktopStoragePlan {
         -not (Read-StorageJson (Join-Path $web ('releases/'+$active.revision+'/iis-package.json')))) {
         throw 'Installed selections must identify existing packages in their declared release roots.'
     }
-    $references = @([string]$installed.release, (Join-Path $web ('releases/'+$active.revision))) + $DatabaseReferences + @(Get-StorageModularWebReferences)
+    $references = @([string]$installed.release, (Join-Path $web ('releases/'+$active.revision))) + $DatabaseReferences
     # API clients can deliberately pin a connector independently of its IIS
     # service. Keep that real consumer reference until the client is updated.
     if($Iis.chess.match_engines.connector){$references += [string]$Iis.chess.match_engines.connector}

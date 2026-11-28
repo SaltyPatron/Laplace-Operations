@@ -10,23 +10,7 @@ function Get-DesktopClientDeclaration([string]$Path) {
 }
 
 function Get-DesktopServiceReaders {
-    $declaration=Join-Path $PSScriptRoot ($env:COMPUTERNAME.ToLowerInvariant()+'-modular-web.json')
-    if(-not(Test-Path -LiteralPath $declaration)){return @()}
-    try{
-        $web=Get-Content -Raw -LiteralPath $declaration|ConvertFrom-Json
-        $active=Get-Content -Raw -LiteralPath (Join-Path $web.directory 'active.json')|ConvertFrom-Json
-        $origin=$web.origin.TrimEnd('/')+$web.application+'/health'
-        if(([Uri]$origin).Scheme -cne 'https'){return @()}
-        $health=Invoke-RestMethod $origin -TimeoutSec 10
-        $reader=$health.reader
-        if($health.service -cne 'laplace-modular-web' -or $health.release -cne $active.release -or
-            $reader.pid -le 0 -or $reader.parent_pid -le 0 -or
-            $reader.executable_sha256 -cne $active.native_binary_sha256 -or $reader.executable_sha256 -notmatch '^[a-f0-9]{64}$'){return @()}
-        $binary=Join-Path $active.native_resources 'bin/lpm.exe'
-        if((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant() -cne $reader.executable_sha256){return @()}
-        return @([pscustomobject]@{pid=[int]$reader.pid;parent_pid=[int]$reader.parent_pid;started_utc=$reader.started_utc
-            executable_sha256=$reader.executable_sha256;release=$active.native_resources;source='verified-iis-health'})
-    }catch{return @()}
+    return @()
 }
 
 function Get-DesktopClientState {

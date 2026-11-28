@@ -108,7 +108,7 @@ REMOTE STAGING / PRODUCTION (GitHub Actions: Laplace-Operations operate.yml / la
 ADVANCED / LOCAL DEVELOPMENT (http://localhost:5187 & https://dev.hartonomous.com)
   laplace-ops prepare | build | test [-List | -Check <id,...>]
   laplace-ops run | start | stop | status | logs
-  laplace-ops deploy desktop [-Plan] [-Components web|modular-web|api,cli] [-Force] [-Package <dir>]
+  laplace-ops deploy desktop [-Plan] [-Components web|api,cli] [-Force] [-Package <dir>]
   laplace-ops restart-iis | repair-postgres [-Plan]
   laplace-ops configure-development | enroll-development
   laplace-ops components desktop | staging [-Force]
