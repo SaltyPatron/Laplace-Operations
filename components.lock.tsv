@@ -4,5 +4,5 @@
 native	Laplace-Native	ca742898323e2a4fa0c42f27a24459d4f7357406
 postgres	Laplace-postgres	654f95f16f2366a1b941d8f1ddc6f402a2b13453
 engine	Laplace-Engine	cd22b83ea28fd5058df823a8951c1d9221dfc710
-mcp	Laplace-MCP	ffd10e1c0263217d9eef73a7ff5ae8dc4ccfdccb
+mcp	Laplace-MCP	dd885896551c380da672f5c803fb30e9a0382299
 salty_suite	Salty-Suite	ff58bbe44e605df219633557215dde925fc561e0
